@@ -1,0 +1,8 @@
+services:
+  tdns-stats:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./config.yml:/etc/tdns-stats/config.yml:ro
+    restart: unless-stopped

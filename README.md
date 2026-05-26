@@ -59,6 +59,27 @@ node backend/src/server.js
 
 Then open `http://your-host:3000` in a browser.
 
+## Running with Docker
+
+```bash
+cp config.example.yml config.yml
+# edit config.yml with your server details
+docker compose up -d
+```
+
+The `config.yml` is mounted read-only into the container at `/etc/tdns-stats/config.yml`. To apply config changes, edit the file and run `docker compose restart`.
+
+To build and run without Compose:
+
+```bash
+docker build -t tdns-stats .
+docker run -d \
+  -p 3000:3000 \
+  -v $(pwd)/config.yml:/etc/tdns-stats/config.yml:ro \
+  --restart unless-stopped \
+  tdns-stats
+```
+
 ## Running as a systemd service
 
 Create `/etc/systemd/system/tdns-stats.service`:
