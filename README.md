@@ -101,6 +101,8 @@ Available values for `servers[].color`: `blue`, `green`, `ora`, `teal`, `pur`, `
 
 If `color` is omitted, servers are auto-assigned colours by their position in the list.
 
+The colour is used to identify each server in the live feed when **All Servers** is selected, where entries from multiple servers are shown together. Each server name in the feed is highlighted in its assigned colour so you can tell at a glance which server handled each query.
+
 ### HTTPS
 
 To serve over HTTPS without a reverse proxy, add an `https` block to `config.yml`:

@@ -21,6 +21,7 @@ servers:
 
 # Available colours: blue, green, ora, teal, pur, yel, red
 # If colour is omitted, servers are auto-assigned colours in the order listed above.
+# The colour is used to identify each server in the live feed when All Servers is selected.
 
 poll:
   statsInterval: 10    # seconds between stats refreshes
