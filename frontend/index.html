@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Technitium Statistics</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2358a6ff' stroke-width='2'><circle cx='12' cy='12' r='10'/><circle cx='12' cy='12' r='4'/><line x1='12' y1='2' x2='12' y2='6'/><line x1='12' y1='18' x2='12' y2='22'/><line x1='2' y1='12' x2='6' y2='12'/><line x1='18' y1='12' x2='22' y2='12'/></svg>">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <header class="topbar">
+        <div class="topbar-brand">
+            <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <circle cx="12" cy="12" r="4"/>
+                <line x1="12" y1="2" x2="12" y2="6"/>
+                <line x1="12" y1="18" x2="12" y2="22"/>
+                <line x1="2" y1="12" x2="6" y2="12"/>
+                <line x1="18" y1="12" x2="22" y2="12"/>
+            </svg>
+            <span class="brand-name">Technitium Statistics</span>
+        </div>
+        <div class="topbar-status" id="serverIndicators"></div>
+        <div class="topbar-right">
+            <div class="theme-switcher">
+                <button class="theme-btn" data-theme="system" title="System theme">
+                    <svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor"><path d="M0 4s0-2 2-2h12s2 0 2 2v6s0 2-2 2h-4l1 2h1a.5.5 0 010 1H4a.5.5 0 010-1h1l1-2H2s-2 0-2-2zm1.398 0A1 1 0 001 4.5v5.086l.002.051c.014.24.117.48.307.67.19.189.43.293.691.293H14c.261 0 .501-.104.691-.293.19-.19.293-.43.307-.67L15 9.586V4.5a1 1 0 00-1-1H2a1 1 0 00-.602.5z"/></svg>
+                </button>
+                <button class="theme-btn" data-theme="light" title="Light theme">
+                    <svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor"><path d="M8 11a3 3 0 100-6 3 3 0 000 6zm0 1a4 4 0 100-8 4 4 0 000 8zm.5-9.5v-1a.5.5 0 00-1 0v1a.5.5 0 001 0zm0 9v1a.5.5 0 01-1 0v-1a.5.5 0 011 0zm-7.5-4.5h-1a.5.5 0 000 1h1a.5.5 0 000-1zm9 0h1a.5.5 0 010 1h-1a.5.5 0 010-1zM3.05 3.757a.5.5 0 00-.707.707l.707.707a.5.5 0 00.707-.707l-.707-.707zm9.193 9.193a.5.5 0 00-.707.707l.707.707a.5.5 0 00.707-.707l-.707-.707zm-9.9 0l-.707.707a.5.5 0 00.707.707l.707-.707a.5.5 0 00-.707-.707zm9.193-9.193l.707-.707a.5.5 0 10-.707-.707l-.707.707a.5.5 0 10.707.707z"/></svg>
+                </button>
+                <button class="theme-btn" data-theme="dark" title="Dark theme">
+                    <svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor"><path d="M6 .278a.768.768 0 01.08.858 7.208 7.208 0 00-.878 3.46c0 4.021 3.278 7.277 7.318 7.277.527 0 1.04-.055 1.533-.16a.787.787 0 01.81.316.733.733 0 01-.031.893A8.349 8.349 0 018.344 16C3.734 16 0 12.286 0 7.71 0 4.266 2.114 1.312 5.124.06A.752.752 0 016 .278z"/></svg>
+                </button>
+            </div>
+            <span class="conn-indicator" id="connIndicator" title="Stream connection">
+                <span class="conn-dot"></span>
+            </span>
+            <span class="last-updated" id="lastUpdated">Connecting...</span>
+        </div>
+    </header>
+
+    <nav class="server-tabs" id="serverTabs"></nav>
+
+    <main class="content">
+        <section class="cluster-cards" id="clusterCards"></section>
+
+        <section class="cluster-cards" id="perfCards"></section>
+
+        <section class="chart-section card">
+            <div class="card-header">
+                <h2 class="card-title">Queries per minute</h2>
+                <div class="chart-controls">
+                    <select id="timeRangeSelect" class="ctrl-select">
+                        <option value="LastHour" selected>Last Hour</option>
+                        <option value="LastDay">Last Day</option>
+                        <option value="LastWeek">Last Week</option>
+                        <option value="LastMonth">Last Month</option>
+                        <option value="LastYear">Last Year</option>
+                    </select>
+                    <select id="chartServerSelect" class="ctrl-select"></select>
+                    <select id="chartDatasetSelect" class="ctrl-select">
+                        <option value="all">All datasets</option>
+                        <option value="overview" selected>Overview</option>
+                    </select>
+                </div>
+            </div>
+            <div class="chart-wrap">
+                <canvas id="mainChart"></canvas>
+            </div>
+        </section>
+
+        <section class="bottom-grid">
+            <div class="top-lists card">
+                <div class="card-header">
+                    <h2 class="card-title">Top</h2>
+                    <div class="chart-controls">
+                        <select id="topServerSelect" class="ctrl-select"></select>
+                    </div>
+                </div>
+                <div class="tabs-bar">
+                    <button class="tab-btn active" data-tab="domains">Domains</button>
+                    <button class="tab-btn" data-tab="blocked">Blocked</button>
+                    <button class="tab-btn" data-tab="clients">Clients</button>
+                </div>
+                <div id="topContent" class="top-content"></div>
+            </div>
+
+            <div class="feed-panel card">
+                <div class="card-header">
+                    <h2 class="card-title">Live Feed</h2>
+                    <div class="chart-controls">
+                        <select id="feedServerSelect" class="ctrl-select">
+                            <option value="all">All servers</option>
+                        </select>
+                        <label class="toggle-label">
+                            <input type="checkbox" id="feedBlockedOnly">
+                            <span>Blocked only</span>
+                        </label>
+                        <button class="feed-pause-btn" id="feedPauseBtn" title="Pause live feed">
+                            <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M5.5 3.5A1.5 1.5 0 017 5v6a1.5 1.5 0 01-3 0V5a1.5 1.5 0 011.5-1.5zm5 0A1.5 1.5 0 0112 5v6a1.5 1.5 0 01-3 0V5a1.5 1.5 0 011.5-1.5z"/></svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="feed-list" id="feedList"></div>
+            </div>
+        </section>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+    <script src="js/feed.js"></script>
+    <script src="js/charts.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>

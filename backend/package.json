@@ -1,0 +1,15 @@
+{
+  "name": "tdns-stats",
+  "version": "1.0.0",
+  "description": "Technitium DNS Server Statistics Dashboard",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "helmet": "^7.1.0",
+    "js-yaml": "^4.1.0",
+    "node-fetch": "^2.7.0"
+  }
+}

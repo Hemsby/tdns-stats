@@ -1,0 +1,56 @@
+# tdns-stats configuration
+# Copy this file to config.yml and fill in your values, then restart the service.
+
+# Port the web interface listens on
+port: 3000
+
+servers:
+  - name: ns1                              # Display name shown in the dashboard
+    url: http://ns1.example.com:5380       # Technitium API base URL
+    token: your-api-token-here             # API token (Settings > API Keys in Technitium)
+    ignoreSsl: false                       # Set true to skip TLS verification (not recommended)
+    queryLogsApp: "Query Logs (MySQL)"     # Optional: name of the query log app installed on this server
+    color: blue                            # Optional: colour for this server (see colours below)
+
+  - name: ns2
+    url: http://ns2.example.com:5380
+    token: your-api-token-here
+    ignoreSsl: false
+    queryLogsApp: "Query Logs (MySQL)"
+    color: green
+
+# Available colours: blue, green, ora, teal, pur, yel, red
+# If colour is omitted, servers are auto-assigned colours in the order listed above.
+
+poll:
+  statsInterval: 10    # seconds between stats refreshes
+  feedInterval: 3      # seconds between live feed polls
+  topInterval: 30      # seconds between top-list refreshes
+  perfInterval: 30     # seconds between RTT/cache performance samples
+
+feed:
+  pageSize: 20         # log entries fetched per poll cycle
+  maxEntries: 200      # maximum entries kept in the browser feed
+
+top:
+  limit: 20            # number of items in top domains/clients lists
+
+rtt:
+  sampleSize: 500      # number of log entries scanned per RTT sample
+
+# Optional: override the default auto-assigned colour order
+# serverColors:
+#   - blue
+#   - green
+#   - ora
+#   - pur
+#   - teal
+#   - yel
+
+# Optional: serve over HTTPS without a reverse proxy.
+# Provide either a separate cert+key pair or a single combined PEM file.
+# https:
+#   cert: /etc/ssl/certs/tdns-stats.crt
+#   key:  /etc/ssl/private/tdns-stats.key
+#   # or a single file containing both certificate and private key:
+#   pem:  /etc/ssl/private/tdns-stats-combined.pem
