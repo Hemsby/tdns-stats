@@ -112,8 +112,14 @@ class Poller {
 
                 let fresh = entries;
                 if (cursor) {
-                    const idx = entries.findIndex(e => e.rowNumber <= cursor);
-                    fresh = idx === -1 ? entries : entries.slice(0, idx);
+                    if (entries.length > 0 && entries[0].rowNumber < cursor) {
+                        // Newest entry is older than cursor — log was reset or rotated
+                        console.log(`${server.name}: feed cursor reset (was ${cursor}, latest is ${entries[0].rowNumber})`);
+                        fresh = entries;
+                    } else {
+                        const idx = entries.findIndex(e => e.rowNumber <= cursor);
+                        fresh = idx === -1 ? entries : entries.slice(0, idx);
+                    }
                 }
 
                 if (fresh.length > 0) {
