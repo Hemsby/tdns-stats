@@ -3,19 +3,17 @@
 const fetch = require('node-fetch');
 const https = require('https');
 
-function makeAgent(ignoreSsl) {
-    return ignoreSsl ? new https.Agent({ rejectUnauthorized: false }) : undefined;
-}
-
-function authHeaders(server) {
-    return { 'Authorization': `Bearer ${server.token}` };
+function makeAgent(url, ignoreSsl) {
+    if (!ignoreSsl) return undefined;
+    return url.startsWith('https') ? new https.Agent({ rejectUnauthorized: false }) : undefined;
 }
 
 async function apiGet(server, path) {
-    const url = `${server.url.replace(/\/$/, '')}/${path}`;
+    const base = server.url.replace(/\/$/, '');
+    const sep = path.includes('?') ? '&' : '?';
+    const url = `${base}/${path}${sep}token=${server.token}`;
     const res = await fetch(url, {
-        agent:   makeAgent(server.ignoreSsl),
-        headers: authHeaders(server),
+        agent:   makeAgent(url, server.ignoreSsl),
         timeout: 8000
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -25,10 +23,9 @@ async function apiGet(server, path) {
 }
 
 async function getSessionInfo(server) {
-    const url = `${server.url.replace(/\/$/, '')}/api/user/session/get`;
+    const url = `${server.url.replace(/\/$/, '')}/api/user/session/get?token=${server.token}`;
     const res = await fetch(url, {
-        agent:   makeAgent(server.ignoreSsl),
-        headers: authHeaders(server),
+        agent:   makeAgent(url, server.ignoreSsl),
         timeout: 8000
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -79,7 +76,7 @@ async function discoverQueryLogsApp(server, preferredName) {
                 if (da.isQueryLogs) return { name: app.name, classPath: da.classPath };
             }
         }
-    } catch (_) { /* no app or unreachable */ }
+    } catch (e) { console.error('discoverQueryLogsApp error:', e.message, e.stack); }
     return null;
 }
 
