@@ -103,12 +103,6 @@ class Poller {
     }
 
     async _pollFeed() {
-        if (this._feedPollInProgress) return;
-        this._feedPollInProgress = true;
-        try { await this._doFeedPoll(); } finally { this._feedPollInProgress = false; }
-    }
-
-    async _doFeedPoll() {
         for (const server of this.servers) {
             try {
                 const logs = await getQueryLogs(server, this.cfg.feedPageSize);
@@ -134,7 +128,7 @@ class Poller {
                 } else if (!cursor && entries.length > 0) {
                     this.feedCursors[server.name] = entries[0]?.rowNumber;
                 }
-            } catch (_) { /* server unreachable */ }
+            } catch (err) { console.warn(`[feed] ${server.name}: ${err.message}`); }
         }
     }
 

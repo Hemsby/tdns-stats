@@ -13,15 +13,21 @@ function authHeaders(server) {
 
 async function apiGet(server, path) {
     const url = `${server.url.replace(/\/$/, '')}/${path}`;
-    const res = await fetch(url, {
-        agent:   makeAgent(server.ignoreSsl),
-        headers: authHeaders(server),
-        timeout: 8000
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    if (data.status !== 'ok') throw new Error(data.errorMessage || 'API error');
-    return data.response;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    try {
+        const res = await fetch(url, {
+            agent:   makeAgent(server.ignoreSsl),
+            headers: authHeaders(server),
+            signal:  controller.signal,
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (data.status !== 'ok') throw new Error(data.errorMessage || 'API error');
+        return data.response;
+    } finally {
+        clearTimeout(timer);
+    }
 }
 
 async function getSessionInfo(server) {

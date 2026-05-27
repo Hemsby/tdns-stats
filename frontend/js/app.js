@@ -18,6 +18,7 @@ const App = (() => {
         feedServer:    'all',
         feedBlocked:   false,
         feedPaused:    false,
+        lastFeedEvent: null,
         timeRange:     'LastHour',
         connected:     false,
         lastUpdated:   null,
@@ -93,6 +94,8 @@ const App = (() => {
             }
 
         } else if (msg.type === 'feed') {
+            state.lastFeedEvent = Date.now();
+            setFeedStall(false);
             Feed.add(msg.server, msg.data);
             Feed.scheduleRender(state.feedServer, state.feedBlocked);
 
@@ -671,6 +674,17 @@ const App = (() => {
         return Math.floor(h / 24) + 'd';
     }
 
+    function setFeedStall(stalled) {
+        const el = document.getElementById('feedStallBanner');
+        if (!el) return;
+        el.hidden = !stalled;
+        if (stalled && state.lastFeedEvent) {
+            const secs = Math.round((Date.now() - state.lastFeedEvent) / 1000);
+            const age  = secs >= 60 ? Math.floor(secs / 60) + 'm' : secs + 's';
+            el.textContent = 'Feed paused: no data received for ' + age + '. Check tdns-stats console for errors.';
+        }
+    }
+
     function setConnDot(cls) {
         const dot = document.getElementById('connIndicator')?.querySelector('.conn-dot');
         if (dot) dot.className = 'conn-dot ' + cls;
@@ -739,6 +753,12 @@ const App = (() => {
             })
             .catch(() => {})
             .finally(() => connect());
+
+        // Show a warning banner if the feed has gone silent while SSE is connected
+        setInterval(() => {
+            if (!state.connected || state.lastFeedEvent === null) return;
+            setFeedStall(Date.now() - state.lastFeedEvent > 120000);
+        }, 15000);
     }
 
     return { init };
