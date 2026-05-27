@@ -242,7 +242,8 @@ main { position: relative; z-index: 1; }
     font-family: 'Chakra Petch', sans-serif;
 }
 .node-badge.primary   { background: rgba(34,211,238,.1); color: var(--accent-blue); border: 1px solid rgba(34,211,238,.2); }
-.node-badge.secondary { background: rgba(86,120,152,.1); color: var(--text-muted); border: 1px solid rgba(86,120,152,.2); }
+.node-badge.secondary   { background: rgba(86,120,152,.1); color: var(--text-muted); border: 1px solid rgba(86,120,152,.2); }
+.node-badge.standalone  { background: rgba(52,211,153,.08); color: var(--accent-green); border: 1px solid rgba(52,211,153,.2); }
 
 /* ---- Stat mini ---- */
 .stat-mini { display: flex; flex-direction: column; gap: 4px; min-width: 0; }

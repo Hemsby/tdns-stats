@@ -3,8 +3,10 @@
 const fetch = require('node-fetch');
 const https = require('https');
 
-function makeAgent(ignoreSsl) {
-    return ignoreSsl ? new https.Agent({ rejectUnauthorized: false }) : undefined;
+function makeAgent(server) {
+    return server.ignoreSsl && server.url.startsWith('https')
+        ? new https.Agent({ rejectUnauthorized: false })
+        : undefined;
 }
 
 function authHeaders(server) {
@@ -17,7 +19,7 @@ async function apiGet(server, path) {
     const timer = setTimeout(() => controller.abort(), 8000);
     try {
         const res = await fetch(url, {
-            agent:   makeAgent(server.ignoreSsl),
+            agent:   makeAgent(server),
             headers: authHeaders(server),
             signal:  controller.signal,
         });
@@ -33,7 +35,7 @@ async function apiGet(server, path) {
 async function getSessionInfo(server) {
     const url = `${server.url.replace(/\/$/, '')}/api/user/session/get`;
     const res = await fetch(url, {
-        agent:   makeAgent(server.ignoreSsl),
+        agent:   makeAgent(server),
         headers: authHeaders(server),
         timeout: 8000
     });

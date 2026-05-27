@@ -456,8 +456,10 @@ const App = (() => {
         const clients = st.totalClients      || 0;
         const pct     = total > 0 ? Math.round(blocked / total * 100) : 0;
 
+        if (!role && node.clusterInitialized === false) role = 'Standalone';
+        const badgeClass = role === 'Primary' ? 'primary' : role === 'Secondary' ? 'secondary' : 'standalone';
         const roleBadge = role
-            ? '<span class="node-badge ' + (role === 'Primary' ? 'primary' : 'secondary') + '">' + esc(role) + '</span>'
+            ? '<span class="node-badge ' + badgeClass + '">' + esc(role) + '</span>'
             : '';
 
         card.innerHTML =
