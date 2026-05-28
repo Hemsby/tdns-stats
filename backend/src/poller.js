@@ -194,7 +194,7 @@ class Poller {
 
                 const denominator = totalRecursive + totalCached;
                 const hitRate     = denominator > 0 ? (totalCached / denominator) * 100 : 0;
-                const impact      = totalQueries > 0 ? mean * (totalRecursive / totalQueries) : 0;
+                const impact      = denominator > 0 ? mean * (rtts.length / denominator) : 0;
 
                 this.broadcast({
                     type:   'perf',
