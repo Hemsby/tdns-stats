@@ -20,7 +20,7 @@ const Charts = (() => {
         'Refused':        { border: 'rgb(100,116,139)',  bg: 'rgba(100,116,139,.07)'  },
     };
 
-    const OVERVIEW_DATASETS = ['Total', 'Blocked', 'Cached'];
+    const OVERVIEW_DATASETS = ['Total', 'Blocked', 'Cached', 'Recursive'];
 
     function setPersistCallback(callback) {
         persistCallback = callback;

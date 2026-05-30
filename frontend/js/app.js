@@ -272,6 +272,7 @@ const App = (() => {
 
         el('timeRangeSelect') && (el('timeRangeSelect').onchange = e => {
             state.timeRange = e.target.value;
+            updateChartHeading();
             refreshChart();
             refreshTopLists();
         });
@@ -622,6 +623,20 @@ const App = (() => {
     }
 
     // ---- Range-aware chart / top refresh ------------------------------------
+    function updateChartHeading() {
+        const headingMap = {
+            'LastHour':  'Queries per minute',
+            'LastDay':   'Queries per hour',
+            'LastWeek':  'Queries per day',
+            'LastMonth': 'Queries per day',
+            'LastYear':  'Queries per day'
+        };
+        const heading = document.querySelector('.chart-section .card-title');
+        if (heading) {
+            heading.textContent = headingMap[state.timeRange] || 'Queries per minute';
+        }
+    }
+
     function refreshChart() {
         if (state.timeRange === 'LastHour') {
             Charts.update(state.nodes, state.chartServer, getDatasetMode());
@@ -955,6 +970,7 @@ const App = (() => {
         initTheme();
         setupUpdateButtons();
         fetchVersion();
+        updateChartHeading();
         Charts.init();
         Charts.setPersistCallback(saveHiddenChartState);
         Charts.setLoadCallback(loadHiddenChartState);
