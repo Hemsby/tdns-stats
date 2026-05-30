@@ -750,6 +750,23 @@ const App = (() => {
         });
     }
 
+    // ---- Chart persistence ---------------------------------------------------
+    function getChartStorageKey(viewMode) {
+        return 'tdns-chart-hidden-' + viewMode;
+    }
+
+    function loadHiddenChartState(viewMode) {
+        const stored = localStorage.getItem(getChartStorageKey(viewMode));
+        return stored ? new Set(JSON.parse(stored)) : new Set();
+    }
+
+    function saveHiddenChartState(viewMode, hiddenSet) {
+        localStorage.setItem(
+            getChartStorageKey(viewMode),
+            JSON.stringify(Array.from(hiddenSet))
+        );
+    }
+
     // ---- Update functionality ---------------------------------------------------
     function handleUpdateStatus(data) {
         state.updateStatus = data.status;
@@ -926,6 +943,8 @@ const App = (() => {
         setupUpdateButtons();
         fetchVersion();
         Charts.init();
+        Charts.setPersistCallback(saveHiddenChartState);
+        Charts.setLoadCallback(loadHiddenChartState);
         fetch('/api/config')
             .then(r => r.json())
             .then(cfg => {

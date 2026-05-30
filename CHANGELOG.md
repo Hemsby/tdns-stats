@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-05-30
+
+### Added
+- Chart legend click interactions to hide/show individual datasets
+- Persist hidden chart dataset preferences to localStorage so selections survive page reloads
+- Independent hidden state tracking per chart view mode (Overview vs All datasets)
+
 ## [1.1.0] - 2026-05-29
 
 ### Added

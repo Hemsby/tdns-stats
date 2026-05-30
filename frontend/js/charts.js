@@ -4,6 +4,7 @@ const Charts = (() => {
     let chart = null;
     let lastView = null;
     const hiddenByView = { overview: new Set(), all: new Set() };
+    let persistCallback = null;
 
     const DATASET_COLORS = {
         'Total':          { border: 'rgb(34,211,238)',   bg: 'rgba(34,211,238,.07)'   },
@@ -20,6 +21,10 @@ const Charts = (() => {
     };
 
     const OVERVIEW_DATASETS = ['Total', 'Blocked', 'Cached'];
+
+    function setPersistCallback(callback) {
+        persistCallback = callback;
+    }
 
     function init() {
         const canvas = document.getElementById('mainChart');
@@ -39,6 +44,25 @@ const Charts = (() => {
                         position: 'bottom',
                         labels: {
                             color: '#94a3b8', boxWidth: 12, padding: 16, font: { size: 11 }
+                        },
+                        onClick: (e, legendItem, legend) => {
+                            const index = legendItem.datasetIndex;
+                            const dataset = chart.data.datasets[index];
+                            const meta = chart.getDatasetMeta(index);
+
+                            meta.hidden = !meta.hidden;
+
+                            if (meta.hidden) {
+                                hiddenByView[lastView || 'overview'].add(dataset.label);
+                            } else {
+                                hiddenByView[lastView || 'overview'].delete(dataset.label);
+                            }
+
+                            if (persistCallback) {
+                                persistCallback(lastView || 'overview', hiddenByView[lastView || 'overview']);
+                            }
+
+                            chart.update('none');
                         }
                     },
                     tooltip: {
@@ -86,10 +110,10 @@ const Charts = (() => {
         // Preserve hidden label state across polling updates
         if (lastView && chart.data.datasets.length > 0) {
             const currentSet = hiddenByView[lastView];
-            
+
             if (currentSet) {
                 currentSet.clear();
-                
+
                 for (let i = 0; i < chart.data.datasets.length; i++) {
                     if (!chart.isDatasetVisible(i)) {
                         currentSet.add(chart.data.datasets[i].label);
@@ -97,6 +121,15 @@ const Charts = (() => {
                 }
             }
         }
+
+        // If view mode changed, load saved state for the new view
+        if (lastView !== datasetMode && hiddenByView[datasetMode].size === 0) {
+            // Only load if we haven't already populated this view
+            if (typeof loadChartHiddenState !== 'undefined') {
+                hiddenByView[datasetMode] = loadChartHiddenState(datasetMode);
+            }
+        }
+
         lastView = datasetMode;
 
         const showAll = datasetMode === 'all';
@@ -131,7 +164,17 @@ const Charts = (() => {
         }
 
         chart.update('none');
+
+        // Persist current state after update
+        if (persistCallback) {
+            persistCallback(datasetMode, hiddenByView[datasetMode]);
+        }
     }
 
-    return { init, update, updateFromData };
+    function setLoadCallback(loadFn) {
+        // Store the load function for use when view mode changes
+        window.loadChartHiddenState = loadFn;
+    }
+
+    return { init, update, updateFromData, setPersistCallback, setLoadCallback };
 })();
