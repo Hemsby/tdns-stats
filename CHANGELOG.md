@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-05-31
+
+### Fixed
+- Update process now waits for service to fully restart (detected via started_at timestamp) instead of guessing delays
+- Browser cache cleared on successful update to ensure fresh JavaScript and CSS load
+
 ## [1.4.0] - 2026-05-31
 
 ### Added
@@ -14,10 +20,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Cluster nodes table with last synced timestamp and node URL links
 - Smart reconnection countdown timer instead of silent wait
 - Extended statistics display (Recursive, Authoritative, Refused, Dropped queries)
-
-### Fixed
-- Update process now waits for service to fully restart (detected via started_at timestamp) instead of guessing delays
-- Browser cache cleared on successful update to ensure fresh JavaScript and CSS load
 
 ## [1.3.0] - 2026-05-30
 
