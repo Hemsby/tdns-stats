@@ -1040,21 +1040,44 @@ const App = (() => {
     }
 
     async function pollHealth() {
-        const maxAttempts = 30; // 30 * 2 seconds = 60 seconds timeout
+        const maxAttempts = 90; // 90 * 2 seconds = 3 minutes max
         let attempts = 0;
+        let initialStartedAt = null;
 
         state.updateStatus = 'reconnecting';
         updateStatusDisplay();
 
+        // Capture initial started_at before polling
+        try {
+            const res = await fetch('/api/health', { cache: 'no-store' });
+            if (res.ok) {
+                const data = await res.json();
+                initialStartedAt = data.started_at;
+            }
+        } catch (e) {
+            // Ignore - will get it on first poll attempt
+        }
+
         const poll = async () => {
             attempts++;
             try {
-                const res = await fetch('/api/health');
+                const res = await fetch('/api/health', { cache: 'no-store' });
                 if (res.ok) {
-                    state.updateStatus = 'done';
-                    updateStatusDisplay();
-                    setTimeout(() => location.reload(), 1000);
-                    return;
+                    const data = await res.json();
+                    // Service only considered "back" if started_at has changed
+                    if (initialStartedAt && data.started_at && data.started_at > initialStartedAt) {
+                        state.updateStatus = 'done';
+                        updateStatusDisplay();
+                        // Clear caches and reload
+                        try {
+                            if ('caches' in window) {
+                                const keys = await caches.keys();
+                                await Promise.all(keys.map(k => caches.delete(k)));
+                            }
+                        } catch (e) {}
+                        setTimeout(() => location.reload(), 1500);
+                        return;
+                    }
                 }
             } catch (e) {
                 // Service not ready yet

@@ -14,6 +14,7 @@ const { listQueryLogApps, discoverQueryLogsApp, getCacheMaxEntries, getDashboard
 
 const PACKAGE = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf8'));
 const VERSION = PACKAGE.version;
+const STARTED_AT = new Date().toISOString();
 
 const CONFIG_PATHS = [
     '/etc/tdns-stats/config.yml',
@@ -190,7 +191,7 @@ async function start() {
     });
 
     app.get('/api/health', (req, res) => {
-        res.json({ status: 'ok', version: VERSION });
+        res.json({ status: 'ok', version: VERSION, started_at: STARTED_AT });
     });
 
     app.get('/api/updates/check', async (req, res) => {
