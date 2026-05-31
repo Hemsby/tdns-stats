@@ -16,7 +16,7 @@ const App = (() => {
         topServer:     null,
         topTab:        'domains',
         feedServer:    'all',
-        feedBlocked:   false,
+        feedFilters:   new Set(),
         feedPaused:    false,
         lastFeedEvent: null,
         timeRange:     'LastHour',
@@ -32,21 +32,54 @@ const App = (() => {
     let es = null;
 
     // ---- SSE ----------------------------------------------------------------
+    let reconnectTimer = null;
+    let currentReconnectDelay = 3000;
+
+    function reconnectWithCountdown(delayMs) {
+        currentReconnectDelay = delayMs;
+        let secondsLeft = Math.ceil(delayMs / 1000);
+
+        function updateCountdown() {
+            document.getElementById('lastUpdated').textContent = `Reconnecting in ${secondsLeft}s...`;
+            secondsLeft--;
+
+            if (secondsLeft < 0) {
+                clearInterval(reconnectTimer);
+                reconnectTimer = null;
+                connect();
+            }
+        }
+
+        updateCountdown();
+        reconnectTimer = setInterval(updateCountdown, 1000);
+    }
+
     function connect() {
         if (es) es.close();
         es = new EventSource('/api/stream');
 
+        // Timeout: if we don't get connected within 5 seconds, retry
+        const connectTimeout = setTimeout(() => {
+            if (!state.connected && es) {
+                es.close();
+                reconnectWithCountdown(currentReconnectDelay);
+            }
+        }, 5000);
+
         let lastMsg = Date.now();
         const stalenessTimer = setInterval(() => {
+            // Skip staleness check during updates
+            if (state.updateStatus === 'updating' || state.updateStatus === 'restarting') return;
             if (Date.now() - lastMsg > 60000) {
                 clearInterval(stalenessTimer);
                 setConnDot('error');
                 es.close();
-                setTimeout(connect, 3000);
+                reconnectWithCountdown(3000);
             }
         }, 20000);
 
         es.onopen = () => {
+            clearTimeout(connectTimeout);
             state.connected = true;
             setConnDot('connected');
             document.getElementById('lastUpdated').textContent = 'Connected';
@@ -56,9 +89,10 @@ const App = (() => {
             clearInterval(stalenessTimer);
             state.connected = false;
             setConnDot('error');
-            document.getElementById('lastUpdated').textContent = 'Reconnecting...';
             es.close();
-            setTimeout(connect, 3000);
+            // During updates, wait longer for service to restart
+            const reconnectDelay = (state.updateStatus === 'updating' || state.updateStatus === 'restarting') ? 8000 : 3000;
+            reconnectWithCountdown(reconnectDelay);
         };
 
         es.onmessage = evt => {
@@ -101,7 +135,7 @@ const App = (() => {
             state.lastFeedEvent = Date.now();
             setFeedStall(false);
             Feed.add(msg.server, msg.data);
-            Feed.scheduleRender(state.feedServer, state.feedBlocked);
+            Feed.scheduleRender(state.feedServer, state.feedFilters);
 
         } else if (msg.type === 'top') {
             state.top[msg.server] = msg.data;
@@ -191,11 +225,12 @@ const App = (() => {
 
         document.querySelectorAll('.stab').forEach(b => b.classList.toggle('active', b.dataset.key === key));
         syncSelects();
+        loadAndApplyFeedFilters();
         renderClusterCards();
         refreshChart();
         refreshTopLists();
         renderPerfCards();
-        Feed.render(state.feedServer, state.feedBlocked);
+        Feed.render(state.feedServer, state.feedFilters);
     }
 
     function buildColorMap() {
@@ -263,6 +298,13 @@ const App = (() => {
         if (fs) { fs.value = state.feedServer; updateSelDot('feedServerSelect', state.feedServer); }
     }
 
+    function loadAndApplyFeedFilters() {
+        state.feedFilters = loadFeedFilters(state.feedServer);
+        document.querySelectorAll('.feed-filter-check').forEach(cb => {
+            cb.checked = state.feedFilters.has(cb.value);
+        });
+    }
+
     let listenersAdded = false;
     function addSelectListeners() {
         if (listenersAdded) return;
@@ -284,6 +326,7 @@ const App = (() => {
         el('chartDatasetSelect') && (el('chartDatasetSelect').onchange = () => {
             refreshChart();
         });
+
         el('topServerSelect') && (el('topServerSelect').onchange = e => {
             state.topServer = e.target.value;
             updateSelDot('topServerSelect', state.topServer);
@@ -292,16 +335,50 @@ const App = (() => {
             const feedSel = el('feedServerSelect');
             if (feedSel) feedSel.value = state.feedServer;
             updateSelDot('feedServerSelect', state.feedServer);
-            Feed.render(state.feedServer, state.feedBlocked);
+            loadAndApplyFeedFilters();
+            Feed.render(state.feedServer, state.feedFilters);
         });
         el('feedServerSelect') && (el('feedServerSelect').onchange = e => {
             state.feedServer = e.target.value;
             updateSelDot('feedServerSelect', state.feedServer);
-            Feed.render(state.feedServer, state.feedBlocked);
+            loadAndApplyFeedFilters();
+            Feed.render(state.feedServer, state.feedFilters);
         });
-        el('feedBlockedOnly') && (el('feedBlockedOnly').onchange = e => {
-            state.feedBlocked = e.target.checked;
-            Feed.render(state.feedServer, state.feedBlocked);
+        loadAndApplyFeedFilters();
+
+        const feedFilterBtn = el('feedFilterBtn');
+        const feedFilterMenu = el('feedFilterMenu');
+        if (feedFilterBtn) {
+            feedFilterBtn.addEventListener('click', () => {
+                feedFilterMenu.hidden = !feedFilterMenu.hidden;
+            });
+        }
+        document.addEventListener('click', e => {
+            if (feedFilterMenu && !feedFilterMenu.contains(e.target) && feedFilterBtn && !feedFilterBtn.contains(e.target)) {
+                feedFilterMenu.hidden = true;
+            }
+        });
+        document.querySelectorAll('.feed-filter-check').forEach(cb => {
+            cb.addEventListener('change', e => {
+                if (e.target.checked) {
+                    state.feedFilters.add(e.target.value);
+                } else {
+                    state.feedFilters.delete(e.target.value);
+                }
+                saveFeedFilters(state.feedServer, state.feedFilters);
+                Feed.render(state.feedServer, state.feedFilters);
+            });
+        });
+        el('feedFilterAll') && el('feedFilterAll').addEventListener('click', () => {
+            document.querySelectorAll('.feed-filter-check').forEach(cb => { cb.checked = true; state.feedFilters.add(cb.value); });
+            saveFeedFilters(state.feedServer, state.feedFilters);
+            Feed.render(state.feedServer, state.feedFilters);
+        });
+        el('feedFilterNone') && el('feedFilterNone').addEventListener('click', () => {
+            state.feedFilters.clear();
+            document.querySelectorAll('.feed-filter-check').forEach(cb => { cb.checked = false; });
+            saveFeedFilters(state.feedServer, state.feedFilters);
+            Feed.render(state.feedServer, state.feedFilters);
         });
 
         const ICON_PAUSE = '<svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M5.5 3.5A1.5 1.5 0 017 5v6a1.5 1.5 0 01-3 0V5a1.5 1.5 0 011.5-1.5zm5 0A1.5 1.5 0 0112 5v6a1.5 1.5 0 01-3 0V5a1.5 1.5 0 011.5-1.5z"/></svg>';
@@ -382,6 +459,10 @@ const App = (() => {
         const nx      = st.totalNxDomain     || 0;
         const fail    = st.totalServerFailure|| 0;
         const clients = st.totalClients      || 0;
+        const recursive = st.totalRecursive  || 0;
+        const auth    = st.totalAuthoritative|| 0;
+        const refused = st.totalRefused      || 0;
+        const dropped = st.totalDropped      || 0;
         const pct     = total > 0 ? Math.round(blocked / total * 100) : 0;
 
         const card = document.createElement('div');
@@ -393,13 +474,17 @@ const App = (() => {
             '</div>' +
             '<div class="srv-card-role"><span class="node-badge primary">Cluster</span></div>' +
             '<div class="srv-stats-grid">' +
-            statMini('Queries',  fmtNum(total),   'blue') +
-            statMini('Blocked',  fmtNum(blocked), 'red') +
-            statMini('Cached',   fmtNum(cached),  'teal') +
-            statMini('Clients',  fmtNum(clients), 'pur') +
+            statMini('Total',   fmtNum(total),   'blue') +
             statMini('No Error', fmtNum(noerr),   'green') +
-            statMini('NXDOMAIN', fmtNum(nx),      'yel') +
             statMini('Failures', fmtNum(fail),    'ora') +
+            statMini('NXDOMAIN', fmtNum(nx),     'yel') +
+            statMini('Refused',  fmtNum(refused), 'slate') +
+            statMini('Authoritative', fmtNum(auth), 'yel') +
+            statMini('Recursive', fmtNum(recursive), 'pur') +
+            statMini('Cached',   fmtNum(cached),  'teal') +
+            statMini('Blocked',  fmtNum(blocked), 'red') +
+            statMini('Dropped',  fmtNum(dropped), 'slate') +
+            statMini('Clients',  fmtNum(clients), 'pur') +
             statMini('Block %',  pct + '%',       'red') +
             '</div>' +
             '<div class="srv-card-footer">' +
@@ -417,16 +502,20 @@ const App = (() => {
             const stateClass = n.state === 'Self' || n.state === 'Connected' ? 'node-online' : 'node-offline';
             const typeBadge  = n.type === 'Primary' ? '<span class="node-badge primary">Primary</span>' : '<span class="node-badge secondary">Secondary</span>';
             const ip         = (n.ipAddresses || []).join(', ');
+            const url        = n.url || 'http://' + (n.name || n.ipAddresses?.[0] || '') + ':5380';
             const upSince    = n.upSince    ? relativeTime(n.upSince)    : '';
             const lastSeen   = n.lastSeen   ? relativeTime(n.lastSeen)   : (n.state === 'Self' ? 'self' : '');
+            const lastSynced = n.configLastSynced && !n.configLastSynced.startsWith('0001-') ? relativeTime(n.configLastSynced) : '';
 
             return '<tr class="node-row">' +
                 '<td><span class="node-dot ' + stateClass + '"></span> <span class="node-name">' + esc(n.name) + '</span></td>' +
                 '<td>' + typeBadge + '</td>' +
-                '<td><span class="node-state ' + stateClass + '">' + esc(n.state) + '</span></td>' +
+                '<td class="node-url"><a href="' + esc(url) + '" target="_blank">' + esc(url) + '</a></td>' +
                 '<td class="node-ip">' + esc(ip) + '</td>' +
                 '<td class="node-time">up ' + esc(upSince) + '</td>' +
                 '<td class="node-time">' + esc(lastSeen) + '</td>' +
+                '<td class="node-time">' + (lastSynced ? 'synced ' + esc(lastSynced) : '') + '</td>' +
+                '<td><span class="node-state ' + stateClass + '">' + esc(n.state) + '</span></td>' +
                 '</tr>';
         }).join('');
 
@@ -434,7 +523,7 @@ const App = (() => {
             '<div class="card-header"><h2 class="card-title">Cluster Nodes' +
             (clusterDomain ? ' <span class="node-domain">' + esc(clusterDomain) + '</span>' : '') + '</h2></div>' +
             '<div class="node-table-scroll"><table class="node-table">' +
-            '<thead><tr><th>Node</th><th>Role</th><th>State</th><th>IP</th><th>Uptime</th><th>Last Seen</th></tr></thead>' +
+            '<thead><tr><th>Node</th><th>Role</th><th>URL</th><th>IP</th><th>Uptime</th><th>Last Seen</th><th>Last Synced</th><th>State</th></tr></thead>' +
             '<tbody>' + rows + '</tbody>' +
             '</table></div>';
         return wrap;
@@ -461,6 +550,10 @@ const App = (() => {
         const nx      = st.totalNxDomain     || 0;
         const fail    = st.totalServerFailure|| 0;
         const clients = st.totalClients      || 0;
+        const recursive = st.totalRecursive  || 0;
+        const auth    = st.totalAuthoritative|| 0;
+        const refused = st.totalRefused      || 0;
+        const dropped = st.totalDropped      || 0;
         const pct     = total > 0 ? Math.round(blocked / total * 100) : 0;
 
         if (!role && node.clusterInitialized === false) role = 'Standalone';
@@ -476,13 +569,17 @@ const App = (() => {
             '</div>' +
             (roleBadge ? '<div class="srv-card-role">' + roleBadge + '</div>' : '') +
             '<div class="srv-stats-grid">' +
-            statMini('Queries', fmtNum(total), 'blue') +
-            statMini('Blocked', fmtNum(blocked), 'red') +
-            statMini('Cached',  fmtNum(cached),  'teal') +
-            statMini('Clients', fmtNum(clients), 'pur') +
+            statMini('Total',   fmtNum(total), 'blue') +
             statMini('No Error', fmtNum(noerr), 'green') +
-            statMini('NXDOMAIN', fmtNum(nx), 'yel') +
             statMini('Failures', fmtNum(fail), 'ora') +
+            statMini('NXDOMAIN', fmtNum(nx), 'yel') +
+            statMini('Refused',  fmtNum(refused), 'slate') +
+            statMini('Authoritative', fmtNum(auth), 'yel') +
+            statMini('Recursive', fmtNum(recursive), 'pur') +
+            statMini('Cached',   fmtNum(cached),  'teal') +
+            statMini('Blocked',  fmtNum(blocked), 'red') +
+            statMini('Dropped',  fmtNum(dropped), 'slate') +
+            statMini('Clients',  fmtNum(clients), 'pur') +
             statMini('Block %',  pct + '%',   'red') +
             '</div>' +
             '<div class="srv-card-footer">' +
@@ -780,6 +877,19 @@ const App = (() => {
             getChartStorageKey(viewMode),
             JSON.stringify(Array.from(hiddenSet))
         );
+    }
+
+    function getFeedFilterStorageKey(server) {
+        return 'tdns-feed-filters-' + (server || 'all');
+    }
+
+    function loadFeedFilters(server) {
+        const stored = localStorage.getItem(getFeedFilterStorageKey(server));
+        return stored ? new Set(JSON.parse(stored)) : new Set();
+    }
+
+    function saveFeedFilters(server, filterSet) {
+        localStorage.setItem(getFeedFilterStorageKey(server), JSON.stringify(Array.from(filterSet)));
     }
 
     // ---- Update functionality ---------------------------------------------------

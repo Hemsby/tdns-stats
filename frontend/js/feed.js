@@ -32,9 +32,14 @@ const Feed = (() => {
         if (!paused) render(lastFilter, lastBlocked);
     }
 
-    function scheduleRender(serverFilter, blockedOnly) {
+    function setFilters(filters) {
+        lastBlocked = filters;
+        render(lastFilter, filters);
+    }
+
+    function scheduleRender(serverFilter, filters) {
         lastFilter  = serverFilter;
-        lastBlocked = blockedOnly;
+        lastBlocked = filters;
         if (paused || renderTimer) return;
         renderTimer = setTimeout(() => {
             renderTimer = null;
@@ -42,16 +47,16 @@ const Feed = (() => {
         }, 250);
     }
 
-    function render(serverFilter, blockedOnly) {
+    function render(serverFilter, filters) {
         lastFilter  = serverFilter;
-        lastBlocked = blockedOnly;
+        lastBlocked = filters;
 
         const list = document.getElementById('feedList');
         if (!list) return;
 
         const filtered = entries.filter(e => {
             if (serverFilter !== 'all' && e._server !== serverFilter) return false;
-            if (blockedOnly && e.responseType !== 'Blocked') return false;
+            if (filters.size > 0 && !filters.has(e.responseType)) return false;
             return true;
         });
 
@@ -125,5 +130,5 @@ const Feed = (() => {
             .replace(/"/g, '&quot;');
     }
 
-    return { init, add, scheduleRender, render, setColors, setPaused };
+    return { init, add, scheduleRender, render, setColors, setPaused, setFilters };
 })();

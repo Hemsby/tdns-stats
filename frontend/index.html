@@ -114,10 +114,30 @@
                         <select id="feedServerSelect" class="ctrl-select">
                             <option value="all">All servers</option>
                         </select>
-                        <label class="toggle-label">
-                            <input type="checkbox" id="feedBlockedOnly">
-                            <span>Blocked only</span>
-                        </label>
+                        <button class="feed-filter-btn" id="feedFilterBtn" title="Filter response types">
+                            <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M1 2a1 1 0 011-1h12a1 1 0 011 1v2.5a1 1 0 01-.293.707l-4.854 4.854a1 1 0 00-.293.707V13a1 1 0 01-1.608.832l-3-2A1 1 0 012 11.48V6.707a1 1 0 00-.293-.707L.293 1.146A1 1 0 011 .5V2z"/></svg>
+                        </button>
+                        <div class="feed-filter-menu" id="feedFilterMenu" hidden>
+                            <div class="feed-filter-content">
+                                <div class="feed-filter-group">
+                                    <label><input type="checkbox" class="feed-filter-check" value="Blocked"> Blocked</label>
+                                    <label><input type="checkbox" class="feed-filter-check" value="Refused"> Refused</label>
+                                    <label><input type="checkbox" class="feed-filter-check" value="ServerFailure"> Server Failure</label>
+                                    <label><input type="checkbox" class="feed-filter-check" value="NxDomain"> NX Domain</label>
+                                </div>
+                                <div class="feed-filter-group">
+                                    <label><input type="checkbox" class="feed-filter-check" value="Recursive"> Recursive</label>
+                                    <label><input type="checkbox" class="feed-filter-check" value="Authoritative"> Authoritative</label>
+                                    <label><input type="checkbox" class="feed-filter-check" value="NoError"> No Error</label>
+                                    <label><input type="checkbox" class="feed-filter-check" value="Dropped"> Dropped</label>
+                                    <label><input type="checkbox" class="feed-filter-check" value="Cached"> Cached</label>
+                                </div>
+                                <div class="feed-filter-actions">
+                                    <button class="feed-filter-all" id="feedFilterAll">All</button>
+                                    <button class="feed-filter-none" id="feedFilterNone">None</button>
+                                </div>
+                            </div>
+                        </div>
                         <button class="feed-pause-btn" id="feedPauseBtn" title="Pause live feed">
                             <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M5.5 3.5A1.5 1.5 0 017 5v6a1.5 1.5 0 01-3 0V5a1.5 1.5 0 011.5-1.5zm5 0A1.5 1.5 0 0112 5v6a1.5 1.5 0 01-3 0V5a1.5 1.5 0 011.5-1.5z"/></svg>
                         </button>

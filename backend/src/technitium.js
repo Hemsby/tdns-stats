@@ -62,7 +62,7 @@ async function getSettings(server) {
 }
 
 async function getClusterState(server) {
-    return apiGet(server, 'api/cluster/state');
+    return apiGet(server, 'api/admin/cluster/state');
 }
 
 async function listQueryLogApps(server) {

@@ -1,6 +1,6 @@
 'use strict';
 
-const { getDashboard, getTopStats, getQueryLogs, getRttSample, getSessionInfo } = require('./technitium');
+const { getDashboard, getTopStats, getQueryLogs, getRttSample, getSessionInfo, getClusterState } = require('./technitium');
 
 const CLUSTER_KEY = '__cluster';
 
@@ -87,13 +87,31 @@ class Poller {
         // Fetch cluster aggregate stats
         if (this.clusterServer) {
             try {
-                const [clusterDash, sampleNode] = await Promise.all([
+                const [clusterDash, clusterState] = await Promise.all([
                     getDashboard(this.clusterServer, 'LastHour', 'cluster'),
-                    Promise.resolve(results.find(r => r.status === 'fulfilled' && r.value.clusterNodes)?.value)
+                    getClusterState(this.clusterServer)
                 ]);
+
+                // Query each node individually to get its configLastSynced
+                const enrichedNodes = await Promise.all(
+                    (clusterState?.clusterNodes || []).map(async node => {
+                        try {
+                            const nodeState = await getClusterState({ ...this.clusterServer, url: node.url });
+                            // Find this node's entry in the response to get its configLastSynced
+                            const selfNode = (nodeState?.clusterNodes || []).find(n => n.id === node.id || n.name === node.name);
+                            return {
+                                ...node,
+                                configLastSynced: selfNode?.configLastSynced || null
+                            };
+                        } catch (_) {
+                            return { ...node, configLastSynced: null };
+                        }
+                    })
+                );
+
                 nodes[CLUSTER_KEY] = {
-                    clusterDomain: sampleNode?.clusterDomain || null,
-                    clusterNodes:  sampleNode?.clusterNodes  || null,
+                    clusterDomain: clusterState?.clusterDomain || null,
+                    clusterNodes:  enrichedNodes,
                     stats:         clusterDash
                 };
             } catch (_) { /* cluster server unreachable */ }
