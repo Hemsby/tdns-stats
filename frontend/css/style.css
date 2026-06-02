@@ -445,8 +445,8 @@ main { position: relative; z-index: 1; }
 }
 .feed-row:hover    { background: var(--bg-hover); }
 .feed-row.blocked  { background: var(--accent-red-row); border-left-color: var(--accent-red); opacity: 0.95; }
-.feed-row.nxdomain { background: var(--accent-ora-row);  border-left-color: var(--accent-ora); }
-.feed-row.servfail { background: var(--accent-red-row);  border-left-color: var(--accent-red); }
+.feed-row.nxdomain { background: var(--accent-ora-row); border-left-color: var(--accent-ora); opacity: 0.95; }
+.feed-row.servfail { background: var(--accent-red-row); border-left-color: var(--accent-red); opacity: 0.95; }
 
 .feed-time   { font-family: 'JetBrains Mono', monospace; color: var(--text-dim); font-size: 11px; }
 .feed-server { font-size: 11px; color: var(--text-muted); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: .2px; }

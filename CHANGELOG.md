@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-06-02
+
+### Fixed
+- **NX Domain Visibility:** Fixed logic where resolution method (Recursive/Authoritative) was masking the NXDOMAIN error status in the live feed badges.
+- **Filter Accuracy:** Updated live feed filters to correctly identify NXDOMAIN and Server Failure queries using RCODE data.
+- **Visual Consistency:** Ensured orange and red markers appear for all error types, not just blocked queries.
+- **Code Cleanup:** Removed temporary debug logs and test-specific diagnostics.
+
 ## [1.5.0] - 2026-06-02
 
 ### Added

@@ -56,7 +56,18 @@ const Feed = (() => {
 
         const filtered = entries.filter(e => {
             if (serverFilter !== 'all' && e._server !== serverFilter) return false;
-            if (filters.size > 0 && !filters.has(e.responseType)) return false;
+            if (filters.size > 0) {
+                // Determine what this entry "is" based on our priority logic
+                let entryType = e.responseType;
+                const rcode = (e.rcode || '').toLowerCase().replace(/\s+/g, '');
+                
+                if (entryType !== 'Blocked') {
+                    if (rcode === 'nxdomain')      entryType = 'NxDomain';
+                    else if (rcode === 'serverfailure') entryType = 'ServerFailure';
+                }
+                
+                if (!filters.has(entryType)) return false;
+            }
             return true;
         });
 
@@ -76,22 +87,29 @@ const Feed = (() => {
             if (existingIds.has(id)) continue;
 
             const row = document.createElement('div');
-            row.className = 'feed-row ' + rowClass(e.responseType);
+            row.className = 'feed-row ' + rowClass(e);
             row.dataset.id = id;
 
             const ts    = formatTime(e.timestamp);
-            const rtype = e.responseType || 'Unknown';
-            const typeCls = rtype.toLowerCase().replace(/\s+/g, '');
             const srvCls  = colorMap[e._server] ? ' ' + colorMap[e._server] : '';
             
-            // Debug: Log first entry to see available fields
-            if (added === 0 && !window._debugLogged) {
-                console.log('Sample Log Entry:', e);
-                window._debugLogged = true;
+            // Determine badge text and class: Priority on Results (RCODE) over Resolution Method
+            let badgeText = e.responseType || 'Unknown';
+            let badgeCls  = badgeText.toLowerCase().replace(/\s+/g, '');
+            
+            const rcode = (e.rcode || '').toLowerCase().replace(/\s+/g, '');
+            if (e.responseType !== 'Blocked') {
+                if (rcode === 'nxdomain') {
+                    badgeText = 'NX Domain';
+                    badgeCls  = 'nxdomain';
+                } else if (rcode === 'serverfailure') {
+                    badgeText = 'ServFail';
+                    badgeCls  = 'servfail';
+                }
             }
 
-            const rttVal  = e.responseRtt !== undefined ? e.responseRtt : e.rtt;
-            const rtt     = fmtMs(rttVal, rtype);
+            const rttVal  = e.responseRtt;
+            const rtt     = fmtMs(rttVal, e.responseType);
             const latCls  = getLatClass(rttVal);
 
             row.innerHTML =
@@ -102,7 +120,7 @@ const Feed = (() => {
                 '<span class="feed-qtype">'  + esc(e.qtype || '')        + '</span>' +
                 '<span class="feed-domain" title="' + esc(e.qname) + '">' + esc(e.qname) + '</span>' +
                 '<span class="feed-latency ' + latCls + '">' + esc(rtt)  + '</span>' +
-                '<span class="feed-type '   + typeCls + '">'             + esc(rtype) + '</span>';
+                '<span class="feed-type '   + badgeCls + '">'            + esc(badgeText) + '</span>';
 
             frag.appendChild(row);
             added++;
@@ -138,13 +156,18 @@ const Feed = (() => {
         return n.toFixed(1) + 'ms';
     }
 
-    function rowClass(responseType) {
-        switch (responseType) {
-            case 'Blocked':      return 'blocked';
-            case 'NxDomain':     return 'nxdomain';
-            case 'ServerFailure':return 'servfail';
-            default: return '';
-        }
+    function rowClass(e) {
+        if (!e) return '';
+        
+        // 1. Priority: Response Type 'Blocked' is always Red
+        if (e.responseType === 'Blocked') return 'blocked';
+        
+        // 2. Secondary: Check RCODE for NXDOMAIN (Orange) or Server Failure (Red)
+        const rcode = (e.rcode || '').toLowerCase().replace(/\s+/g, '');
+        if (rcode === 'nxdomain')      return 'nxdomain';
+        if (rcode === 'serverfailure') return 'servfail';
+        
+        return '';
     }
 
     function formatTime(ts) {
