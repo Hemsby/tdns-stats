@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-06-02
+
+### Added
+- **Live Latency (ms):** Added a new column to the live feed showing round-trip time (RTT) for recursive queries.
+- **Query Type:** Added query type (A, AAAA, TXT, etc.) to the live feed for better visibility.
+- **Vibrant UI:** Completely overhauled the color palette for high-contrast Red and Orange distinctions.
+
+### Changed
+- **Color Synchronization:** Synchronized colors across graph legends, stats cards, and feed badges (Authoritative=Yellow, NXDOMAIN=Orange, Failure=Red).
+- **Layout Optimization:** Tightened feed columns to give significantly more room for domain names.
+- **Top Stats:** Renamed "TOP" card to "TOP STATS" and fixed alignment of hostnames in the Clients tab.
+- **Streamlined Stats:** Removed redundant text-based "Block %" figures in favor of the visual bar for a cleaner look.
+
+### Fixed
+- Fixed hostname truncation and right-alignment issues in the Top Clients list.
+
 ## [1.4.1] - 2026-05-31
 
 ### Fixed

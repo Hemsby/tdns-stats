@@ -83,13 +83,25 @@ const Feed = (() => {
             const rtype = e.responseType || 'Unknown';
             const typeCls = rtype.toLowerCase().replace(/\s+/g, '');
             const srvCls  = colorMap[e._server] ? ' ' + colorMap[e._server] : '';
+            
+            // Debug: Log first entry to see available fields
+            if (added === 0 && !window._debugLogged) {
+                console.log('Sample Log Entry:', e);
+                window._debugLogged = true;
+            }
+
+            const rttVal  = e.responseRtt !== undefined ? e.responseRtt : e.rtt;
+            const rtt     = fmtMs(rttVal, rtype);
+            const latCls  = getLatClass(rttVal);
 
             row.innerHTML =
                 '<span class="feed-time">'   + esc(ts)                  + '</span>' +
                 '<span class="feed-server' + srvCls + '">' + esc(e._server) + '</span>' +
                 '<span class="feed-client" title="' + esc(e.clientIpAddress) + '">' + esc(e.clientIpAddress) + '</span>' +
                 '<span class="feed-proto">'  + esc(e.protocol || '')     + '</span>' +
+                '<span class="feed-qtype">'  + esc(e.qtype || '')        + '</span>' +
                 '<span class="feed-domain" title="' + esc(e.qname) + '">' + esc(e.qname) + '</span>' +
+                '<span class="feed-latency ' + latCls + '">' + esc(rtt)  + '</span>' +
                 '<span class="feed-type '   + typeCls + '">'             + esc(rtype) + '</span>';
 
             frag.appendChild(row);
@@ -104,6 +116,26 @@ const Feed = (() => {
             const rows = list.querySelectorAll('.feed-row');
             for (let i = MAX_ENTRIES; i < rows.length; i++) rows[i].remove();
         }
+    }
+
+    function getLatClass(n) {
+        if (n == null || n <= 0) return '';
+        if (n <= 20)  return 'lat-low';
+        if (n <= 100) return 'lat-mid';
+        return 'lat-high';
+    }
+
+    function fmtMs(n, type) {
+        // If it's not a recursive query, it's effectively 0ms latency from the server's perspective
+        const instantTypes = ['Cached', 'Blocked', 'Authoritative', 'Refused', 'Dropped'];
+        if (instantTypes.includes(type) && (n == null || n === undefined || n === 0)) {
+            return '0.0ms';
+        }
+
+        if (n == null || n === undefined) return '---';
+        if (n === 0)   return '0.0ms';
+        if (n >= 1000) return (n / 1000).toFixed(2) + 's';
+        return n.toFixed(1) + 'ms';
     }
 
     function rowClass(responseType) {
