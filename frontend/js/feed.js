@@ -146,8 +146,8 @@ const Feed = (() => {
     function fmtMs(n, type) {
         // If it's not a recursive query, it's effectively 0ms latency from the server's perspective
         const instantTypes = ['Cached', 'Blocked', 'Authoritative', 'Refused', 'Dropped'];
-        if (instantTypes.includes(type) && (n == null || n === undefined || n === 0)) {
-            return '0.0ms';
+        if (instantTypes.includes(type)) {
+            return '';
         }
 
         if (n == null || n === undefined) return '---';
