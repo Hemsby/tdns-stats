@@ -69,7 +69,7 @@ const App = (() => {
         let lastMsg = Date.now();
         const stalenessTimer = setInterval(() => {
             // Skip staleness check during updates
-            if (state.updateStatus === 'updating' || state.updateStatus === 'restarting') return;
+            if (state.updateStatus === 'updating' || state.updateStatus === 'restarting' || state.updateStatus === 'reconnecting') return;
             if (Date.now() - lastMsg > 60000) {
                 clearInterval(stalenessTimer);
                 setConnDot('error');
@@ -90,9 +90,13 @@ const App = (() => {
             state.connected = false;
             setConnDot('error');
             es.close();
-            // During updates, wait longer for service to restart
-            const reconnectDelay = (state.updateStatus === 'updating' || state.updateStatus === 'restarting') ? 8000 : 3000;
-            reconnectWithCountdown(reconnectDelay);
+
+            // If an update is in progress, pollHealth handles the reconnection via reload.
+            if (state.updateStatus === 'updating' || state.updateStatus === 'restarting' || state.updateStatus === 'reconnecting') {
+                return;
+            }
+
+            reconnectWithCountdown(3000);
         };
 
         es.onmessage = evt => {
@@ -1074,6 +1078,13 @@ const App = (() => {
                                 await Promise.all(keys.map(k => caches.delete(k)));
                             }
                         } catch (e) {}
+
+                        // Clear any pending reconnection timer before reload
+                        if (reconnectTimer) {
+                            clearInterval(reconnectTimer);
+                            reconnectTimer = null;
+                        }
+
                         setTimeout(() => location.reload(), 1500);
                         return;
                     }
