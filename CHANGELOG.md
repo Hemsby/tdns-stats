@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-06-03
+
+### Changed
+- Improved consistency of numerical output by hiding unnecessary decimal precision on whole numbers.
+- Refined live feed to hide latency for instant query types like Cached or Blocked.
+
+### Fixed
+- Resolved UI glitching during reconnection by ensuring only one recovery path is active after a restart.
+
 ## [1.5.1] - 2026-06-02
 
 ### Fixed
