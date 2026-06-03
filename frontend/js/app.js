@@ -658,6 +658,7 @@ const App = (() => {
             ? Math.round(cache.entries / cache.maxEntries * 100) + '%'
             : fmtNum(cache.entries);
         const cachePopLabel = cache.maxEntries > 0 ? 'Cache Pop.' : 'Entries';
+        const missRate = 100 - (cache.hitRate || 0);
 
         card.innerHTML =
             '<div class="srv-card-header">' +
@@ -674,7 +675,7 @@ const App = (() => {
             '<div class="srv-card-role" style="margin-top:6px"><span class="perf-section-label">Cache</span></div>' +
             '<div class="srv-stats-grid">' +
             statMini('Hit Rate',    cache.hitRate + '%',                              'green') +
-            statMini('Miss Rate',   (100 - (cache.hitRate || 0)).toFixed(1) + '%',   'red') +
+            statMini('Miss Rate',   + missRate.toFixed(1) + '%',                      'red') +
             statMini(cachePopLabel, cachePopHtml,                                     'teal') +
             statMini('Impact',      fmtMs(perf.impact),                               'pur') +
             '</div>';
@@ -816,15 +817,15 @@ const App = (() => {
     }
 
     function fmtNum(n) {
-        if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
-        if (n >= 1000)    return (n / 1000).toFixed(1) + 'K';
+        if (n >= 1000000) return parseFloat((n / 1000000).toFixed(1)) + 'M';
+        if (n >= 1000)    return parseFloat((n / 1000).toFixed(1)) + 'K';
         return String(n);
     }
 
     function fmtMs(n) {
         if (n == null) return '--';
-        if (n >= 1000) return (n / 1000).toFixed(2) + 's';
-        return n.toFixed(1) + 'ms';
+        if (n >= 1000) return parseFloat((n / 1000).toFixed(2)) + 's';
+        return parseFloat(n.toFixed(1)) + 'ms';
     }
 
     function esc(str) {
