@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.6.1] - 2026-06-03
+
+### Fixed
+- **SSE Stability Hardening:** Fixed rapid "connected/connecting" glitch loop by implementing a 2-second connection cooldown and explicit timer cleanup in the frontend.
+- **Backend Robustness:** Added formal JSON `ping` events and explicit SSE `error` listeners to prevent the backend process from crashing on write errors (e.g., due to SSL issues or abrupt disconnects).
+- **Auto-Reconnect Instruction:** Added `retry: 5000` header to inform browsers to wait longer between native reconnection attempts.
+
 ## [1.6.0] - 2026-06-03
 
 ### Changed

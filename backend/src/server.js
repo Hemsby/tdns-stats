@@ -116,30 +116,51 @@ async function start() {
     app.use(express.static(path.join(__dirname, '../../frontend')));
 
     app.get('/api/stream', (req, res) => {
+        req.setTimeout(0);
         res.setHeader('Content-Type',  'text/event-stream');
         res.setHeader('Cache-Control', 'no-cache');
         res.setHeader('Connection',    'keep-alive');
         res.setHeader('X-Accel-Buffering', 'no');
         res.flushHeaders();
 
+        // Tell browser to wait 5s before retrying if connection is lost
+        res.write('retry: 5000\n\n');
+
+        const cleanup = () => {
+            clients.delete(res);
+            if (clients.size === 0) poller.pause();
+            clearInterval(ping);
+        };
+
+        res.on('error', (err) => {
+            console.warn('[stream] Response error:', err.message);
+            cleanup();
+        });
+
         clients.add(res);
         if (clients.size === 1) poller.resume();
 
-        const state = poller.getState();
-        if (state.nodes) res.write(`data: ${JSON.stringify({ type: 'stats', data: state.nodes })}\n\n`);
-        if (state.perf && Object.keys(state.perf).length > 0) {
-            for (const [server, data] of Object.entries(state.perf)) {
-                res.write(`data: ${JSON.stringify({ type: 'perf', server, data })}
-
-`);
+        try {
+            const state = poller.getState();
+            if (state.nodes) res.write(`data: ${JSON.stringify({ type: 'stats', data: state.nodes })}\n\n`);
+            if (state.perf && Object.keys(state.perf).length > 0) {
+                for (const [server, data] of Object.entries(state.perf)) {
+                    res.write(`data: ${JSON.stringify({ type: 'perf', server, data })}\n\n`);
+                }
             }
+        } catch (err) {
+            console.error('[stream] Initial write failed:', err.message);
         }
 
         const ping = setInterval(() => {
-            try { res.write(': ping\n\n'); } catch (_) { clearInterval(ping); }
+            try { 
+                res.write(`data: ${JSON.stringify({ type: 'ping' })}\n\n`); 
+            } catch (_) { 
+                cleanup();
+            }
         }, 20000);
 
-        req.on('close', () => { clients.delete(res); if (clients.size === 0) poller.pause(); clearInterval(ping); });
+        req.on('close', cleanup);
     });
 
     app.get('/api/servers', (req, res) => {

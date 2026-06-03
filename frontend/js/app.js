@@ -34,13 +34,18 @@ const App = (() => {
     // ---- SSE ----------------------------------------------------------------
     let reconnectTimer = null;
     let currentReconnectDelay = 3000;
+    let lastConnectAttempt = 0;
 
     function reconnectWithCountdown(delayMs) {
+        // Clear any existing timer to prevent overlapping loops
+        if (reconnectTimer) clearInterval(reconnectTimer);
+        
         currentReconnectDelay = delayMs;
         let secondsLeft = Math.ceil(delayMs / 1000);
 
         function updateCountdown() {
-            document.getElementById('lastUpdated').textContent = `Reconnecting in ${secondsLeft}s...`;
+            const statusEl = document.getElementById('lastUpdated');
+            if (statusEl) statusEl.textContent = `Reconnecting in ${secondsLeft}s...`;
             secondsLeft--;
 
             if (secondsLeft < 0) {
@@ -55,13 +60,35 @@ const App = (() => {
     }
 
     function connect() {
-        if (es) es.close();
+        // Cooldown: prevent rapid cycling (at most once every 2 seconds)
+        const now = Date.now();
+        if (now - lastConnectAttempt < 2000) {
+            console.warn('[sse] Connect attempt blocked by cooldown');
+            return;
+        }
+        lastConnectAttempt = now;
+
+        if (es) {
+            console.log('[sse] Closing existing connection');
+            es.close();
+            es = null;
+        }
+
+        // Clear any pending reconnect timers
+        if (reconnectTimer) {
+            clearInterval(reconnectTimer);
+            reconnectTimer = null;
+        }
+
+        console.log('[sse] Connecting to /api/stream...');
         es = new EventSource('/api/stream');
 
         // Timeout: if we don't get connected within 5 seconds, retry
         const connectTimeout = setTimeout(() => {
             if (!state.connected && es) {
+                console.warn('[sse] Connection timeout, retrying...');
                 es.close();
+                es = null;
                 reconnectWithCountdown(currentReconnectDelay);
             }
         }, 5000);
@@ -70,26 +97,32 @@ const App = (() => {
         const stalenessTimer = setInterval(() => {
             // Skip staleness check during updates
             if (state.updateStatus === 'updating' || state.updateStatus === 'restarting' || state.updateStatus === 'reconnecting') return;
+            
             if (Date.now() - lastMsg > 60000) {
+                console.warn('[sse] Connection stale (60s), restarting...');
                 clearInterval(stalenessTimer);
                 setConnDot('error');
-                es.close();
+                if (es) { es.close(); es = null; }
                 reconnectWithCountdown(3000);
             }
         }, 20000);
 
         es.onopen = () => {
+            console.log('[sse] Connection established');
             clearTimeout(connectTimeout);
             state.connected = true;
             setConnDot('connected');
             document.getElementById('lastUpdated').textContent = 'Connected';
         };
 
-        es.onerror = () => {
+        es.onerror = (err) => {
+            console.error('[sse] Stream error:', err);
             clearInterval(stalenessTimer);
+            clearTimeout(connectTimeout);
             state.connected = false;
             setConnDot('error');
-            es.close();
+            
+            if (es) { es.close(); es = null; }
 
             // If an update is in progress, pollHealth handles the reconnection via reload.
             if (state.updateStatus === 'updating' || state.updateStatus === 'restarting' || state.updateStatus === 'reconnecting') {
@@ -154,6 +187,8 @@ const App = (() => {
             }
         } else if (msg.type === 'update-status') {
             handleUpdateStatus(msg.data);
+        } else if (msg.type === 'ping') {
+            // No action needed, handleMessage already updated lastMsg
         }
     }
 
