@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.6.2] - 2026-06-03
+
+### Changed
+- **Improved Jitter Accuracy:** Replaced the simplistic "statistical skew" method with a standard RFC 3550 EWMA algorithm. This provides a much more accurate and stable health metric for DNS upstream performance by measuring actual inter-arrival delay variation.
+
 ## [1.6.1] - 2026-06-03
 
 ### Fixed
