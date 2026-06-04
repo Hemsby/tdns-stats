@@ -25,6 +25,7 @@ class Poller {
         this._feedTimer  = null;
         this._topTimer   = null;
         this._perfTimer  = null;
+        this._jitterState = {};
     }
 
     start() {
@@ -216,11 +217,17 @@ class Poller {
                 const rtts = await getRttSample(server, this.cfg.rttSample);
                 if (rtts.length === 0) continue;
 
-                rtts.sort((a, b) => a - b);
-                const mean   = rtts.reduce((s, v) => s + v, 0) / rtts.length;
-                const median = rtts[Math.floor(rtts.length / 2)];
-                const p99    = rtts[Math.min(Math.floor(rtts.length * 0.99), rtts.length - 1)];
-                const jitter = Math.max(0, mean - median);
+                const sorted = [...rtts].sort((a, b) => a - b);
+                const mean   = sorted.reduce((s, v) => s + v, 0) / sorted.length;
+                const median = sorted[Math.floor(sorted.length / 2)];
+                const p99    = sorted[Math.min(Math.floor(sorted.length * 0.99), sorted.length - 1)];
+
+                rtts.reverse();
+                let J = this._jitterState[server.name] ?? 0;
+                for (let i = 1; i < rtts.length; i++)
+                    J += (Math.abs(rtts[i] - rtts[i - 1]) - J) / 16;
+                this._jitterState[server.name] = J;
+                const jitter = J;
 
                 const st = this.state.nodes?.[server.name]?.stats?.stats || {};
                 const totalQueries   = st.totalQueries    || 0;
