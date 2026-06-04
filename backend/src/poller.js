@@ -19,6 +19,7 @@ class Poller {
         };
         this.state     = {};
         this.state.perf  = {};
+        this._jitterState  = {};
         this.feedCursors   = {};
         this.clusterServer = null;
         this._statsTimer = null;
@@ -216,11 +217,20 @@ class Poller {
                 const rtts = await getRttSample(server, this.cfg.rttSample);
                 if (rtts.length === 0) continue;
 
+                // 1. Calculate Jitter (RFC 3550 EWMA)
+                // We do this before sorting to maintain temporal order (newest to oldest)
+                let j = this._jitterState[server.name] || 0;
+                for (let i = 1; i < rtts.length; i++) {
+                    j += (Math.abs(rtts[i] - rtts[i - 1]) - j) / 16;
+                }
+                this._jitterState[server.name] = j;
+                const jitter = j;
+
+                // 2. Statistical Metrics (requires sorted array)
                 rtts.sort((a, b) => a - b);
                 const mean   = rtts.reduce((s, v) => s + v, 0) / rtts.length;
                 const median = rtts[Math.floor(rtts.length / 2)];
                 const p99    = rtts[Math.min(Math.floor(rtts.length * 0.99), rtts.length - 1)];
-                const jitter = Math.max(0, mean - median);
 
                 const st = this.state.nodes?.[server.name]?.stats?.stats || {};
                 const totalQueries   = st.totalQueries    || 0;
