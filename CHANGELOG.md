@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-06-06
+
+### Added
+- **Cache & Block Test:** Added a new page tab for quickly checking cache and performing a block test on domain names.
+
 ## [1.6.2] - 2026-06-04
 
 ### Changed
