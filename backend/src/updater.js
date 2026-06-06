@@ -29,7 +29,7 @@ class Updater {
 
         if (fs.existsSync('/etc/tdns-stats/config.yml')) {
             try {
-                const result = await execAsync('systemctl is-active tdns-stats 2>/dev/null', { shell: '/bin/bash' });
+                const result = await execAsync('systemctl is-active tdns-stats 2>/dev/null', { shell: '/bin/sh' });
                 if (result.stdout.trim() === 'active') {
                     this.deploymentType = 'systemd';
                     return this.deploymentType;
@@ -61,12 +61,12 @@ class Updater {
     async updateGit() {
         const cwd = this.projectRoot;
         console.log('[update] Fetching from remote');
-        const { stdout: fetchStdout, stderr: fetchStderr } = await execAsync('git fetch origin', { cwd, shell: '/bin/bash' });
+        const { stdout: fetchStdout, stderr: fetchStderr } = await execAsync('git fetch origin', { cwd, shell: '/bin/sh' });
         if (fetchStderr) console.log('[update] git fetch stderr:', fetchStderr);
         console.log('[update] Fetched updates:', fetchStdout);
 
         console.log('[update] Resetting to remote master');
-        const { stdout: resetStdout, stderr: resetStderr } = await execAsync('git reset --hard origin/master', { cwd, shell: '/bin/bash' });
+        const { stdout: resetStdout, stderr: resetStderr } = await execAsync('git reset --hard origin/master', { cwd, shell: '/bin/sh' });
         if (resetStderr) console.log('[update] git reset stderr:', resetStderr);
         console.log('[update] Reset complete:', resetStdout);
 
@@ -77,12 +77,12 @@ class Updater {
     async updateDocker() {
         const cwd = this.projectRoot;
         console.log('[update] Executing docker-compose pull');
-        const { stdout: pullStdout, stderr: pullStderr } = await execAsync('docker-compose pull', { cwd, shell: '/bin/bash' });
+        const { stdout: pullStdout, stderr: pullStderr } = await execAsync('docker-compose pull', { cwd, shell: '/bin/sh' });
         if (pullStderr) console.log('[update] docker-compose pull stderr:', pullStderr);
         console.log('[update] Pull complete:', pullStdout);
 
         console.log('[update] Executing docker-compose up -d');
-        const { stdout: upStdout, stderr: upStderr } = await execAsync('docker-compose up -d', { cwd, shell: '/bin/bash' });
+        const { stdout: upStdout, stderr: upStderr } = await execAsync('docker-compose up -d', { cwd, shell: '/bin/sh' });
         if (upStderr) console.log('[update] docker-compose up stderr:', upStderr);
         console.log('[update] Update complete, container will be restarted:', upStdout);
     }
@@ -90,12 +90,12 @@ class Updater {
     async updateSystemd() {
         const cwd = this.projectRoot;
         console.log('[update] Executing git pull');
-        const { stdout: pullStdout, stderr: pullStderr } = await execAsync('git pull origin master', { cwd, shell: '/bin/bash' });
+        const { stdout: pullStdout, stderr: pullStderr } = await execAsync('git pull origin master', { cwd, shell: '/bin/sh' });
         if (pullStderr) console.log('[update] git pull stderr:', pullStderr);
         console.log('[update] Git pull complete:', pullStdout);
 
         console.log('[update] Restarting systemd service');
-        const { stdout: restartStdout, stderr: restartStderr } = await execAsync('systemctl restart tdns-stats', { shell: '/bin/bash' });
+        const { stdout: restartStdout, stderr: restartStderr } = await execAsync('systemctl restart tdns-stats', { shell: '/bin/sh' });
         if (restartStderr) console.log('[update] systemctl stderr:', restartStderr);
         console.log('[update] Service restart triggered:', restartStdout);
     }
