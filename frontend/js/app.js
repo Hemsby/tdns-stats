@@ -27,6 +27,8 @@ const App = (() => {
         updateAvailable: false,
         updateStatus:  null,
         healthCheckTimer: null,
+        domainSearchServer: 'all',
+        blockedLookup: false,
     };
 
     let es = null;
@@ -200,6 +202,23 @@ const App = (() => {
         buildSelects();
     }
 
+    function getElement(id) {
+        return document.getElementById(id);
+    }
+
+    function populateSelect(id, options, selectedValue) {
+        const sel = getElement(id);
+        if (!sel) return;
+        sel.innerHTML = '';
+        for (const option of options) {
+            const opt = document.createElement('option');
+            opt.value = option.value;
+            opt.textContent = option.label;
+            sel.appendChild(opt);
+        }
+        if (selectedValue != null) sel.value = selectedValue;
+    }
+
     function serverColor(key) {
         if (!key) return '';
         if (key === 'all' || key === CLUSTER_KEY) return 'blue';
@@ -286,27 +305,33 @@ const App = (() => {
         const serverOptions = state.serverNames.map(n => ({ value: n, label: n }));
 
         ['chartServerSelect', 'topServerSelect'].forEach(id => {
-            const sel = document.getElementById(id);
-            sel.innerHTML = '';
-            for (const o of [...clusterOption, ...serverOptions]) {
-                const opt = document.createElement('option');
-                opt.value = o.value; opt.textContent = o.label;
-                sel.appendChild(opt);
-            }
+            populateSelect(id, [...clusterOption, ...serverOptions], state[id === 'chartServerSelect' ? 'chartServer' : 'topServer']);
             injectSelDot(id);
         });
 
-        const feedSel = document.getElementById('feedServerSelect');
-        feedSel.innerHTML = '<option value="all">All servers</option>';
-        for (const n of state.serverNames) {
-            const opt = document.createElement('option');
-            opt.value = n; opt.textContent = n;
-            feedSel.appendChild(opt);
-        }
+        populateSelect('feedServerSelect', [{ value: 'all', label: 'All servers' }, ...serverOptions], state.feedServer);
         injectSelDot('feedServerSelect');
+
+        buildDomainSearchSelect();
 
         syncSelects();
         addSelectListeners();
+    }
+
+    function buildDomainSearchSelect() {
+        const preferred = state.domainSearchServer || 'all';
+        const options = state.isCluster
+            ? [{ value: CLUSTER_KEY, label: 'Cluster (all nodes)' }]
+            : [{ value: 'all', label: 'All servers' }];
+
+        for (const n of state.serverNames) options.push({ value: n, label: n });
+
+        const selected = options.some(o => o.value === preferred)
+            ? preferred
+            : options[0]?.value || 'all';
+
+        populateSelect('domainSearchServerSelect', options, selected);
+        state.domainSearchServer = selected;
     }
 
     function injectSelDot(selectId) {
@@ -383,6 +408,9 @@ const App = (() => {
             loadAndApplyFeedFilters();
             Feed.render(state.feedServer, state.feedFilters);
         });
+        el('domainSearchServerSelect') && (el('domainSearchServerSelect').onchange = e => {
+            state.domainSearchServer = e.target.value;
+        });
         loadAndApplyFeedFilters();
 
         const feedFilterBtn = el('feedFilterBtn');
@@ -438,6 +466,301 @@ const App = (() => {
                 refreshTopLists();
             });
         });
+
+        initDomainSearch();
+    }
+
+    function initDomainSearch() {
+        const form = document.getElementById('domainSearchForm');
+        if (!form || form.dataset.ready === 'true') return;
+        form.dataset.ready = 'true';
+        form.addEventListener('submit', e => {
+            e.preventDefault();
+            searchDomainCache();
+        });
+        const clearBtn = document.getElementById('clearResultsBtn');
+        if (clearBtn && !clearBtn.dataset.ready) {
+            clearBtn.dataset.ready = 'true';
+            clearBtn.addEventListener('click', e => {
+                e.preventDefault();
+                clearDomainSearchResults();
+            });
+        }
+    }
+
+    function clearDomainSearchResults() {
+        const input = document.getElementById('domainSearchInput');
+        const serverSel = document.getElementById('domainSearchServerSelect');
+        const summary = document.getElementById('domainSearchSummary');
+        const results = document.getElementById('domainSearchResults');
+        const blockedSection = document.getElementById('blockedLookupResults');
+        const checkbox = document.getElementById('blockedResultCheckbox');
+
+        if (input) input.value = '';
+        if (checkbox) { checkbox.checked = false; state.blockedLookup = false; }
+        if (summary) { summary.className = 'domain-search-summary no-data'; summary.textContent = 'Enter a domain to inspect DNS cache.'; }
+        if (results) results.innerHTML = '';
+        if (blockedSection) blockedSection.innerHTML = '';
+        // optionally reset server select to 'all'
+        if (serverSel) serverSel.value = state.domainSearchServer || 'all';
+    }
+
+    async function searchDomainCache() {
+        const input = document.getElementById('domainSearchInput');
+        const serverSel = document.getElementById('domainSearchServerSelect');
+        const blockedSection = document.getElementById('blockedLookupResults');
+        const summary = document.getElementById('domainSearchSummary');
+        const results = document.getElementById('domainSearchResults');
+        const btn = document.querySelector('#domainSearchForm .search-btn');
+        if (!input || !summary || !results) return;
+
+        const domain = input.value.trim().replace(/^\.+|\.+$/g, '').toLowerCase();
+        if (!domain) return;
+
+        state.domainSearchServer = serverSel?.value || state.domainSearchServer || 'all';
+        state.blockedLookup = document.getElementById('blockedResultCheckbox')?.checked || false;
+        summary.className = 'domain-search-summary no-data';
+        summary.textContent = 'Searching cache...';
+        results.innerHTML = '';
+        if (blockedSection) blockedSection.innerHTML = '';
+        if (btn) btn.disabled = true;
+
+        try {
+            const url = '/api/cache/search?domain=' + encodeURIComponent(domain) + '&server=' + encodeURIComponent(state.domainSearchServer) + '&blocked=' + (state.blockedLookup ? '1' : '0');
+            const res = await fetch(url, { cache: 'no-store' });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Cache search failed');
+            renderDomainCacheResults(data);
+        } catch (e) {
+            summary.className = 'domain-search-summary domain-search-error';
+            summary.textContent = e.message || 'Cache search failed';
+        } finally {
+            if (btn) btn.disabled = false;
+        }
+    }
+
+    function renderDomainCacheResults(data) {
+        const summary = document.getElementById('domainSearchSummary');
+        const results = document.getElementById('domainSearchResults');
+        const blockedSection = document.getElementById('blockedLookupResults');
+        if (!summary || !results) return;
+
+        const selectedServers = data.results || [];
+        const cachedServers = selectedServers.filter(r => r.cached).map(r => r.server);
+        const serverCountText = data.searchedAllNodes
+            ? cachedServers.length + ' of ' + selectedServers.length + ' servers'
+            : (cachedServers.length ? '1 server' : '0 servers');
+
+        const summaryClass = cachedServers.length ? 'domain-search-hit' : 'domain-search-miss';
+        summary.className = 'domain-search-summary ' + summaryClass;
+        summary.textContent = data.domain + ' is cached on ' + serverCountText + '.';
+
+        if (blockedSection) {
+            blockedSection.innerHTML = data.blockedLookup && data.blockedSummary
+                ? renderBlockedLookupSummary(data.blockedSummary)
+                : '';
+        }
+
+        results.innerHTML =
+            '<div class="domain-search-result-details">' +
+                '<div class="domain-search-target">' +
+                    '<div>' +
+                        '<div class="domain-search-title">' + esc(data.domain) + '</div>' +
+                        '<div class="domain-search-meta">' + serverCountText + '</div>' +
+                    '</div>' +
+                    '<div class="domain-server-list">' +
+                        cachedServers.map(server => '<span class="domain-server-pill">' + esc(server) + '</span>').join('') +
+                    '</div>' +
+                '</div>' +
+                '<div class="domain-search-node-list">' +
+                    selectedServers.map(renderDomainCacheNode).join('') +
+                '</div>' +
+            '</div>';
+    }
+
+    function renderDomainCacheNode(node) {
+        const statusClass = !node.ok ? 'domain-node-error' : node.cached ? 'domain-node-hit' : 'domain-node-miss';
+        const statusBadgeClass = !node.ok
+            ? 'neutral'
+            : node.blockedLookup
+                ? node.cached ? 'danger' : 'success'
+                : node.cached ? 'success' : 'danger';
+        const statusText = !node.ok
+            ? 'Error'
+            : node.blockedLookup
+                ? node.cached ? 'Blocked' : 'Not blocked'
+                : node.cached ? 'Cached' : 'Not cached';
+        const allRecords = collectCacheRecords(node);
+        const records = allRecords.filter(r => !isDnssecRecordType(r.record));
+        
+        let body;
+        if (!node.ok) {
+            body = '<div class="domain-cache-empty">' + esc(node.error || 'Unable to search this node') + '</div>';
+        } else if (records.length > 0) {
+            body = '<div class="domain-cache-table-wrap"><table class="domain-cache-table"><thead><tr><th>Type</th><th>Answer</th><th>TTL</th><th>Status</th></tr></thead><tbody>' +
+                    records.map(renderDomainCacheRecord).join('') +
+                    '</tbody></table></div>';
+        } else if (allRecords.length > 0) {
+            body = '<div class="domain-cache-empty">Only DNSSEC records cached for this domain on this node.</div>';
+        } else {
+            body = '<div class="domain-cache-empty">Domain not cached on this node.</div>';
+        }
+
+        return '<article class="domain-cache-node ' + statusClass + '">' +
+            '<div class="domain-cache-node-head">' +
+            '<div class="domain-search-node-title"><span class="srv-card-name">' + esc(node.server) + '</span>' +
+            (node.domain && node.domain !== node.server ? '<span class="node-domain">' + esc(node.domain) + '</span>' : '') +
+            '</div>' +
+            '<span class="status-badge ' + statusBadgeClass + '">' + statusText + '</span>' +
+            '</div>' +
+            body +
+            '</article>';
+    }
+
+    function formatBlockedSource(value) {
+        const normalized = String(value || '').trim().toLowerCase();
+        if (!normalized) return value;
+        return normalized === 'block-list-zone' ? 'URL Blocklist'
+            : normalized === 'blocked-zone' ? 'Local Blocked Zone'
+            : normalized === 'advanced-blocking-app' ? 'Advanced Blocking App'
+            : value;
+    }
+
+    function renderBlockedLookupSummary(node) {
+        const parsedEntries = Array.isArray(node.blockedMeta?.entries) && node.blockedMeta.entries.length
+            ? node.blockedMeta.entries
+            : node.blockedMeta?.parsed ? [node.blockedMeta.parsed] : [];
+        const labelMap = {
+            source: 'Source',
+            group: 'Group',
+            blocklisturl: 'Block List',
+            blocklist: 'Block List',
+            'block list': 'Block List',
+            domain: 'Domain',
+            blockreason: 'Reason',
+            reason: 'Reason',
+        };
+
+        const splitValues = value => {
+            if (typeof value !== 'string') return [String(value)];
+            const parts = value.split(/[,;]\s*/).map(v => v.trim()).filter(Boolean);
+            return parts.length ? parts : [value];
+        };
+
+        const detailMap = new Map();
+        parsedEntries.forEach(entry => {
+            for (const [key, value] of Object.entries(entry || {})) {
+                if (!value) continue;
+                const normalized = key.toLowerCase();
+                if (normalized === 'domain' || normalized === 'raw') continue;
+
+                const label = labelMap[normalized] || normalized.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase());
+                const displayValue = normalized === 'source' ? formatBlockedSource(value) : value;
+                const values = splitValues(displayValue).map(v => esc(v));
+
+                const group = detailMap.get(label) || { label, values: [] };
+                values.forEach(v => {
+                    if (!group.values.includes(v)) group.values.push(v);
+                });
+                detailMap.set(label, group);
+            }
+        });
+
+        const details = [];
+        detailMap.forEach(({ label, values }) => {
+            if (!values.length) return;
+            details.push({ label, value: values[0] });
+            values.slice(1).forEach(value => details.push({ label: '', value }));
+        });
+
+        const hasBlockedMeta = node.blockedMeta && (
+            (Array.isArray(node.blockedMeta.entries) && node.blockedMeta.entries.length > 0) ||
+            (node.blockedMeta.parsed && Object.keys(node.blockedMeta.parsed).length > 0) ||
+            node.blockedMeta.source || node.blockedMeta.group
+        );
+        const statusBadge = node.ok
+            ? (node.blocked || hasBlockedMeta)
+                ? '<span class="status-badge danger">Blocked</span>'
+                : '<span class="status-badge success">Not blocked</span>'
+            : '<span class="status-badge neutral">Lookup failed</span>';
+
+        return '<article class="blocked-lookup-card">' +
+            '<div class="blocked-lookup-card-header">' +
+                '<div class="blocked-lookup-card-title">' + esc(node.server) + '</div>' +
+                '<div>' + statusBadge + '</div>' +
+            '</div>' +
+            '<div class="blocked-lookup-card-meta">' +
+                (details.length ? details.map(item => typeof item === 'string'
+                    ? '<div>' + item + '</div>'
+                    : '<div class="blocked-lookup-meta-row"><span class="blocked-lookup-meta-label">' + (item.label ? esc(item.label + ':') : '&nbsp;') + '</span><span class="blocked-lookup-meta-value">' + item.value + '</span></div>').join('')
+                    : '<div>Blocked lookup response</div>') +
+            '</div>' +
+        '</article>';
+    }
+
+    function collectCacheRecords(node) {
+        const out = [];
+        for (const z of node.zones || []) {
+            const zoneName = z.name || z.zone || z.domain || '';
+            for (const r of z.records || []) out.push({ zoneName, record: r });
+        }
+        for (const r of node.records || []) out.push({ zoneName: '', record: r });
+        return out;
+    }
+
+    function renderDomainCacheRecord(item) {
+        const r = item.record || {};
+        const type = r.type || r.recordType || r.dnsResourceRecordType || '';
+        const answer = recordValue(r);
+        const ttl = getRecordTTL(r);
+        const status = getSecurityStatus(r);
+        const lastUsed = getRecordLastUsed(r);
+
+        return '<tr>' +
+            '<td>' + esc(type) + '</td>' +
+            '<td>' + esc(answer) + (lastUsed ? '<div class="record-meta">' + esc(lastUsed) + '</div>' : '') + '</td>' +
+            '<td>' + esc(ttl) + '</td>' +
+            '<td>' + esc(status) + '</td>' +
+            '</tr>';
+    }
+
+    function recordValue(record) {
+        const rData = record.rData;
+        if (rData && typeof rData === 'object') {
+            if (rData.value != null) return rData.value;
+            const values = Object.values(rData).filter(v => v != null && typeof v !== 'object');
+            if (values.length) return values.join(' ');
+        }
+        return record.value || record.data || record.text || record.address || record.exchange || JSON.stringify(record);
+    }
+
+    const DNSSEC_TYPES = new Set(['RRSIG', 'DNSKEY', 'DS', 'NSEC', 'NSEC3', 'NSEC3PARAM', 'CDNSKEY', 'CDS', 'DLV']);
+
+    function isDnssecRecordType(record) {
+        const type = String(record?.type || record?.recordType || record?.dnsResourceRecordType || '').toUpperCase();
+        return DNSSEC_TYPES.has(type);
+    }
+
+    function getRecordTTL(record) {
+        return record.ttl ?? record.originalTtl ?? record.expiryTtl ?? record.expiresIn ?? '';
+    }
+
+    function getSecurityStatus(record) {
+        const raw = String(record.dnsSecStatus || record.dnssecStatus || record.validationStatus || record.securityStatus || record.security || record.secure || record.status || '').trim().toLowerCase();
+        if (!raw) return 'Unknown';
+        if (raw.includes('insecure') || raw.includes('bogus') || raw.includes('failed')) return 'Insecure';
+        if (raw.includes('disabled') || raw.includes('not supported')) return 'Disabled';
+        if (raw.includes('secure') || raw.includes('validated') || raw === 'ok') return 'Secure';
+        return raw.charAt(0).toUpperCase() + raw.slice(1);
+    }
+
+    function getRecordLastUsed(record) {
+        const last = record.lastUsedOn || record.lastUsedValue || record.lastUsed || record.lastAccessed || record.lastSeen || record.lastUsedAt || record.lastSeenAt || record.lastQuery;
+        if (!last) return '';
+        if (typeof last === 'number') return 'Last used: ' + last;
+        const date = new Date(last);
+        if (!isNaN(date)) return 'Last used: ' + relativeTime(date.toISOString());
+        return 'Last used: ' + last;
     }
 
     function getDatasetMode() {
@@ -900,6 +1223,29 @@ const App = (() => {
         });
     }
 
+    // ---- Main page tabs (Dashboard / Cache & Blocked) ----------------------
+    function initMainTabs() {
+        const btns = document.querySelectorAll('.main-tab-btn');
+        const dashView      = document.getElementById('dashboardView');
+        const cacheBlockedView = document.getElementById('cacheBlockedView');
+
+        function setMainTab(tab) {
+            const isDash = tab === 'dashboard';
+            dashView.hidden        = !isDash;
+            cacheBlockedView.hidden = isDash;
+            btns.forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+            localStorage.setItem('tdns-main-tab', tab);
+        }
+
+        btns.forEach(btn => {
+            btn.addEventListener('click', () => setMainTab(btn.dataset.tab));
+        });
+
+        // Restore last active tab
+        const saved = localStorage.getItem('tdns-main-tab') || 'dashboard';
+        setMainTab(saved);
+    }
+
     // ---- Chart persistence ---------------------------------------------------
     function getChartStorageKey(viewMode) {
         return 'tdns-chart-hidden-' + viewMode;
@@ -1146,6 +1492,7 @@ const App = (() => {
 
     function init() {
         initTheme();
+        initMainTabs();
         setupUpdateButtons();
         fetchVersion();
         updateChartHeading();

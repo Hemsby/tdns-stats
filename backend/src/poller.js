@@ -28,40 +28,43 @@ class Poller {
         this._perfTimer  = null;
     }
 
-    start() {
-        this._pollStats();
-        this._pollFeed();
-        this._pollTop();
-        this._pollPerformance();
+    _clearTimers() {
+        clearInterval(this._statsTimer);
+        clearInterval(this._feedTimer);
+        clearInterval(this._topTimer);
+        clearInterval(this._perfTimer);
+    }
+
+    _startTimers() {
         this._statsTimer = setInterval(() => this._pollStats(),       this.cfg.statsInterval);
         this._feedTimer  = setInterval(() => this._pollFeed(),        this.cfg.feedInterval);
         this._topTimer   = setInterval(() => this._pollTop(),         this.cfg.topInterval);
         this._perfTimer  = setInterval(() => this._pollPerformance(), this.cfg.perfInterval);
+    }
+
+    _pollAll() {
+        this._pollStats();
+        this._pollFeed();
+        this._pollTop();
+        this._pollPerformance();
+    }
+
+    start() {
+        this._pollAll();
+        this._startTimers();
     }
 
     stop() {
-        clearInterval(this._statsTimer);
-        clearInterval(this._feedTimer);
-        clearInterval(this._topTimer);
-        clearInterval(this._perfTimer);
+        this._clearTimers();
     }
 
     pause() {
-        clearInterval(this._statsTimer);
-        clearInterval(this._feedTimer);
-        clearInterval(this._topTimer);
-        clearInterval(this._perfTimer);
+        this._clearTimers();
     }
 
     resume() {
-        this._pollStats();
-        this._pollFeed();
-        this._pollTop();
-        this._pollPerformance();
-        this._statsTimer = setInterval(() => this._pollStats(),       this.cfg.statsInterval);
-        this._feedTimer  = setInterval(() => this._pollFeed(),        this.cfg.feedInterval);
-        this._topTimer   = setInterval(() => this._pollTop(),         this.cfg.topInterval);
-        this._perfTimer  = setInterval(() => this._pollPerformance(), this.cfg.perfInterval);
+        this._pollAll();
+        this._startTimers();
     }
 
     getState() {

@@ -10,11 +10,12 @@ const yaml      = require('js-yaml');
 const fetch     = require('node-fetch');
 const Poller    = require('./poller');
 const Updater   = require('./updater');
-const { listQueryLogApps, discoverQueryLogsApp, getCacheMaxEntries, getDashboard, getTopStats } = require('./technitium');
+const { listQueryLogApps, discoverQueryLogsApp, getCacheMaxEntries, getDashboard, getTopStats, listCache, resolveBlockedDomain } = require('./technitium');
 
 const PACKAGE = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf8'));
 const VERSION = PACKAGE.version;
 const STARTED_AT = new Date().toISOString();
+const CLUSTER_KEY = '__cluster';
 
 const CONFIG_PATHS = [
     '/etc/tdns-stats/config.yml',
@@ -59,6 +60,82 @@ const PORT = config.port || 3000;
 
 const clients = new Set();
 
+function normalizeDomain(value) {
+    return String(value || '')
+        .trim()
+        .replace(/^\.+|\.+$/g, '')
+        .toLowerCase();
+}
+
+function summarizeCache(data) {
+    const zones = Array.isArray(data?.zones) ? data.zones : [];
+    const directRecords = Array.isArray(data?.records) ? data.records : [];
+    const recordCount = zones.reduce((sum, z) => sum + (Array.isArray(z.records) ? z.records.length : 0), directRecords.length);
+
+    return {
+        cached: zones.length > 0 || directRecords.length > 0,
+        zoneCount: zones.length,
+        recordCount,
+        zones,
+        records: directRecords,
+    };
+}
+
+function uniqueServers(list) {
+    const seen = new Set();
+    return list.filter(server => {
+        const key = server.url || server.name;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+}
+
+function getCacheSearchTargets(serverName, state) {
+    const cluster = state.nodes?.__cluster;
+    const configuredTargets = servers.map(server => ({
+        ...server,
+        displayName: server.name,
+        domain: state.nodes?.[server.name]?.dnsServerDomain || server.name,
+    }));
+
+    if (serverName !== CLUSTER_KEY && serverName !== 'all') {
+        const server = configuredTargets.find(s => s.name === serverName);
+        return server ? [server] : null;
+    }
+
+    if (!cluster) return configuredTargets;
+
+    const baseServer = servers.find(server => state.nodes?.[server.name]?.clusterInitialized) || servers[0];
+    const clusterTargets = (cluster.clusterNodes || [])
+        .filter(node => node.url)
+        .map(node => ({
+            ...baseServer,
+            name: node.name || node.id || node.url,
+            displayName: node.name || node.url,
+            domain: node.name || node.url,
+            url: String(node.url).replace(/\/$/, ''),
+        }));
+
+    return uniqueServers([...clusterTargets, ...configuredTargets]);
+}
+
+function getBlockedLookupTarget(serverName, state) {
+    const cluster = state.nodes?.__cluster;
+    if (cluster && (serverName === 'all' || serverName === CLUSTER_KEY)) {
+        const primaryServer = servers.find(server => state.nodes?.[server.name]?.clusterInitialized) || servers[0];
+        const clusterDomain = cluster.clusterDomain || state.nodes?.[primaryServer.name]?.dnsServerDomain || 'Cluster';
+        return {
+            ...primaryServer,
+            displayName: clusterDomain,
+            domain: clusterDomain,
+        };
+    }
+
+    const targets = getCacheSearchTargets(serverName, state);
+    return targets?.[0] || null;
+}
+
 function broadcast(msg) {
     const data = `data: ${JSON.stringify(msg)}\n\n`;
     for (const res of clients) {
@@ -96,6 +173,14 @@ async function start() {
     const updater = new Updater(path.join(__dirname, '../..'));
 
     const app = express();
+
+    function getValidatedRangeType(type) {
+        return VALID_TYPES.has(type) ? type : 'LastHour';
+    }
+
+    function resolveServer(serverName) {
+        return serverName === CLUSTER_KEY ? servers[0] : servers.find(s => s.name === serverName);
+    }
 
     app.use(helmet({
         contentSecurityPolicy: {
@@ -180,31 +265,118 @@ async function start() {
     });
 
     const VALID_TYPES = new Set(['LastHour', 'LastDay', 'LastWeek', 'LastMonth', 'LastYear']);
+    const VALID_STATS = new Set(['TopDomains', 'TopBlockedDomains', 'TopClients']);
 
     app.get('/api/dashboard', async (req, res) => {
         const { server: serverName, type } = req.query;
-        const rangeType = VALID_TYPES.has(type) ? type : 'LastHour';
-        const isCluster = serverName === '__cluster';
-        const server = isCluster ? servers[0] : servers.find(s => s.name === serverName);
+        const rangeType = getValidatedRangeType(type);
+        const server = resolveServer(serverName);
         if (!server) return res.status(404).json({ error: 'Unknown server' });
         try {
-            const data = await getDashboard(server, rangeType, isCluster ? 'cluster' : null);
+            const data = await getDashboard(server, rangeType, serverName === CLUSTER_KEY ? 'cluster' : null);
             res.json(data);
         } catch (e) { res.status(502).json({ error: e.message }); }
     });
 
     app.get('/api/top', async (req, res) => {
         const { server: serverName, type, statsType } = req.query;
-        const rangeType = VALID_TYPES.has(type) ? type : 'LastHour';
-        const VALID_STATS = new Set(['TopDomains', 'TopBlockedDomains', 'TopClients']);
         if (!VALID_STATS.has(statsType)) return res.status(400).json({ error: 'Invalid statsType' });
-        const isCluster = serverName === '__cluster';
-        const server = isCluster ? servers[0] : servers.find(s => s.name === serverName);
+        const rangeType = getValidatedRangeType(type);
+        const server = resolveServer(serverName);
         if (!server) return res.status(404).json({ error: 'Unknown server' });
         try {
-            const data = await getTopStats(server, statsType, config.top?.limit || 20, rangeType, isCluster ? 'cluster' : null);
+            const data = await getTopStats(server, statsType, config.top?.limit || 20, rangeType, serverName === CLUSTER_KEY ? 'cluster' : null);
             res.json(data);
         } catch (e) { res.status(502).json({ error: e.message }); }
+    });
+
+    app.get('/api/cache/search', async (req, res) => {
+        const domain = normalizeDomain(req.query.domain);
+        const serverName = String(req.query.server || 'all');
+        const blockedLookup = String(req.query.blocked || '').toLowerCase() === '1' || String(req.query.blocked || '').toLowerCase() === 'true';
+        console.debug('[api/cache/search] blockedLookup=' + blockedLookup + ' domain=' + domain + ' server=' + serverName);
+        if (!domain) return res.status(400).json({ error: 'Domain is required' });
+        if (domain.length > 253 || !/^[a-z0-9_*.-]+$/.test(domain)) return res.status(400).json({ error: 'Invalid domain' });
+
+        const state = poller.getState();
+        const cluster = state.nodes?.__cluster;
+        const targets = getCacheSearchTargets(serverName, state);
+        if (!targets || !targets.length) return res.status(404).json({ error: 'Unknown server' });
+
+        const results = await Promise.all(targets.map(async server => {
+            try {
+                const data = await listCache(server, domain);
+                const node = state.nodes?.[server.name] || {};
+                return {
+                    server: server.displayName || server.name,
+                    domain: server.domain || node.dnsServerDomain || server.name,
+                    url: server.url,
+                    ok: true,
+                    ...summarizeCache(data),
+                };
+            } catch (e) {
+                return {
+                    server: server.displayName || server.name,
+                    domain: server.domain || state.nodes?.[server.name]?.dnsServerDomain || server.name,
+                    url: server.url,
+                    ok: false,
+                    cached: false,
+                    zoneCount: 0,
+                    recordCount: 0,
+                    zones: [],
+                    records: [],
+                    error: e.message,
+                };
+            }
+        }));
+
+        let blockedSummary = null;
+        if (blockedLookup) {
+            const blockedTarget = getBlockedLookupTarget(serverName, state);
+            if (blockedTarget) {
+                try {
+                    const data = await resolveBlockedDomain(blockedTarget, domain);
+                    const isBlocked = Boolean(
+                        (Array.isArray(data.records) && data.records.length > 0) ||
+                        data.source ||
+                        data.group ||
+                        (data.parsed && Object.keys(data.parsed).length > 0) ||
+                        data.extraText
+                    );
+                    blockedSummary = {
+                        server: blockedTarget.displayName || blockedTarget.name,
+                        domain: blockedTarget.domain || blockedTarget.name,
+                        ok: true,
+                        blocked: isBlocked,
+                        blockedMeta: {
+                            source: data.source || data.extraText || undefined,
+                            group: data.group || undefined,
+                            parsed: data.parsed || {},
+                            entries: Array.isArray(data.parsedEntries) ? data.parsedEntries : [],
+                            raw: data.extraText || undefined,
+                        },
+                    };
+                } catch (e) {
+                    blockedSummary = {
+                        server: blockedTarget.displayName || blockedTarget.name,
+                        domain: blockedTarget.domain || blockedTarget.name,
+                        ok: false,
+                        error: e.message,
+                    };
+                }
+            }
+        }
+
+        res.json({
+            domain,
+            cluster: !!cluster,
+            blockedLookup,
+            blockedSummary,
+            searchedAllNodes: targets.length > 1,
+            cachedNodeCount: results.filter(r => r.cached).length,
+            recordCount: results.reduce((sum, r) => sum + (r.recordCount || 0), 0),
+            results,
+        });
     });
 
     app.get('/api/version', (req, res) => {
