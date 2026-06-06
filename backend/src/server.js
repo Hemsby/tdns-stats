@@ -294,7 +294,6 @@ async function start() {
         const domain = normalizeDomain(req.query.domain);
         const serverName = String(req.query.server || 'all');
         const blockedLookup = String(req.query.blocked || '').toLowerCase() === '1' || String(req.query.blocked || '').toLowerCase() === 'true';
-        console.debug('[api/cache/search] blockedLookup=' + blockedLookup + ' domain=' + domain + ' server=' + serverName);
         if (!domain) return res.status(400).json({ error: 'Domain is required' });
         if (domain.length > 253 || !/^[a-z0-9_*.-]+$/.test(domain)) return res.status(400).json({ error: 'Invalid domain' });
 

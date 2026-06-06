@@ -144,7 +144,6 @@ async function listCache(server, domain) {
 
 async function dnsClientResolve(server, domain, type, protocol = 'UDP') {
     const path = 'api/dnsClient/resolve?server=this-server&domain=' + encodeURIComponent(domain) + '&type=' + encodeURIComponent(type) + '&protocol=' + encodeURIComponent(protocol);
-    console.debug('[dnsClientResolve] url=' + server.url + '/' + path + ' server=' + server.name + ' type=' + type);
     return apiGet(server, path);
 }
 
@@ -251,11 +250,9 @@ async function resolveBlockedDomain(server, domain) {
 
     for (const result of [aResult, aaaaResult]) {
         if (result.status === 'fulfilled') {
-            console.debug('[resolveBlockedDomain] response', { domain, server: server.name, data: result.value });
             responses.push(result.value);
             extras.push(...collectStringValues(result.value));
         } else {
-            console.debug('[resolveBlockedDomain] error', { domain, server: server.name, error: result.reason });
             errors.push(result.reason?.message || String(result.reason));
         }
     }

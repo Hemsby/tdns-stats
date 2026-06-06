@@ -71,7 +71,6 @@ const App = (() => {
         lastConnectAttempt = now;
 
         if (es) {
-            console.log('[sse] Closing existing connection');
             es.close();
             es = null;
         }
@@ -82,7 +81,6 @@ const App = (() => {
             reconnectTimer = null;
         }
 
-        console.log('[sse] Connecting to /api/stream...');
         es = new EventSource('/api/stream');
 
         // Timeout: if we don't get connected within 5 seconds, retry
@@ -110,7 +108,6 @@ const App = (() => {
         }, 20000);
 
         es.onopen = () => {
-            console.log('[sse] Connection established');
             clearTimeout(connectTimeout);
             state.connected = true;
             setConnDot('connected');
