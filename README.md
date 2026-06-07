@@ -80,8 +80,6 @@ services:
       - ./config.yml:/etc/tdns-stats/config.yml:ro
       - /var/run/docker.sock:/var/run/docker.sock
       - /home/myuser/tdns-stats:/app/host-project
-    environment:
-      - HOST_PROJECT_PATH=/app/host-project
     restart: unless-stopped
 ```
 
