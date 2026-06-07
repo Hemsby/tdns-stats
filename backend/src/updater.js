@@ -79,6 +79,18 @@ class Updater {
         return fs.existsSync(path.join(dir, '.git'));
     }
 
+    async getHostMountSource(containerId, destination) {
+        try {
+            const { stdout } = await execAsync(
+                `docker inspect --format='{{range .Mounts}}{{if eq .Destination "${destination}"}}{{.Source}}{{end}}{{end}}' ${containerId}`,
+                { shell: '/bin/sh' }
+            );
+            return String(stdout).trim() || null;
+        } catch (e) {
+            return null;
+        }
+    }
+
     async findDockerComposePath() {
         const envPath = process.env.TDNS_STATS_HOST_PROJECT_PATH || process.env.HOST_PROJECT_PATH;
         const candidates = [];
@@ -98,7 +110,6 @@ class Updater {
             if (paths.length > 0) {
                 const composeFile = paths[0];
                 const hostProject = path.dirname(composeFile);
-                console.warn(`[update] Detected docker-compose file using fallback search at ${composeFile}`);
                 return { hostProject, composeFile };
             }
         } catch (e) {
@@ -110,6 +121,7 @@ class Updater {
 
     async updateGit() {
         const cwd = this.projectRoot;
+
         console.log('[update] Fetching from remote');
         const { stdout: fetchStdout, stderr: fetchStderr } = await execAsync('git fetch origin', { cwd, shell: '/bin/sh' });
         if (fetchStderr) console.log('[update] git fetch stderr:', fetchStderr);
@@ -148,7 +160,6 @@ class Updater {
             }
         }
 
-        console.log('[update] Executing docker compose pull');
         try {
             const { stdout: pullStdout, stderr: pullStderr } = await execAsync(`${composeCmd} -p tdns-stats -f ${composeFile} pull`, { cwd, shell: '/bin/sh' });
             if (pullStderr) console.log('[update] docker compose pull stderr:', pullStderr);
@@ -160,18 +171,19 @@ class Updater {
 
         console.log('[update] Scheduling compose restart from helper container');
         let helperImage = null;
+        let helperHostSource = null;
         try {
-            const { stdout: containerId } = await execAsync('hostname', { shell: '/bin/sh' });
-            const { stdout: imageName } = await execAsync(`docker inspect --format='{{.Config.Image}}' ${containerId.trim()}`, { shell: '/bin/sh' });
+            const { stdout: containerIdOut } = await execAsync('hostname', { shell: '/bin/sh' });
+            const containerId = containerIdOut.trim();
+            const { stdout: imageName } = await execAsync(`docker inspect --format='{{.Config.Image}}' ${containerId}`, { shell: '/bin/sh' });
             helperImage = imageName.trim();
-            console.log('[update] Helper image detected:', helperImage);
+            helperHostSource = await this.getHostMountSource(containerId, hostProject);
         } catch (e) {
-            console.warn('[update] Could not detect current image, helper runner may fail:', e.message);
         }
 
-        const helperCmd = helperImage
-            ? `docker run --rm -d -v /var/run/docker.sock:/var/run/docker.sock -v ${hostProject}:${hostProject} -w ${hostProject} ${helperImage} sh -c '${composeCmd} -p tdns-stats -f ${composeFile} up -d --build'`
-            : `${composeCmd} -p tdns-stats -f ${composeFile} up -d --build`;
+        const helperCmd = helperImage && helperHostSource
+            ? `docker run --rm -d -v /var/run/docker.sock:/var/run/docker.sock -v ${helperHostSource}:${hostProject} -w ${hostProject} ${helperImage} sh -c '${composeCmd} -p tdns-stats -f ${composeFile} up -d --build'`
+            : `${composeCmd} -p tdns-stats -f ${composeFile} up -d --build`; 
 
         try {
             const { stdout: helperStdout, stderr: helperStderr } = await execAsync(helperCmd, { cwd, shell: '/bin/sh' });
