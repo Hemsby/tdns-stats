@@ -158,11 +158,9 @@ const App = (() => {
                 buildServerUI();
                 renderPerfCards(); // show placeholders immediately on first server discovery
 
-                // Ensure chart and top lists data are populated immediately if the selected time range is anything other than LastHour
-                if (state.timeRange !== 'LastHour') {
-                    refreshChart();
-                    refreshTopLists();
-                }
+                // Populate chart and top list data immediately, without waiting for first poll
+                refreshChart();
+                refreshTopLists(true);
             }
 
             renderClusterCards();
@@ -1122,8 +1120,8 @@ const App = (() => {
             .catch(() => {});
     }
 
-    function refreshTopLists() {
-        if (state.timeRange === 'LastHour') {
+    function refreshTopLists(init) {
+        if (state.timeRange === 'LastHour' && !init) {
             renderTopLists();
             return;
         }
