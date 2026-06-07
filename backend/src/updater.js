@@ -58,6 +58,27 @@ class Updater {
         }
     }
 
+    async getDockerComposeCommand() {
+        try {
+            await execAsync('command -v docker >/dev/null 2>&1', { shell: '/bin/sh' });
+            await execAsync('docker compose version >/dev/null 2>&1', { shell: '/bin/sh' });
+            return 'docker compose';
+        } catch (e) {
+        }
+
+        try {
+            await execAsync('command -v docker-compose >/dev/null 2>&1', { shell: '/bin/sh' });
+            return 'docker-compose';
+        } catch (e) {
+        }
+
+        throw new Error('No docker compose command available in container');
+    }
+
+    async isGitRepo(dir) {
+        return fs.existsSync(path.join(dir, '.git'));
+    }
+
     async updateGit() {
         const cwd = this.projectRoot;
         console.log('[update] Fetching from remote');
@@ -75,18 +96,40 @@ class Updater {
     }
 
     async updateDocker() {
-        const composeFile = '/app/host-project/docker-compose.yml';
-        const cwd = '/app/host-project';
+        const hostProject = '/app/host-project';
+        const composeFile = path.join(hostProject, 'docker-compose.yml');
+        const cwd = hostProject;
 
-        console.log('[update] Executing docker compose pull');
-        const { stdout: pullStdout, stderr: pullStderr } = await execAsync(`docker compose -p tdns-stats -f ${composeFile} pull`, { cwd, shell: '/bin/sh' });
-        if (pullStderr) console.log('[update] docker compose pull stderr:', pullStderr);
-        console.log('[update] Pull complete:', pullStdout);
+        if (!fs.existsSync(composeFile)) {
+            throw new Error(`Docker compose file not found at ${composeFile}`);
+        }
 
-        console.log('[update] Executing docker compose up -d');
-        // Run detached so the container restart doesn't kill this process
-        await execAsync(`nohup sh -c 'sleep 2 && docker compose -p tdns-stats -f ${composeFile} up -d --build' > /tmp/update.log 2>&1 &`, { cwd, shell: '/bin/sh' });
-        console.log('[update] Update triggered, container will restart');
+        const composeCmd = await this.getDockerComposeCommand();
+        console.log(`[update] Using compose command: ${composeCmd}`);
+
+        if (await this.isGitRepo(cwd)) {
+            console.log('[update] Updating host project repository from git');
+            try {
+                const { stdout: fetchStdout, stderr: fetchStderr } = await execAsync('git fetch origin', { cwd, shell: '/bin/sh' });
+                if (fetchStderr) console.log('[update] git fetch stderr:', fetchStderr);
+                console.log('[update] Fetched updates:', fetchStdout);
+
+                const { stdout: resetStdout, stderr: resetStderr } = await execAsync('git reset --hard origin/master', { cwd, shell: '/bin/sh' });
+                if (resetStderr) console.log('[update] git reset stderr:', resetStderr);
+                console.log('[update] Reset host project to origin/master:', resetStdout);
+            } catch (e) {
+                console.warn('[update] Failed to update host git repository, continuing with compose rebuild:', e.message);
+            }
+        }
+
+        console.log('[update] Executing docker compose up -d --build');
+        try {
+            await execAsync(`${composeCmd} -p tdns-stats -f ${composeFile} up -d --build`, { cwd, shell: '/bin/sh' });
+            console.log('[update] Docker compose up complete');
+        } catch (e) {
+            console.error('[update] docker compose up failed:', e.message);
+            throw e;
+        }
     }
 
     async updateSystemd() {

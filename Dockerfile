@@ -1,6 +1,6 @@
 FROM node:20-alpine
 
-RUN apk add --no-cache docker-cli-compose
+RUN apk add --no-cache docker-cli-compose git
 
 WORKDIR /app
 

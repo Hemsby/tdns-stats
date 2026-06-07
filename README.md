@@ -83,7 +83,9 @@ services:
     restart: unless-stopped
 ```
 
-Replace `/home/myuser/tdns-stats` with the actual path to your project on the host. This mounts the full project directory into the container, which is required for the auto-update feature to rebuild the image.
+Replace `/home/myuser/tdns-stats` with the actual path to your project on the host. This mounts the full project directory into the container, which is required for the auto-update feature to rebuild the service using your host compose file.
+
+The Docker image now includes `git` so the container can update the mounted host project before triggering `docker compose up -d --build`.
 
 Then start the container:
 
