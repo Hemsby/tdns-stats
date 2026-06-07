@@ -79,12 +79,12 @@ class Updater {
         const cwd = '/app/host-project';
 
         console.log('[update] Executing docker compose pull');
-        const { stdout: pullStdout, stderr: pullStderr } = await execAsync(`docker compose -f ${composeFile} pull`, { cwd, shell: '/bin/sh' });
+        const { stdout: pullStdout, stderr: pullStderr } = await execAsync(`docker compose -p tdns-stats -f ${composeFile} pull`, { cwd, shell: '/bin/sh' });
         if (pullStderr) console.log('[update] docker compose pull stderr:', pullStderr);
         console.log('[update] Pull complete:', pullStdout);
 
         console.log('[update] Executing docker compose up -d');
-        const { stdout: upStdout, stderr: upStderr } = await execAsync(`docker compose -f ${composeFile} up -d`, { cwd, shell: '/bin/sh' });
+        const { stdout: upStdout, stderr: upStderr } = await execAsync(`docker compose -p tdns-stats -f ${composeFile} up -d --build`, { cwd, shell: '/bin/sh' });
         if (upStderr) console.log('[update] docker compose up stderr:', upStderr);
         console.log('[update] Update complete, container will be restarted:', upStdout);
     }
