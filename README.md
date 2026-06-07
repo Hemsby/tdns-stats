@@ -124,7 +124,7 @@ The dashboard includes a built-in update checker that works with GitHub releases
 
 **How it works by deployment method:**
 - **Git clone:** `git fetch` + `git reset --hard origin/master`, then restarts
-- **Docker:** `docker-compose pull` + `docker-compose up -d`
+- **Docker:** `docker compose pull` + `docker compose up -d`
 - **Systemd:** Same as git clone, then `systemctl restart tdns-stats`
 
 **Requirements:**
