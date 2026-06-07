@@ -215,10 +215,11 @@ main { position: relative; z-index: 1; }
 }
 .icon-btn {
     display: flex; align-items: center; justify-content: center;
-    width: 26px; height: 24px; background: none; border: none;
+    width: 28px; height: 26px; background: none; border: none;
     color: var(--text-muted); cursor: pointer; transition: color .15s, background .15s;
     flex-shrink: 0;
 }
+.icon-btn svg { width: 14px; height: 14px; }
 .icon-btn:hover { color: var(--text); background: var(--bg-hover); }
 .icon-btn.checking { animation: spin .8s linear infinite; }
 .icon-btn.updating { color: var(--accent-yel); animation: spin .8s linear infinite; }
