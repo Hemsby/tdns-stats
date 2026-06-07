@@ -68,7 +68,7 @@ cp config.example.yml config.yml
 # edit config.yml with your server details
 ```
 
-Before starting, update the volume mount in `docker-compose.yml` to point to the absolute path where your compose file lives on the host:
+Before starting, update the volume mount in `docker-compose.yml` to point to the absolute path of your project directory on the host:
 
 ```yaml
 services:
@@ -79,11 +79,11 @@ services:
     volumes:
       - ./config.yml:/etc/tdns-stats/config.yml:ro
       - /var/run/docker.sock:/var/run/docker.sock
-      - /home/myuser/tdns-stats/docker-compose.yml:/app/docker-compose.yml
+      - /home/myuser/tdns-stats:/app/host-project
     restart: unless-stopped
 ```
 
-Replace `/home/myuser/tdns-stats/` with the actual path on your host. This is required for the auto-update feature to work.
+Replace `/home/myuser/tdns-stats` with the actual path to your project on the host. This mounts the full project directory into the container, which is required for the auto-update feature to rebuild the image.
 
 Then start the container:
 
@@ -104,7 +104,7 @@ docker run -d \
   tdns-stats
 ```
 
-> **Note:** Running without Compose disables the auto-update feature, as it requires access to the Docker socket and the compose file.
+> **Note:** Running without Compose disables the auto-update feature, as it requires access to the Docker socket and the full project directory.
 
 ## Running as a systemd service
 
@@ -160,7 +160,7 @@ The dashboard includes a built-in update checker that works with GitHub releases
 - **Systemd:** `Restart=always` in the service file (see above)
 - **Docker:** Requires two things in `docker-compose.yml`:
   - The Docker socket mounted: `/var/run/docker.sock:/var/run/docker.sock`
-  - The compose file mounted: `/your/path/docker-compose.yml:/app/docker-compose.yml`
+  - The full project directory mounted: `/your/path/tdns-stats:/app/host-project`
 
 ## Configuration reference
 
