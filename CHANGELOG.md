@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.7.3] - 2026-06-07
+
+### Changed
+- Fetch Query Chart and Top Stats immediately on page load when any time range is selected, so data appears without waiting for the first polling interval.
+- Refresh both Query Chart and Top Stats every 60s for the 'Last Day' (hourly data) time range.
+
+### Fixed
+- Prevent periodic top-stats polling data (always LastHour) from overwriting the Top Stats card when another time range is selected.
+
 ## [1.7.2] - 2026-06-06
 
 ### Fixed
