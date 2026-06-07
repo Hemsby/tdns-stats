@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.7.5] - 2026-06-07
+
+### Added
+- Added connected users as Viewers on Dashboard
+
+### Fixed
+- Small Tidy of Code and Timers Functions
+- Slight Size increase of Check for Updates Button
+
 ## [1.7.4] - 2026-06-07
 
 ### Fixed
