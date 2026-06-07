@@ -79,6 +79,35 @@ class Updater {
         return fs.existsSync(path.join(dir, '.git'));
     }
 
+    async findDockerComposePath() {
+        const envPath = process.env.TDNS_STATS_HOST_PROJECT_PATH || process.env.HOST_PROJECT_PATH;
+        const candidates = [];
+        if (envPath) candidates.push(envPath);
+        candidates.push('/app/host-project', '/app', '/host-project', '/project');
+
+        for (const candidate of candidates) {
+            const composeFile = path.join(candidate, 'docker-compose.yml');
+            if (fs.existsSync(composeFile)) {
+                return { hostProject: candidate, composeFile };
+            }
+        }
+
+        try {
+            const { stdout } = await execAsync("find / -maxdepth 5 -type f -name 'docker-compose.yml' 2>/dev/null | sort | head -n 20", { shell: '/bin/sh' });
+            const paths = String(stdout).trim().split('\n').filter(Boolean);
+            if (paths.length > 0) {
+                const composeFile = paths[0];
+                const hostProject = path.dirname(composeFile);
+                console.warn(`[update] Detected docker-compose file using fallback search at ${composeFile}`);
+                return { hostProject, composeFile };
+            }
+        } catch (e) {
+        }
+
+        const checked = candidates.map(p => path.join(p, 'docker-compose.yml')).join(', ');
+        throw new Error(`Docker compose file not found in any known mount path. Checked: ${checked}. Set HOST_PROJECT_PATH or TDNS_STATS_HOST_PROJECT_PATH to the mounted host project path.`);
+    }
+
     async updateGit() {
         const cwd = this.projectRoot;
         console.log('[update] Fetching from remote');
@@ -96,16 +125,13 @@ class Updater {
     }
 
     async updateDocker() {
-        const hostProject = '/app/host-project';
-        const composeFile = path.join(hostProject, 'docker-compose.yml');
+        const { hostProject, composeFile } = await this.findDockerComposePath();
         const cwd = hostProject;
-
-        if (!fs.existsSync(composeFile)) {
-            throw new Error(`Docker compose file not found at ${composeFile}`);
-        }
 
         const composeCmd = await this.getDockerComposeCommand();
         console.log(`[update] Using compose command: ${composeCmd}`);
+        console.log(`[update] Using host project path: ${hostProject}`);
+        console.log(`[update] Using compose file: ${composeFile}`);
 
         if (await this.isGitRepo(cwd)) {
             console.log('[update] Updating host project repository from git');
@@ -122,12 +148,37 @@ class Updater {
             }
         }
 
-        console.log('[update] Executing docker compose up -d --build');
+        console.log('[update] Executing docker compose pull');
         try {
-            await execAsync(`${composeCmd} -p tdns-stats -f ${composeFile} up -d --build`, { cwd, shell: '/bin/sh' });
-            console.log('[update] Docker compose up complete');
+            const { stdout: pullStdout, stderr: pullStderr } = await execAsync(`${composeCmd} -p tdns-stats -f ${composeFile} pull`, { cwd, shell: '/bin/sh' });
+            if (pullStderr) console.log('[update] docker compose pull stderr:', pullStderr);
+            console.log('[update] Pull complete:', pullStdout);
         } catch (e) {
-            console.error('[update] docker compose up failed:', e.message);
+            console.error('[update] docker compose pull failed:', e.message);
+            throw e;
+        }
+
+        console.log('[update] Scheduling compose restart from helper container');
+        let helperImage = null;
+        try {
+            const { stdout: containerId } = await execAsync('hostname', { shell: '/bin/sh' });
+            const { stdout: imageName } = await execAsync(`docker inspect --format='{{.Config.Image}}' ${containerId.trim()}`, { shell: '/bin/sh' });
+            helperImage = imageName.trim();
+            console.log('[update] Helper image detected:', helperImage);
+        } catch (e) {
+            console.warn('[update] Could not detect current image, helper runner may fail:', e.message);
+        }
+
+        const helperCmd = helperImage
+            ? `docker run --rm -d -v /var/run/docker.sock:/var/run/docker.sock -v ${hostProject}:${hostProject} -w ${hostProject} ${helperImage} sh -c '${composeCmd} -p tdns-stats -f ${composeFile} up -d --build'`
+            : `${composeCmd} -p tdns-stats -f ${composeFile} up -d --build`;
+
+        try {
+            const { stdout: helperStdout, stderr: helperStderr } = await execAsync(helperCmd, { cwd, shell: '/bin/sh' });
+            if (helperStderr) console.log('[update] helper command stderr:', helperStderr);
+            console.log('[update] Update triggered:', helperStdout.trim() || 'helper started');
+        } catch (e) {
+            console.error('[update] Failed to trigger helper restart:', e.message);
             throw e;
         }
     }

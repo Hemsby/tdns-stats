@@ -80,12 +80,18 @@ services:
       - ./config.yml:/etc/tdns-stats/config.yml:ro
       - /var/run/docker.sock:/var/run/docker.sock
       - /home/myuser/tdns-stats:/app/host-project
+    environment:
+      - HOST_PROJECT_PATH=/app/host-project
     restart: unless-stopped
 ```
 
 Replace `/home/myuser/tdns-stats` with the actual path to your project on the host. This mounts the full project directory into the container, which is required for the auto-update feature to rebuild the service using your host compose file.
 
+If your full project mount is mounted at a different path inside the container, set `HOST_PROJECT_PATH` to that path.
+
 The Docker image now includes `git` so the container can update the mounted host project before triggering `docker compose up -d --build`.
+
+The updater runs the restart via a helper container outside the current service container, which avoids failed restarts when the container replaces itself.
 
 Then start the container:
 
