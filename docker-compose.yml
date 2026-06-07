@@ -6,4 +6,5 @@ services:
     volumes:
       - ./config.yml:/etc/tdns-stats/config.yml:ro
       - /var/run/docker.sock:/var/run/docker.sock
+      - /root/tdns-stats/docker-compose.yml:/app/docker-compose.yml
     restart: unless-stopped

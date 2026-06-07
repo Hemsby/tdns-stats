@@ -66,6 +66,28 @@ Then open `http://your-host:3000` in a browser.
 ```bash
 cp config.example.yml config.yml
 # edit config.yml with your server details
+```
+
+Before starting, update the volume mount in `docker-compose.yml` to point to the absolute path where your compose file lives on the host:
+
+```yaml
+services:
+  tdns-stats:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./config.yml:/etc/tdns-stats/config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /home/myuser/tdns-stats/docker-compose.yml:/app/docker-compose.yml
+    restart: unless-stopped
+```
+
+Replace `/home/myuser/tdns-stats/` with the actual path on your host. This is required for the auto-update feature to work.
+
+Then start the container:
+
+```bash
 docker compose up -d
 ```
 
@@ -81,6 +103,8 @@ docker run -d \
   --restart unless-stopped \
   tdns-stats
 ```
+
+> **Note:** Running without Compose disables the auto-update feature, as it requires access to the Docker socket and the compose file.
 
 ## Running as a systemd service
 
@@ -123,14 +147,20 @@ The dashboard includes a built-in update checker that works with GitHub releases
 - The service automatically detects when it comes back online and refreshes the page
 
 **How it works by deployment method:**
-- **Git clone:** `git fetch` + `git reset --hard origin/master`, then restarts
-- **Docker:** `docker compose pull` + `docker compose up -d`
-- **Systemd:** Same as git clone, then `systemctl restart tdns-stats`
 
-**Requirements:**
-- For systemd: `Restart=always` in the service file (see above)
-- For Docker: Restart policy configured (e.g. `--restart unless-stopped`)
-- GitHub releases must be published with version tags (e.g. `v1.1.0`)
+| Method | Mechanism |
+|--------|-----------|
+| Git clone | `git fetch` + `git reset --hard origin/master`, then restarts |
+| Docker | `docker compose pull` + `docker compose up -d` |
+| Systemd | `git pull origin master` + `systemctl restart tdns-stats` |
+
+**Requirements by deployment method:**
+
+- **Git:** No additional requirements
+- **Systemd:** `Restart=always` in the service file (see above)
+- **Docker:** Requires two things in `docker-compose.yml`:
+  - The Docker socket mounted: `/var/run/docker.sock:/var/run/docker.sock`
+  - The compose file mounted: `/your/path/docker-compose.yml:/app/docker-compose.yml`
 
 ## Configuration reference
 
