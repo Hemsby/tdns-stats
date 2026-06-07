@@ -143,6 +143,10 @@ function broadcast(msg) {
     }
 }
 
+function broadcastViewerCount() {
+    broadcast({ type: 'viewer-count', data: { count: clients.size } });
+}
+
 async function start() {
     // Discover query logs app for each server in parallel
     await Promise.allSettled(servers.map(async s => {
@@ -211,10 +215,12 @@ async function start() {
         // Tell browser to wait 5s before retrying if connection is lost
         res.write('retry: 5000\n\n');
 
+        let ping = null;
         const cleanup = () => {
-            clients.delete(res);
+            const removed = clients.delete(res);
             if (clients.size === 0) poller.pause();
-            clearInterval(ping);
+            if (removed) broadcastViewerCount();
+            if (ping) clearInterval(ping);
         };
 
         res.on('error', (err) => {
@@ -224,6 +230,7 @@ async function start() {
 
         clients.add(res);
         if (clients.size === 1) poller.resume();
+        broadcastViewerCount();
 
         try {
             const state = poller.getState();
@@ -237,7 +244,7 @@ async function start() {
             console.error('[stream] Initial write failed:', err.message);
         }
 
-        const ping = setInterval(() => {
+        ping = setInterval(() => {
             try { 
                 res.write(`data: ${JSON.stringify({ type: 'ping' })}\n\n`); 
             } catch (_) { 

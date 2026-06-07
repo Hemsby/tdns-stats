@@ -21,6 +21,7 @@ const App = (() => {
         lastFeedEvent: null,
         timeRange:     'LastHour',
         connected:     false,
+        dashboardViewers: 0,
         lastUpdated:   null,
         isCluster:     false,
         version:       null,
@@ -214,6 +215,9 @@ const App = (() => {
             }
         } else if (msg.type === 'update-status') {
             handleUpdateStatus(msg.data);
+        } else if (msg.type === 'viewer-count') {
+            state.dashboardViewers = Math.max(0, Number(msg.data?.count) || 0);
+            renderDashboardViewers();
         } else if (msg.type === 'ping') {
             // No action needed, handleMessage already updated lastMsg
         }
@@ -994,6 +998,13 @@ const App = (() => {
             return '<span class="server-pill ' + (ok ? 'online' : 'offline') + '">' +
                    '<span class="pill-dot"></span>' + esc(name) + '</span>';
         }).join('');
+    }
+
+    function renderDashboardViewers() {
+        const el = document.getElementById('dashboardViewers');
+        if (!el) return;
+        const viewerLabel = state.dashboardViewers === 1 ? 'viewer' : 'viewers';
+        el.innerHTML = '<span class="pill-dot"></span>' + fmtNum(state.dashboardViewers) + ' ' + viewerLabel;
     }
 
     // ---- Performance cards --------------------------------------------------

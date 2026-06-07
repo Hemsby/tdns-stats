@@ -240,6 +240,7 @@ main { position: relative; z-index: 1; }
 }
 .server-pill.online  { border-color: rgba(52,211,153,.3); color: var(--accent-green); background: rgba(52,211,153,.05); }
 .server-pill.offline { border-color: rgba(248,113,113,.3); color: var(--accent-red); background: rgba(248,113,113,.05); }
+.server-pill.viewers { border-color: rgba(34,211,238,.28); color: var(--accent-blue); background: rgba(34,211,238,.06); }
 .pill-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .server-pill.online .pill-dot { box-shadow: 0 0 5px currentColor; }
 
