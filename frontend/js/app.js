@@ -157,6 +157,12 @@ const App = (() => {
                 if (!state.topServer)   state.topServer   = chartFallback;
                 buildServerUI();
                 renderPerfCards(); // show placeholders immediately on first server discovery
+
+                // Ensure chart and top lists data are populated immediately if the selected time range is anything other than LastHour
+                if (state.timeRange !== 'LastHour') {
+                    refreshChart();
+                    refreshTopLists();
+                }
             }
 
             renderClusterCards();
@@ -175,7 +181,7 @@ const App = (() => {
 
         } else if (msg.type === 'top') {
             state.top[msg.server] = msg.data;
-            if (msg.server === state.topServer) renderTopLists();
+            if (msg.server === state.topServer && state.timeRange === 'LastHour') renderTopLists();
 
         } else if (msg.type === 'perf') {
             state.perf[msg.server] = msg.data;
@@ -378,6 +384,11 @@ const App = (() => {
             updateChartHeading();
             refreshChart();
             refreshTopLists();
+            if (state.timeRange === 'LastDay') {
+                startLastDayRefresh();
+            } else {
+                stopLastDayRefresh();
+            }
         });
         el('chartServerSelect') && (el('chartServerSelect').onchange = e => {
             state.chartServer = e.target.value;
@@ -1132,6 +1143,27 @@ const App = (() => {
             .catch(() => {});
     }
 
+    // Allow periodic (60s) refresh of LastDay data for both query chart and top lists, regardless of polling interval
+    let lastDayTimer = null;
+
+    function startLastDayRefresh() {
+        stopLastDayRefresh();
+        lastDayTimer = setInterval(() => {
+            Object.keys(state.rangeCache).forEach(key => {
+                if (key.includes(':LastDay')) delete state.rangeCache[key];
+            });
+            refreshChart();
+            refreshTopLists();
+        }, 60000);
+    }
+
+    function stopLastDayRefresh() {
+        if (lastDayTimer) {
+            clearInterval(lastDayTimer);
+            lastDayTimer = null;
+        }
+    }
+
     function renderTopListsFromData(data, statsType) {
         const keyMap = { TopDomains: 'topDomains', TopBlockedDomains: 'topBlockedDomains', TopClients: 'topClients' };
         const colorMap = { TopDomains: 'blue', TopBlockedDomains: 'red', TopClients: 'pur' };
@@ -1488,6 +1520,9 @@ const App = (() => {
     }
 
     function init() {
+        const tr = document.getElementById('timeRangeSelect');
+        if (tr) state.timeRange = tr.value;
+        if (state.timeRange === 'LastDay') startLastDayRefresh();
         initTheme();
         initMainTabs();
         setupUpdateButtons();
