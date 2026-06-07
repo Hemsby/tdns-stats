@@ -157,6 +157,10 @@ const App = (() => {
                 if (!state.topServer)   state.topServer   = chartFallback;
                 buildServerUI();
                 renderPerfCards(); // show placeholders immediately on first server discovery
+
+                // Populate chart and top list data immediately, without waiting for first poll
+                refreshChart();
+                refreshTopLists(true);
             }
 
             renderClusterCards();
@@ -175,7 +179,7 @@ const App = (() => {
 
         } else if (msg.type === 'top') {
             state.top[msg.server] = msg.data;
-            if (msg.server === state.topServer) renderTopLists();
+            if (msg.server === state.topServer && state.timeRange === 'LastHour') renderTopLists();
 
         } else if (msg.type === 'perf') {
             state.perf[msg.server] = msg.data;
@@ -378,6 +382,11 @@ const App = (() => {
             updateChartHeading();
             refreshChart();
             refreshTopLists();
+            if (state.timeRange === 'LastDay') {
+                startLastDayRefresh();
+            } else {
+                stopLastDayRefresh();
+            }
         });
         el('chartServerSelect') && (el('chartServerSelect').onchange = e => {
             state.chartServer = e.target.value;
@@ -1111,8 +1120,8 @@ const App = (() => {
             .catch(() => {});
     }
 
-    function refreshTopLists() {
-        if (state.timeRange === 'LastHour') {
+    function refreshTopLists(init) {
+        if (state.timeRange === 'LastHour' && !init) {
             renderTopLists();
             return;
         }
@@ -1130,6 +1139,27 @@ const App = (() => {
                 renderTopListsFromData(data, statsType);
             })
             .catch(() => {});
+    }
+
+    // Allow periodic (60s) refresh of LastDay data for both query chart and top lists, regardless of polling interval
+    let lastDayTimer = null;
+
+    function startLastDayRefresh() {
+        stopLastDayRefresh();
+        lastDayTimer = setInterval(() => {
+            Object.keys(state.rangeCache).forEach(key => {
+                if (key.includes(':LastDay')) delete state.rangeCache[key];
+            });
+            refreshChart();
+            refreshTopLists();
+        }, 60000);
+    }
+
+    function stopLastDayRefresh() {
+        if (lastDayTimer) {
+            clearInterval(lastDayTimer);
+            lastDayTimer = null;
+        }
     }
 
     function renderTopListsFromData(data, statsType) {
@@ -1488,6 +1518,9 @@ const App = (() => {
     }
 
     function init() {
+        const tr = document.getElementById('timeRangeSelect');
+        if (tr) state.timeRange = tr.value;
+        if (state.timeRange === 'LastDay') startLastDayRefresh();
         initTheme();
         initMainTabs();
         setupUpdateButtons();
