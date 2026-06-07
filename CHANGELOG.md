@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.7.4] - 2026-06-07
+
+### Fixed
+- Docker Updates should now complete correctly.
+
 ## [1.7.3] - 2026-06-07
 
 ### Changed
