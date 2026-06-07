@@ -26,6 +26,7 @@ class Poller {
         this._feedTimer  = null;
         this._topTimer   = null;
         this._perfTimer  = null;
+        this._running    = false;
     }
 
     _clearTimers() {
@@ -33,13 +34,20 @@ class Poller {
         clearInterval(this._feedTimer);
         clearInterval(this._topTimer);
         clearInterval(this._perfTimer);
+        this._statsTimer = null;
+        this._feedTimer  = null;
+        this._topTimer   = null;
+        this._perfTimer  = null;
+        this._running    = false;
     }
 
     _startTimers() {
+        if (this._running) return;
         this._statsTimer = setInterval(() => this._pollStats(),       this.cfg.statsInterval);
         this._feedTimer  = setInterval(() => this._pollFeed(),        this.cfg.feedInterval);
         this._topTimer   = setInterval(() => this._pollTop(),         this.cfg.topInterval);
         this._perfTimer  = setInterval(() => this._pollPerformance(), this.cfg.perfInterval);
+        this._running    = true;
     }
 
     _pollAll() {
@@ -259,7 +267,8 @@ class Poller {
                         entries:    cachedEntries,
                         maxEntries: cacheMax
                     },
-                    impact:  +impact.toFixed(2)
+                    impact:       +impact.toFixed(2),
+                    recursivePct: totalQueries > 0 ? Math.round(totalRecursive / totalQueries * 100) : 0,
                 };
 
                 this.state.perf[server.name] = perfData;
@@ -267,22 +276,7 @@ class Poller {
                 this.broadcast({
                     type:   'perf',
                     server: server.name,
-                    data: {
-                        rtt: {
-                            median:  +median.toFixed(2),
-                            mean:    +mean.toFixed(2),
-                            p99:     +p99.toFixed(2),
-                            jitter:  +jitter.toFixed(2),
-                            samples: rtts.length
-                        },
-                        cache: {
-                            hitRate:    +hitRate.toFixed(1),
-                            entries:    cachedEntries,
-                            maxEntries: cacheMax
-                        },
-                        impact:       +impact.toFixed(2),
-                        recursivePct: totalQueries > 0 ? Math.round(totalRecursive / totalQueries * 100) : 0,
-                    }
+                    data:   perfData
                 });
             } catch (_) { /* unreachable */ }
         }

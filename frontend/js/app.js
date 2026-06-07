@@ -35,12 +35,43 @@ const App = (() => {
 
     // ---- SSE ----------------------------------------------------------------
     let reconnectTimer = null;
+    let connectTimeout = null;
+    let stalenessTimer = null;
     let currentReconnectDelay = 3000;
     let lastConnectAttempt = 0;
+    let lastMessageAt = 0;
+
+    function updateInProgress() {
+        return state.updateStatus === 'updating' ||
+            state.updateStatus === 'restarting' ||
+            state.updateStatus === 'reconnecting';
+    }
+
+    function clearReconnectTimer() {
+        if (!reconnectTimer) return;
+        clearInterval(reconnectTimer);
+        reconnectTimer = null;
+    }
+
+    function clearConnectionTimers() {
+        if (connectTimeout) {
+            clearTimeout(connectTimeout);
+            connectTimeout = null;
+        }
+        if (stalenessTimer) {
+            clearInterval(stalenessTimer);
+            stalenessTimer = null;
+        }
+    }
+
+    function closeEventSource() {
+        if (!es) return;
+        es.close();
+        es = null;
+    }
 
     function reconnectWithCountdown(delayMs) {
-        // Clear any existing timer to prevent overlapping loops
-        if (reconnectTimer) clearInterval(reconnectTimer);
+        clearReconnectTimer();
         
         currentReconnectDelay = delayMs;
         let secondsLeft = Math.ceil(delayMs / 1000);
@@ -70,45 +101,42 @@ const App = (() => {
         }
         lastConnectAttempt = now;
 
-        if (es) {
-            es.close();
-            es = null;
-        }
+        closeEventSource();
+        clearConnectionTimers();
+        clearReconnectTimer();
 
-        // Clear any pending reconnect timers
-        if (reconnectTimer) {
-            clearInterval(reconnectTimer);
-            reconnectTimer = null;
-        }
-
+        state.connected = false;
+        lastMessageAt = Date.now();
         es = new EventSource('/api/stream');
 
         // Timeout: if we don't get connected within 5 seconds, retry
-        const connectTimeout = setTimeout(() => {
+        connectTimeout = setTimeout(() => {
             if (!state.connected && es) {
                 console.warn('[sse] Connection timeout, retrying...');
-                es.close();
-                es = null;
+                closeEventSource();
+                clearConnectionTimers();
                 reconnectWithCountdown(currentReconnectDelay);
             }
         }, 5000);
 
-        let lastMsg = Date.now();
-        const stalenessTimer = setInterval(() => {
-            // Skip staleness check during updates
-            if (state.updateStatus === 'updating' || state.updateStatus === 'restarting' || state.updateStatus === 'reconnecting') return;
+        stalenessTimer = setInterval(() => {
+            if (updateInProgress()) return;
             
-            if (Date.now() - lastMsg > 60000) {
+            if (Date.now() - lastMessageAt > 60000) {
                 console.warn('[sse] Connection stale (60s), restarting...');
-                clearInterval(stalenessTimer);
                 setConnDot('error');
-                if (es) { es.close(); es = null; }
+                state.connected = false;
+                closeEventSource();
+                clearConnectionTimers();
                 reconnectWithCountdown(3000);
             }
         }, 20000);
 
         es.onopen = () => {
-            clearTimeout(connectTimeout);
+            if (connectTimeout) {
+                clearTimeout(connectTimeout);
+                connectTimeout = null;
+            }
             state.connected = true;
             setConnDot('connected');
             document.getElementById('lastUpdated').textContent = 'Connected';
@@ -116,23 +144,19 @@ const App = (() => {
 
         es.onerror = (err) => {
             console.error('[sse] Stream error:', err);
-            clearInterval(stalenessTimer);
-            clearTimeout(connectTimeout);
+            clearConnectionTimers();
             state.connected = false;
             setConnDot('error');
-            
-            if (es) { es.close(); es = null; }
+            closeEventSource();
 
             // If an update is in progress, pollHealth handles the reconnection via reload.
-            if (state.updateStatus === 'updating' || state.updateStatus === 'restarting' || state.updateStatus === 'reconnecting') {
-                return;
-            }
+            if (updateInProgress()) return;
 
             reconnectWithCountdown(3000);
         };
 
         es.onmessage = evt => {
-            lastMsg = Date.now();
+            lastMessageAt = Date.now();
             let msg;
             try { msg = JSON.parse(evt.data); } catch (_) { return; }
             handleMessage(msg);
