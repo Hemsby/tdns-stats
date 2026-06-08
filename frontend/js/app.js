@@ -1181,13 +1181,23 @@ const App = (() => {
 
     function startLastDayRefresh() {
         stopLastDayRefresh();
-        lastDayTimer = setInterval(() => {
+        const doRefresh = () => {
             Object.keys(state.rangeCache).forEach(key => {
                 if (key.includes(':LastDay')) delete state.rangeCache[key];
             });
             refreshChart();
             refreshTopLists();
-        }, 60000);
+        };
+        const scheduleNext = () => {
+            const now = Date.now();
+            const msUntilNextMinute = (60 - Math.floor(now / 1000) % 60) * 1000;
+            lastDayTimer = setTimeout(() => {
+                doRefresh();
+                scheduleNext();
+            }, msUntilNextMinute);
+        };
+        doRefresh();
+        scheduleNext();
     }
 
     function stopLastDayRefresh() {
