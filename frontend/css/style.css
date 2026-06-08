@@ -34,6 +34,7 @@
     --accent-ora-row: rgba(255, 159, 67, .05);
     
     --accent-slate: #646873;
+    --accent-slate-bg: rgba(100,104,115,.08);
     --scrollbar:    #1a2d44;
 }
 
@@ -66,6 +67,7 @@
     --accent-ora-row: rgba(249,115,22,.04);
 
     --accent-slate: #475569;
+    --accent-slate-bg: rgba(71,85,105,.08);
     --scrollbar:    #bfcfdf;
 }
 @media (prefers-color-scheme: light) {
@@ -711,8 +713,7 @@ main { position: relative; z-index: 1; }
 .feed-row.blocked  { background: var(--accent-red-row); border-left-color: var(--accent-red); opacity: 0.95; }
 .feed-row.nxdomain { background: var(--accent-ora-row); border-left-color: var(--accent-ora); opacity: 0.95; }
 .feed-row.servfail { background: var(--accent-red-row); border-left-color: var(--accent-red); opacity: 0.95; }
-
-.feed-time   { font-family: 'JetBrains Mono', monospace; color: var(--text-dim); font-size: 11px; }
+ .feed-row.refused  { background: var(--accent-slate-bg); border-left-color: var(--accent-slate); opacity: 0.95; }
 .feed-server { font-size: 11px; color: var(--text-muted); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: .2px; }
 .feed-server.blue  { color: var(--accent-blue); }
 .feed-server.red   { color: var(--accent-red); }
@@ -747,6 +748,8 @@ main { position: relative; z-index: 1; }
 .feed-type.authoritative{ background: var(--accent-yel-bg);   color: var(--accent-yel); }
 .feed-type.recursive    { background: var(--accent-pur-bg);   color: var(--accent-pur); }
 .feed-type.other        { background: var(--border-dim); color: var(--text-dim); }
+/* Refused responses (treated as authoritative refusal) */
+.feed-type.refused      { background: var(--border-dim); color: var(--accent-slate); }
 
 /* ---- Scrollbar global ---- */
 ::-webkit-scrollbar { width: 6px; height: 6px; }

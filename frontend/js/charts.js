@@ -6,19 +6,63 @@ const Charts = (() => {
     const hiddenByView = { overview: new Set(), all: new Set() };
     let persistCallback = null;
 
+    // Map dataset labels to CSS variable names so chart colors follow the UI theme
     const DATASET_COLORS = {
-        'Total':          { border: 'rgb(34,211,238)',   bg: 'rgba(34,211,238,.07)'   },
-        'No Error':       { border: 'rgb(52,211,153)',   bg: 'rgba(52,211,153,.07)'   },
-        'Blocked':        { border: 'rgb(255, 68, 68)',  bg: 'rgba(255, 68, 68, .07)'  },
-        'Cached':         { border: 'rgb(45,212,191)',   bg: 'rgba(45,212,191,.07)'   },
-        'Recursive':      { border: 'rgb(167,139,250)',  bg: 'rgba(167,139,250,.07)'  },
-        'Authoritative':  { border: 'rgb(251,191,36)',   bg: 'rgba(251,191,36,.07)'   },
-        'NX Domain':      { border: 'rgb(255, 152, 0)',  bg: 'rgba(255, 152, 0, .07)'  },
-        'Server Failure': { border: 'rgb(255, 68, 68)',  bg: 'rgba(255, 68, 68, .09)'  },
-        'Dropped':        { border: 'rgb(100,116,139)',  bg: 'rgba(100,116,139,.09)'  },
-        'Clients':        { border: 'rgb(167,139,250)',  bg: 'rgba(167,139,250,.07)'  },
-        'Refused':        { border: 'rgb(100,116,139)',  bg: 'rgba(100,116,139,.07)'  },
+        'Total':          { borderVar: '--accent-blue',  bgVar: '--accent-blue-bg' },
+        'No Error':       { borderVar: '--accent-green', bgVar: '--accent-green-bg' },
+        'Blocked':        { borderVar: '--accent-red',   bgVar: '--accent-red-bg' },
+        'Cached':         { borderVar: '--accent-teal',  bgVar: '--accent-teal-bg' },
+        'Recursive':      { borderVar: '--accent-pur',   bgVar: '--accent-pur-bg' },
+        'Authoritative':  { borderVar: '--accent-yel',   bgVar: '--accent-yel-bg' },
+        'NX Domain':      { borderVar: '--accent-ora',   bgVar: '--accent-ora-bg' },
+        'Server Failure': { borderVar: '--accent-red',   bgVar: '--accent-red-bg' },
+        'Dropped':        { borderVar: '--accent-slate' },
+        'Clients':        { borderVar: '--accent-pur',   bgVar: '--accent-pur-bg' },
+        'Refused':        { borderVar: '--accent-slate' },
     };
+
+    function cssVar(name) {
+        try {
+            return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || null;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function hexToRgba(hex, alpha) {
+        if (!hex) return null;
+        const h = hex.replace('#', '');
+        if (h.length === 3) {
+            const r = parseInt(h[0] + h[0], 16);
+            const g = parseInt(h[1] + h[1], 16);
+            const b = parseInt(h[2] + h[2], 16);
+            return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        }
+        if (h.length === 6) {
+            const r = parseInt(h.slice(0,2), 16);
+            const g = parseInt(h.slice(2,4), 16);
+            const b = parseInt(h.slice(4,6), 16);
+            return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        }
+        return null;
+    }
+
+    function resolveColor(entry) {
+        // entry may have borderVar and bgVar
+        const border = entry.borderVar ? cssVar(entry.borderVar) : null;
+        let bg = entry.bgVar ? cssVar(entry.bgVar) : null;
+
+        if (!bg) {
+            // Try to synthesize a translucent background from the border color
+            if (border && border.startsWith('rgb(')) {
+                bg = border.replace('rgb(', 'rgba(').replace(')', ', .08)');
+            } else if (border && border.startsWith('#')) {
+                bg = hexToRgba(border, 0.08) || 'rgba(139,148,158,.08)';
+            }
+        }
+
+        return { border: border || entry.border || '#8b949e', bg: bg || entry.bg || 'rgba(139,148,158,.08)' };
+    }
 
     const OVERVIEW_DATASETS = ['Total', 'Blocked', 'Cached', 'Recursive'];
 
@@ -156,7 +200,8 @@ const Charts = (() => {
         const datasets = (chartData.datasets || [])
             .filter(ds => allowed.has(ds.label))
             .map(ds => {
-                const c = DATASET_COLORS[ds.label] || { border: '#8b949e', bg: 'rgba(139,148,158,.08)' };
+                const entry = DATASET_COLORS[ds.label] || { border: '#8b949e', bg: 'rgba(139,148,158,.08)' };
+                const c = resolveColor(entry);
                 return {
                     label:            ds.label,
                     data:             ds.data,

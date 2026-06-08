@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.7.7] - 2026-06-08
+
+### Fixed
+- Corrected Stat Cards Colours (They got overridden on a previous patch update).
+- Refused queires now shown correctly in live feed.  They were previously masked by Authoritative queiries.
+- Removed Dropped and No Error from live feed filters as they individualy are not required.
+
 ## [1.7.6] - 2026-06-08
 
 ### Fixed

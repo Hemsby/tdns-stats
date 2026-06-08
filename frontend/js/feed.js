@@ -62,8 +62,9 @@ const Feed = (() => {
                 const rcode = (e.rcode || '').toLowerCase().replace(/\s+/g, '');
                 
                 if (entryType !== 'Blocked') {
-                    if (rcode === 'nxdomain')      entryType = 'NxDomain';
+                    if (rcode === 'nxdomain')         entryType = 'NxDomain';
                     else if (rcode === 'serverfailure') entryType = 'ServerFailure';
+                    else if (rcode === 'refused')       entryType = 'Refused';
                 }
                 
                 if (!filters.has(entryType)) return false;
@@ -105,6 +106,9 @@ const Feed = (() => {
                 } else if (rcode === 'serverfailure') {
                     badgeText = 'ServFail';
                     badgeCls  = 'servfail';
+                } else if (rcode === 'refused') {
+                    badgeText = 'Refused';
+                    badgeCls  = 'refused';
                 }
             }
 
@@ -162,10 +166,11 @@ const Feed = (() => {
         // 1. Priority: Response Type 'Blocked' is always Red
         if (e.responseType === 'Blocked') return 'blocked';
         
-        // 2. Secondary: Check RCODE for NXDOMAIN (Orange) or Server Failure (Red)
+        // 2. Secondary: Check RCODE for NXDOMAIN, Server Failure, or Refused
         const rcode = (e.rcode || '').toLowerCase().replace(/\s+/g, '');
         if (rcode === 'nxdomain')      return 'nxdomain';
         if (rcode === 'serverfailure') return 'servfail';
+        if (rcode === 'refused')       return 'refused';
         
         return '';
     }

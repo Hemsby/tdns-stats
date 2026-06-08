@@ -966,10 +966,10 @@ const App = (() => {
             '<div class="srv-stats-grid">' +
             statMini('Total',   fmtNum(total), 'blue') +
             statMini('No Error', fmtNum(noerr), 'green') +
-            statMini('Failures', fmtNum(fail), 'ora') +
-            statMini('NXDOMAIN', fmtNum(nx), 'yel') +
+            statMini('Failures', fmtNum(fail), 'red') +
+            statMini('NXDOMAIN', fmtNum(nx), 'ora') +
             statMini('Refused',  fmtNum(refused), 'slate') +
-            statMini('Authoritative', fmtNum(auth), 'blue') +
+            statMini('Authoritative', fmtNum(auth), 'yel') +
             statMini('Recursive', fmtNum(recursive), 'pur') +
             statMini('Cached',   fmtNum(cached),  'teal') +
             statMini('Blocked',  fmtNum(blocked), 'red') +
