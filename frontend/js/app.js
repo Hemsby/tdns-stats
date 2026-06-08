@@ -1146,7 +1146,7 @@ const App = (() => {
             Charts.updateFromData(state.rangeCache[cacheKey], getDatasetMode());
             return;
         }
-        fetch('/api/dashboard?server=' + encodeURIComponent(state.chartServer) + '&type=' + state.timeRange)
+        fetch('/api/dashboard?server=' + encodeURIComponent(state.chartServer) + '&type=' + state.timeRange + '&tz=' + new Date().getTimezoneOffset())
             .then(r => r.json())
             .then(data => {
                 state.rangeCache[cacheKey] = data;
@@ -1167,7 +1167,7 @@ const App = (() => {
             renderTopListsFromData(state.rangeCache[cacheKey], statsType);
             return;
         }
-        fetch('/api/top?server=' + encodeURIComponent(state.topServer) + '&type=' + state.timeRange + '&statsType=' + statsType)
+        fetch('/api/top?server=' + encodeURIComponent(state.topServer) + '&type=' + state.timeRange + '&statsType=' + statsType + '&tz=' + new Date().getTimezoneOffset())
             .then(r => r.json())
             .then(data => {
                 state.rangeCache[cacheKey] = data;

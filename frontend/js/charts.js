@@ -100,6 +100,24 @@ const Charts = (() => {
         updateFromData(chartData, datasetMode);
     }
 
+    function formatLabels(labels, fmt, tzOffset) {
+        if (!fmt || !labels?.length) return labels;
+        const utc = !tzOffset && !/HH|mm/.test(fmt);
+        return labels.map(l => {
+            if (typeof l !== 'string') return l;
+            const d = new Date(l);
+            if (isNaN(d.getTime())) return l;
+            const pad = n => String(n).padStart(2, '0');
+            const part = n => utc ? d['getUTC' + n]() : d['get' + n]();
+            return fmt
+                .replace(/yyyy|YYYY/g, part('FullYear'))
+                .replace(/dd|DD/g, pad(part('Date')))
+                .replace(/HH/g, pad(part('Hours')))
+                .replace(/mm/g, pad(part('Minutes')))
+                .replace(/MM/g, pad(part('Month') + 1));
+        });
+    }
+
     function updateFromData(responseOrChartData, datasetMode) {
         if (!chart) init();
         if (!chart) return;
@@ -152,7 +170,7 @@ const Charts = (() => {
                 };
             });
 
-        chart.data.labels   = chartData.labels || [];
+        chart.data.labels   = formatLabels(chartData.labels, chartData.labelFormat, chartData.tzOffset);
         chart.data.datasets = datasets;
 
         // Restore hidden label state after update
