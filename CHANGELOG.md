@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.7.6] - 2026-06-08
+
+### Fixed
+- All time ranges now properly include all data for the given range (fixed the issue where some ranges (LastDay, LastYear) were off-by-one or otherwise not correctly including all data).
+- Ensure chart periodic labels accurately reflect the data displayed for the selected time range.
+
 ## [1.7.5] - 2026-06-07
 
 ### Added
