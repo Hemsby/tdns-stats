@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-06-08
+
+### Added
+
+- Added Changelog pop-up modal that opens when the current version pill is clicked, showing release history.
+
 ## [1.7.8] - 2026-06-08
 
 ### Fixed
