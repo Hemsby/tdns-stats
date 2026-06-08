@@ -47,7 +47,7 @@
                 <span class="pill-dot"></span>0 viewers
             </span>
             <div class="version-info">
-                <span class="version-pill" id="versionPill">v?.?.?</span>
+                <span class="version-pill" id="versionPill" title="View changelog">v?.?.?</span>
                 <button class="icon-btn" id="checkUpdatesBtn" title="Check for updates">
                     <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M8 3a5 5 0 014.95 4H12a.5.5 0 010 1H8.5a.5.5 0 01-.5-.5V4a.5.5 0 011 0v1.6A4 4 0 004 8a.5.5 0 000 1 5 5 0 015-5z"/><path d="M8 13a5 5 0 01-4.95-4H4a.5.5 0 010-1h3.5a.5.5 0 01.5.5v3.5a.5.5 0 01-1 0v-1.6A4 4 0 0012 8a.5.5 0 000-1 5 5 0 01-4 5z"/></svg>
                 </button>
@@ -79,6 +79,16 @@
             <div class="update-spinner"></div>
             <p class="update-overlay-text" id="updateOverlayText">Service is updating...</p>
             <p class="update-overlay-subtext">Please wait, this usually takes less than 30 seconds</p>
+        </div>
+    </div>
+
+    <div class="changelog-overlay" id="changelogOverlay" hidden>
+        <div class="changelog-modal">
+            <div class="changelog-header">
+                <h2 class="changelog-title">Changelog</h2>
+                <button class="changelog-close" id="changelogCloseBtn">&Cross;</button>
+            </div>
+            <div class="changelog-body" id="changelogBody"></div>
         </div>
     </div>
 
@@ -196,6 +206,7 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked@15.0.7/marked.min.js"></script>
     <script src="js/feed.js"></script>
     <script src="js/charts.js"></script>
     <script src="js/app.js"></script>

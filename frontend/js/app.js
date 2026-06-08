@@ -30,6 +30,7 @@ const App = (() => {
         healthCheckTimer: null,
         domainSearchServer: 'all',
         blockedLookup: false,
+        changelogHtml: null,
     };
 
     let es = null;
@@ -1557,6 +1558,43 @@ const App = (() => {
         poll();
     }
 
+    async function showChangelog() {
+        if (!state.changelogHtml) {
+            try {
+                const res = await fetch('/api/changelog');
+                const data = await res.json();
+                if (data.changelog) {
+                    const cleaned = data.changelog.replace(/^[\s\S]*?(?=^## \[\d)/m, '');
+                    state.changelogHtml = marked.parse(cleaned);
+                }
+            } catch (e) {
+                console.error('Failed to fetch changelog:', e);
+                return;
+            }
+        }
+        document.getElementById('changelogBody').innerHTML = state.changelogHtml;
+        document.getElementById('changelogOverlay').hidden = false;
+    }
+
+    function hideChangelog() {
+        document.getElementById('changelogOverlay').hidden = true;
+    }
+
+    function setupChangelog() {
+        const pill = document.getElementById('versionPill');
+        const overlay = document.getElementById('changelogOverlay');
+        const closeBtn = document.getElementById('changelogCloseBtn');
+
+        pill.addEventListener('click', showChangelog);
+        closeBtn.addEventListener('click', hideChangelog);
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) hideChangelog();
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !overlay.hidden) hideChangelog();
+        });
+    }
+
     function setupUpdateButtons() {
         document.getElementById('checkUpdatesBtn').addEventListener('click', checkUpdates);
         document.getElementById('updateBtn').addEventListener('click', triggerUpdate);
@@ -1569,6 +1607,7 @@ const App = (() => {
         initTheme();
         initMainTabs();
         setupUpdateButtons();
+        setupChangelog();
         fetchVersion();
         updateChartHeading();
         Charts.init();

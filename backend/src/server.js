@@ -389,6 +389,17 @@ async function start() {
         res.json({ version: VERSION });
     });
 
+    app.get('/api/changelog', (req, res) => {
+        try {
+            const changelogPath = path.join(__dirname, '../../CHANGELOG.md');
+            const changelog = fs.readFileSync(changelogPath, 'utf8');
+            res.json({ changelog });
+        } catch (e) {
+            console.error('[changelog] Failed to read:', e.message);
+            res.status(500).json({ error: 'Failed to read changelog' });
+        }
+    });
+
     app.get('/api/health', (req, res) => {
         res.json({ status: 'ok', version: VERSION, started_at: STARTED_AT });
     });

@@ -213,8 +213,10 @@ main { position: relative; z-index: 1; }
     display: inline-flex; align-items: center; justify-content: center;
     padding: 3px 8px; background: var(--bg); border: 1px solid var(--border);
     border-radius: 4px; font-size: 10px; font-weight: 600; font-family: 'JetBrains Mono', monospace;
-    color: var(--text-muted); letter-spacing: .3px;
+    color: var(--text-muted); letter-spacing: .3px; cursor: pointer;
+    transition: color .15s, border-color .15s;
 }
+.version-pill:hover { color: var(--accent-blue); border-color: var(--accent-blue); }
 .icon-btn {
     display: flex; align-items: center; justify-content: center;
     width: 28px; height: 26px; background: none; border: none;
@@ -713,7 +715,7 @@ main { position: relative; z-index: 1; }
 .feed-row.blocked  { background: var(--accent-red-row); border-left-color: var(--accent-red); opacity: 0.95; }
 .feed-row.nxdomain { background: var(--accent-ora-row); border-left-color: var(--accent-ora); opacity: 0.95; }
 .feed-row.servfail { background: var(--accent-red-row); border-left-color: var(--accent-red); opacity: 0.95; }
- .feed-row.refused  { background: var(--accent-slate-bg); border-left-color: var(--accent-slate); opacity: 0.95; }
+.feed-row.refused  { background: var(--accent-slate-bg); border-left-color: var(--accent-slate); opacity: 0.95; }
 .feed-time   { font-family: 'JetBrains Mono', monospace; color: var(--text-dim); font-size: 11px; }
 .feed-server { font-size: 11px; color: var(--text-muted); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: .2px; }
 .feed-server.blue  { color: var(--accent-blue); }
@@ -756,6 +758,72 @@ main { position: relative; z-index: 1; }
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 3px; }
+
+/* ---- Changelog modal ---- */
+.changelog-overlay {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(5, 8, 13, 0.65); backdrop-filter: blur(4px);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 9999; animation: fadeIn .3s ease-in;
+}
+.changelog-modal {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 6px; width: 90%; max-width: 680px;
+    max-height: 80vh; display: flex; flex-direction: column;
+}
+.changelog-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 20px; border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+}
+.changelog-title {
+    font-size: 16px; font-weight: 600; color: var(--text);
+    letter-spacing: .5px;
+}
+.changelog-close {
+    display: flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; background: none; border: 1px solid var(--border);
+    border-radius: 4px; color: var(--text-muted); cursor: pointer;
+    font-size: 14px; transition: color .15s, background .15s;
+}
+.changelog-close:hover { color: var(--text); background: var(--bg-hover); }
+.changelog-body {
+    padding: 20px; overflow-y: auto; flex: 1;
+    font-family: 'Chakra Petch', system-ui, sans-serif;
+    font-size: 13px; line-height: 1.7; color: var(--text);
+}
+.changelog-body h2 {
+    font-size: 15px; font-weight: 600; color: var(--accent-blue);
+    margin: 18px 0 4px; letter-spacing: .3px;
+}
+.changelog-body h2:first-child { margin-top: 0; }
+.changelog-body h3 {
+    font-size: 12px; font-weight: 600; color: var(--accent-teal);
+    margin: 14px 0 4px; letter-spacing: .4px; text-transform: uppercase;
+}
+.changelog-body ul {
+    list-style: none; padding: 0; margin: 4px 0 12px;
+}
+.changelog-body ul li {
+    position: relative; padding-left: 16px; margin-bottom: 3px;
+    color: var(--text-muted);
+}
+.changelog-body ul li::before {
+    content: ''; position: absolute; left: 2px; top: 8px;
+    width: 5px; height: 5px; border-radius: 50%;
+    background: var(--border);
+}
+.changelog-body code {
+    font-family: 'JetBrains Mono', monospace; font-size: 12px;
+    background: var(--bg); padding: 1px 5px; border-radius: 3px;
+    color: var(--accent-yel);
+}
+.changelog-body strong {
+    color: var(--text); font-weight: 600;
+}
+.changelog-body p { margin: 6px 0; }
+.changelog-body a { color: var(--accent-blue); text-decoration: none; }
+.changelog-body a:hover { text-decoration: underline; }
 
 /* ---- Update overlay ---- */
 .update-overlay {
