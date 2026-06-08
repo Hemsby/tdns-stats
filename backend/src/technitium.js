@@ -51,10 +51,41 @@ async function getSessionInfo(server) {
     };
 }
 
-async function getDashboard(server, type, node) {
-    let path = 'api/dashboard/stats/get?type=' + (type || 'LastHour');
+function getLocalMidnightDate(tzOffset, daysAgo) {
+    const now = Date.now();
+    const localOffsetMs = -tzOffset * 60 * 1000;
+    const dayMs = 24 * 3600 * 1000;
+    return new Date(Math.floor((now + localOffsetMs) / dayMs) * dayMs - localOffsetMs - daysAgo * dayMs);
+}
+
+function getCustomDateParams(tzOffset, days) {
+    const start = getLocalMidnightDate(tzOffset, days);
+    const end = getLocalMidnightDate(tzOffset, 0);
+    return 'start=' + start.toISOString() + '&end=' + end.toISOString();
+}
+
+function trimLastDataPoint(mainChartData) {
+    if (!mainChartData || !mainChartData.labels || !mainChartData.datasets) return;
+    mainChartData.labels.pop();
+    for (const ds of mainChartData.datasets) {
+        if (ds.data) ds.data.pop();
+    }
+}
+
+const CUSTOM_RANGES = { LastWeek: 7, LastMonth: 31 };
+
+async function getDashboard(server, type, node, tzOffset) {
+    const days = CUSTOM_RANGES[type];
+    let path = days
+        ? 'api/dashboard/stats/get?type=Custom&utc=true&' + getCustomDateParams(tzOffset, days)
+        : 'api/dashboard/stats/get?type=' + (type || 'LastHour') + '&utc=true';
     if (node) path += '&node=' + encodeURIComponent(node);
-    return apiGet(server, path);
+    const data = await apiGet(server, path);
+    if (days) {
+        trimLastDataPoint(data.mainChartData);
+        data.mainChartData.tzOffset = tzOffset;
+    }
+    return data;
 }
 
 async function getSettings(server) {
@@ -132,8 +163,11 @@ async function getCacheMaxEntries(server) {
     } catch (_) { return 0; }
 }
 
-async function getTopStats(server, statsType, limit, type, node) {
-    let path = 'api/dashboard/stats/getTop?type=' + (type || 'LastHour') + '&statsType=' + statsType + '&limit=' + limit;
+async function getTopStats(server, statsType, limit, type, node, tzOffset) {
+    const days = CUSTOM_RANGES[type];
+    let path = days
+        ? 'api/dashboard/stats/getTop?type=Custom&utc=true&statsType=' + statsType + '&limit=' + limit + '&' + getCustomDateParams(tzOffset, days)
+        : 'api/dashboard/stats/getTop?type=' + (type || 'LastHour') + '&utc=true&statsType=' + statsType + '&limit=' + limit;
     if (node) path += '&node=' + encodeURIComponent(node);
     return apiGet(server, path);
 }

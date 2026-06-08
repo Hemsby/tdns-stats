@@ -275,24 +275,24 @@ async function start() {
     const VALID_STATS = new Set(['TopDomains', 'TopBlockedDomains', 'TopClients']);
 
     app.get('/api/dashboard', async (req, res) => {
-        const { server: serverName, type } = req.query;
+        const { server: serverName, type, tz } = req.query;
         const rangeType = getValidatedRangeType(type);
         const server = resolveServer(serverName);
         if (!server) return res.status(404).json({ error: 'Unknown server' });
         try {
-            const data = await getDashboard(server, rangeType, serverName === CLUSTER_KEY ? 'cluster' : null);
+            const data = await getDashboard(server, rangeType, serverName === CLUSTER_KEY ? 'cluster' : null, parseInt(tz) || 0);
             res.json(data);
         } catch (e) { res.status(502).json({ error: e.message }); }
     });
 
     app.get('/api/top', async (req, res) => {
-        const { server: serverName, type, statsType } = req.query;
+        const { server: serverName, type, statsType, tz } = req.query;
         if (!VALID_STATS.has(statsType)) return res.status(400).json({ error: 'Invalid statsType' });
         const rangeType = getValidatedRangeType(type);
         const server = resolveServer(serverName);
         if (!server) return res.status(404).json({ error: 'Unknown server' });
         try {
-            const data = await getTopStats(server, statsType, config.top?.limit || 20, rangeType, serverName === CLUSTER_KEY ? 'cluster' : null);
+            const data = await getTopStats(server, statsType, config.top?.limit || 20, rangeType, serverName === CLUSTER_KEY ? 'cluster' : null, parseInt(tz) || 0);
             res.json(data);
         } catch (e) { res.status(502).json({ error: e.message }); }
     });
