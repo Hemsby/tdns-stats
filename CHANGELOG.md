@@ -6,65 +6,83 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.7.8] - 2026-06-08
+
+### Fixed
+
+- Restored accidentally removed style class for live feed timestamps.
+
 ## [1.7.7] - 2026-06-08
 
 ### Fixed
+
 - Corrected Stat Cards Colours (They got overridden on a previous patch update).
-- Refused queires now shown correctly in live feed.  They were previously masked by Authoritative queiries.
-- Removed Dropped and No Error from live feed filters as they individualy are not required.
+- Refused queries now shown correctly in live feed. They were previously masked by Authoritative queries.
+- Removed Dropped and No Error from live feed filters as they individually are not required.
 
 ## [1.7.6] - 2026-06-08
 
 ### Fixed
+
 - All time ranges now properly include all data for the given range (fixed the issue where some ranges (LastDay, LastYear) were off-by-one or otherwise not correctly including all data).
 - Ensure chart periodic labels accurately reflect the data displayed for the selected time range.
 
 ## [1.7.5] - 2026-06-07
 
 ### Added
+
 - Added connected users as Viewers on Dashboard
 
 ### Fixed
+
 - Small Tidy of Code and Timers Functions
 - Slight Size increase of Check for Updates Button
 
 ## [1.7.4] - 2026-06-07
 
 ### Fixed
+
 - Docker Updates should now complete correctly.
 
 ## [1.7.3] - 2026-06-07
 
 ### Changed
+
 - Fetch Query Chart and Top Stats immediately on page load when any time range is selected, so data appears without waiting for the first polling interval.
 - Refresh both Query Chart and Top Stats every 60s for the 'Last Day' (hourly data) time range.
 
 ### Fixed
+
 - Prevent periodic top-stats polling data (always LastHour) from overwriting the Top Stats card when another time range is selected.
 
 ## [1.7.2] - 2026-06-06
 
 ### Fixed
+
 - Docker failing to Update due to hardcoded bin/bash in updater.js
 
 ## [1.7.1] - 2026-06-06
 
 ### Fixed
+
 - Removed the Temporary Console Debug Options left behind from Develop
 
 ## [1.7.0] - 2026-06-06
 
 ### Added
+
 - **Cache & Block Test:** Added a new page tab for quickly checking cache and performing a block test on domain names.
 
 ## [1.6.2] - 2026-06-04
 
 ### Changed
+
 - **Improved Jitter Accuracy:** Replaced the simplistic "statistical skew" method with a standard RFC 3550 EWMA algorithm. This provides a much more accurate and stable health metric for DNS upstream performance by measuring actual inter-arrival delay variation.
 
 ## [1.6.1] - 2026-06-03
 
 ### Fixed
+
 - **SSE Stability Hardening:** Fixed rapid "connected/connecting" glitch loop by implementing a 2-second connection cooldown and explicit timer cleanup in the frontend.
 - **Backend Robustness:** Added formal JSON `ping` events and explicit SSE `error` listeners to prevent the backend process from crashing on write errors (e.g., due to SSL issues or abrupt disconnects).
 - **Auto-Reconnect Instruction:** Added `retry: 5000` header to inform browsers to wait longer between native reconnection attempts.
@@ -72,15 +90,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [1.6.0] - 2026-06-03
 
 ### Changed
+
 - Improved consistency of numerical output by hiding unnecessary decimal precision on whole numbers.
 - Refined live feed to hide latency for instant query types like Cached or Blocked.
 
 ### Fixed
+
 - Resolved UI glitching during reconnection by ensuring only one recovery path is active after a restart.
 
 ## [1.5.1] - 2026-06-02
 
 ### Fixed
+
 - **NX Domain Visibility:** Fixed logic where resolution method (Recursive/Authoritative) was masking the NXDOMAIN error status in the live feed badges.
 - **Filter Accuracy:** Updated live feed filters to correctly identify NXDOMAIN and Server Failure queries using RCODE data.
 - **Visual Consistency:** Ensured orange and red markers appear for all error types, not just blocked queries.
@@ -89,28 +110,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [1.5.0] - 2026-06-02
 
 ### Added
+
 - **Live Latency (ms):** Added a new column to the live feed showing round-trip time (RTT) for recursive queries.
 - **Query Type:** Added query type (A, AAAA, TXT, etc.) to the live feed for better visibility.
 - **Vibrant UI:** Completely overhauled the color palette for high-contrast Red and Orange distinctions.
 
 ### Changed
+
 - **Color Synchronization:** Synchronized colors across graph legends, stats cards, and feed badges (Authoritative=Yellow, NXDOMAIN=Orange, Failure=Red).
 - **Layout Optimization:** Tightened feed columns to give significantly more room for domain names.
 - **Top Stats:** Renamed "TOP" card to "TOP STATS" and fixed alignment of hostnames in the Clients tab.
 - **Streamlined Stats:** Removed redundant text-based "Block %" figures in favor of the visual bar for a cleaner look.
 
 ### Fixed
+
 - Fixed hostname truncation and right-alignment issues in the Top Clients list.
 
 ## [1.4.1] - 2026-05-31
 
 ### Fixed
+
 - Update process now waits for service to fully restart (detected via started_at timestamp) instead of guessing delays
 - Browser cache cleared on successful update to ensure fresh JavaScript and CSS load
 
 ## [1.4.0] - 2026-05-31
 
 ### Added
+
 - Live feed multi-select response type filters with per-server persistence
 - All/None quick selection buttons for feed filters
 - Cluster nodes table with last synced timestamp and node URL links
@@ -120,18 +146,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [1.3.0] - 2026-05-30
 
 ### Added
+
 - Dynamic chart heading that updates based on selected time range (Queries per minute/hour/day)
 - Recursive dataset added to Overview graph for better query type visibility
 
 ## [1.2.1] - 2026-05-30
 
 ### Fixed
+
 - Fixed auto-update not executing due to missing shell context in git and systemctl commands
 - Improved error logging in update process for better troubleshooting
 
 ## [1.2.0] - 2026-05-30
 
 ### Added
+
 - Chart legend click interactions to hide/show individual datasets
 - Persist hidden chart dataset preferences to localStorage so selections survive page reloads
 - Independent hidden state tracking per chart view mode (Overview vs All datasets)
@@ -139,6 +168,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [1.1.0] - 2026-05-29
 
 ### Added
+
 - Auto-update feature with a check-for-updates button and one-click update trigger in the UI
 - Version number displayed in the UI
 - Auto-update support for git clone, Docker, and systemd deployments
@@ -151,6 +181,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Case-insensitive matching for `queryLogsApp` name
 
 ### Fixed
+
 - Corrected cache impact (RTT effect) calculation which was producing inflated values due to incorrect inputs; it now considers only recursive queries with a valid upstream RTT (#4 - thanks @sjclayton)
 - Fixed RTT sample size being ignored because the Technitium DNS Logs API uses `entriesPerPage` not `limit`, causing results to silently fall back to the API default of 25 (#1 - thanks @sjclayton)
 - Fixed `ignoreSsl: true` incorrectly creating an HTTPS agent for plain HTTP URLs, which caused the query log app to go undiscovered
@@ -161,4 +192,5 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [1.0.0] - 2026-05-26
 
 ### Added
+
 - Initial release
