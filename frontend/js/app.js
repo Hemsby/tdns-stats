@@ -1128,7 +1128,7 @@ const App = (() => {
             'LastDay':   'Queries per hour',
             'LastWeek':  'Queries per day',
             'LastMonth': 'Queries per day',
-            'LastYear':  'Queries per day'
+            'LastYear':  'Queries per month'
         };
         const heading = document.querySelector('.chart-section .card-title');
         if (heading) {
