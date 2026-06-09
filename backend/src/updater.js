@@ -16,11 +16,9 @@ class Updater {
 
     async detectCapability() {
         const type = await this.detectDeploymentMethod();
-        if (type === 'docker') {
-            this.capable = fs.existsSync('/app/host-project/docker-compose.yml');
-        } else {
-            this.capable = true;
-        }
+        this.capable = type === 'docker'
+            ? fs.existsSync('/app/host-project/docker-compose.yml')
+            : type === 'systemd';
         return this.capable;
     }
 
@@ -28,7 +26,7 @@ class Updater {
         if (this.deploymentType) return this.deploymentType;
 
         const deploymentTypeEnv = process.env.DEPLOYMENT_TYPE;
-        if (deploymentTypeEnv && ['git', 'docker', 'systemd'].includes(deploymentTypeEnv)) {
+        if (deploymentTypeEnv && ['docker', 'systemd'].includes(deploymentTypeEnv)) {
             this.deploymentType = deploymentTypeEnv;
             return this.deploymentType;
         }
@@ -51,8 +49,8 @@ class Updater {
             return this.deploymentType;
         }
 
-        this.deploymentType = 'git';
-        return this.deploymentType;
+        this.deploymentType = null;
+        return null;
     }
 
     async executeUpdate() {
@@ -63,9 +61,8 @@ class Updater {
                 return this.updateDocker();
             case 'systemd':
                 return this.updateSystemd();
-            case 'git':
             default:
-                return this.updateGit();
+                throw new Error('Updater not available for this deployment type');
         }
     }
 
@@ -128,23 +125,6 @@ class Updater {
 
         const checked = candidates.map(p => path.join(p, 'docker-compose.yml')).join(', ');
         throw new Error(`Docker compose file not found in any known mount path. Checked: ${checked}. Set HOST_PROJECT_PATH or TDNS_STATS_HOST_PROJECT_PATH to the mounted host project path.`);
-    }
-
-    async updateGit() {
-        const cwd = this.projectRoot;
-
-        console.log('[update] Fetching from remote');
-        const { stdout: fetchStdout, stderr: fetchStderr } = await execAsync('git fetch origin', { cwd, shell: '/bin/sh' });
-        if (fetchStderr) console.log('[update] git fetch stderr:', fetchStderr);
-        console.log('[update] Fetched updates:', fetchStdout);
-
-        console.log('[update] Resetting to remote master');
-        const { stdout: resetStdout, stderr: resetStderr } = await execAsync('git reset --hard origin/master', { cwd, shell: '/bin/sh' });
-        if (resetStderr) console.log('[update] git reset stderr:', resetStderr);
-        console.log('[update] Reset complete:', resetStdout);
-
-        console.log('[update] Update complete, process will restart');
-        process.exit(0);
     }
 
     async updateDocker() {

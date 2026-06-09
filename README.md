@@ -147,6 +147,7 @@ systemctl start tdns-stats
 The dashboard includes a built-in update checker that works with GitHub releases.
 
 **In the UI:**
+
 - Version number appears in the top-right corner
 - Click **Check for updates** to fetch the latest release from GitHub
 - If a newer version is available, click **Update** to trigger the update
@@ -154,15 +155,13 @@ The dashboard includes a built-in update checker that works with GitHub releases
 
 **How it works by deployment method:**
 
-| Method | Mechanism |
-|--------|-----------|
-| Git clone | `git fetch` + `git reset --hard origin/master`, then restarts |
-| Docker | `docker compose pull` + `docker compose up -d` |
-| Systemd | `git pull origin master` + `systemctl restart tdns-stats` |
+| Method                | Mechanism                                                 |
+| --------------------- | --------------------------------------------------------- |
+| Docker (Compose only) | `docker compose pull` + `docker compose up -d --build`    |
+| Systemd               | `git pull origin master` + `systemctl restart tdns-stats` |
 
 **Requirements by deployment method:**
 
-- **Git:** No additional requirements
 - **Systemd:** `Restart=always` in the service file (see above)
 - **Docker:** Requires two things in `docker-compose.yml`:
   - The Docker socket mounted: `/var/run/docker.sock:/var/run/docker.sock`
@@ -172,23 +171,23 @@ The dashboard includes a built-in update checker that works with GitHub releases
 
 All configuration lives in `config.yml` (see `config.example.yml` for a fully annotated example).
 
-| Key | Default | Description |
-|-----|---------|-------------|
-| `port` | `3000` | Port the web interface listens on |
-| `servers[].name` | required | Display name for the server |
-| `servers[].url` | required | Technitium API base URL (e.g. `http://ns1.example.com:5380`) |
-| `servers[].token` | required | API token |
-| `servers[].ignoreSsl` | `false` | Skip TLS certificate verification |
-| `servers[].queryLogsApp` | auto-detect | Name of the query log app on this server |
-| `servers[].color` | auto-assigned | Colour for this server in the UI |
-| `poll.statsInterval` | `10` | Seconds between stats refreshes |
-| `poll.feedInterval` | `3` | Seconds between live feed polls |
-| `poll.topInterval` | `30` | Seconds between top-list refreshes |
-| `poll.perfInterval` | `30` | Seconds between RTT/cache samples |
-| `feed.pageSize` | `20` | Log entries fetched per poll cycle |
-| `feed.maxEntries` | `200` | Maximum entries kept in the browser feed |
-| `top.limit` | `20` | Number of items in top domains/clients lists |
-| `rtt.sampleSize` | `500` | Log entries scanned per RTT sample |
+| Key                      | Default       | Description                                                  |
+| ------------------------ | ------------- | ------------------------------------------------------------ |
+| `port`                   | `3000`        | Port the web interface listens on                            |
+| `servers[].name`         | required      | Display name for the server                                  |
+| `servers[].url`          | required      | Technitium API base URL (e.g. `http://ns1.example.com:5380`) |
+| `servers[].token`        | required      | API token                                                    |
+| `servers[].ignoreSsl`    | `false`       | Skip TLS certificate verification                            |
+| `servers[].queryLogsApp` | auto-detect   | Name of the query log app on this server                     |
+| `servers[].color`        | auto-assigned | Colour for this server in the UI                             |
+| `poll.statsInterval`     | `10`          | Seconds between stats refreshes                              |
+| `poll.feedInterval`      | `3`           | Seconds between live feed polls                              |
+| `poll.topInterval`       | `30`          | Seconds between top-list refreshes                           |
+| `poll.perfInterval`      | `30`          | Seconds between RTT/cache samples                            |
+| `feed.pageSize`          | `20`          | Log entries fetched per poll cycle                           |
+| `feed.maxEntries`        | `200`         | Maximum entries kept in the browser feed                     |
+| `top.limit`              | `20`          | Number of items in top domains/clients lists                 |
+| `rtt.sampleSize`         | `500`         | Log entries scanned per RTT sample                           |
 
 ### Server colours
 
@@ -205,7 +204,7 @@ To serve over HTTPS without a reverse proxy, add an `https` block to `config.yml
 ```yaml
 https:
   cert: /etc/ssl/certs/tdns-stats.crt
-  key:  /etc/ssl/private/tdns-stats.key
+  key: /etc/ssl/private/tdns-stats.key
 ```
 
 Or using a single combined PEM file (certificate and private key in one file):
