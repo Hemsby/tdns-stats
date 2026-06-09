@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.8.1] - 2026-06-09
+
+### Fixed
+
+- Fixed an issue where Changelog modal pop-up could not properly load the CHANGELOG.md file for users running via Docker deployment.
+- Preserve user changes to `docker-compose.yml` file such as (custom port mappings, environment variables and mount points) when updating through the dashboard when deployed via Docker.
+
 ## [1.8.0] - 2026-06-08
 
 ### Added
