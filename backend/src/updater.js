@@ -11,6 +11,17 @@ class Updater {
     constructor(projectRoot) {
         this.projectRoot = projectRoot;
         this.deploymentType = null;
+        this.capable = false;
+    }
+
+    async detectCapability() {
+        const type = await this.detectDeploymentMethod();
+        if (type === 'docker') {
+            this.capable = fs.existsSync('/app/host-project/docker-compose.yml');
+        } else {
+            this.capable = true;
+        }
+        return this.capable;
     }
 
     async detectDeploymentMethod() {

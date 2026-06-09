@@ -175,6 +175,7 @@ async function start() {
     poller.start();
 
     const updater = new Updater(path.join(__dirname, '../..'));
+    await updater.detectCapability();
 
     const app = express();
 
@@ -386,27 +387,18 @@ async function start() {
     });
 
     app.get('/api/version', (req, res) => {
-        res.json({ version: VERSION });
+        res.json({ version: VERSION, updaterEnabled: updater.capable });
     });
 
     app.get('/api/changelog', (req, res) => {
-        const changelogPaths = [
-            path.join(__dirname, '../../CHANGELOG.md'),
-            path.join(process.env.TDNS_STATS_HOST_PROJECT_PATH || process.env.HOST_PROJECT_PATH || '/app/host-project', 'CHANGELOG.md')
-        ];
-        for (const changelogPath of changelogPaths) {
-            if (fs.existsSync(changelogPath)) {
-                try {
-                    const changelog = fs.readFileSync(changelogPath, 'utf8');
-                    return res.json({ changelog });
-                } catch (e) {
-                    console.error('[changelog] Failed to read:', e.message);
-                    return res.status(500).json({ error: 'Failed to read changelog' });
-                }
-            }
+        const changelogPath = path.join(__dirname, '../../CHANGELOG.md');
+        try {
+            const changelog = fs.readFileSync(changelogPath, 'utf8');
+            res.json({ changelog });
+        } catch (e) {
+            console.error('[changelog] Failed to read:', e.message);
+            res.status(500).json({ error: 'Failed to read changelog' });
         }
-        console.error('[changelog] Not found at:', changelogPaths.join(', '));
-        res.status(500).json({ error: 'Failed to read changelog' });
     });
 
     app.get('/api/health', (req, res) => {
