@@ -97,8 +97,6 @@ services:
 
 Replace `<path to project on host>` with the path where you cloned the project to on the host. This mounts the full project directory into the container, which is required for the auto-update feature to rebuild the container using your host compose file.
 
-The updater runs the restart via a helper container outside the current service container, which avoids failed restarts when the container replaces itself.
-
 ### 3. Build and Start
 
 ```bash
