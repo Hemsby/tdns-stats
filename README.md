@@ -91,11 +91,11 @@ services:
     volumes:
       - ./config.yml:/etc/tdns-stats/config.yml:ro
       - /var/run/docker.sock:/var/run/docker.sock
-      - <path to project on host>:/app/host-project
+      - <path-to-project>:/app/host-project
     restart: unless-stopped
 ```
 
-Replace `<path to project on host>` with the path where you cloned the project to on the host. This mounts the full project directory into the container, which is required for the auto-update feature to rebuild the container using your host compose file.
+Replace `<path-to-project>` with the path where you cloned the project to on the host. This mounts the full project directory into the container, which is required for the auto-update feature to rebuild the container using your host compose file.
 
 ### 3. Build and Start
 
