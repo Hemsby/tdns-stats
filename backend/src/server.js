@@ -390,14 +390,23 @@ async function start() {
     });
 
     app.get('/api/changelog', (req, res) => {
-        try {
-            const changelogPath = path.join(__dirname, '../../CHANGELOG.md');
-            const changelog = fs.readFileSync(changelogPath, 'utf8');
-            res.json({ changelog });
-        } catch (e) {
-            console.error('[changelog] Failed to read:', e.message);
-            res.status(500).json({ error: 'Failed to read changelog' });
+        const changelogPaths = [
+            path.join(__dirname, '../../CHANGELOG.md'),
+            path.join(process.env.TDNS_STATS_HOST_PROJECT_PATH || process.env.HOST_PROJECT_PATH || '/app/host-project', 'CHANGELOG.md')
+        ];
+        for (const changelogPath of changelogPaths) {
+            if (fs.existsSync(changelogPath)) {
+                try {
+                    const changelog = fs.readFileSync(changelogPath, 'utf8');
+                    return res.json({ changelog });
+                } catch (e) {
+                    console.error('[changelog] Failed to read:', e.message);
+                    return res.status(500).json({ error: 'Failed to read changelog' });
+                }
+            }
         }
+        console.error('[changelog] Not found at:', changelogPaths.join(', '));
+        res.status(500).json({ error: 'Failed to read changelog' });
     });
 
     app.get('/api/health', (req, res) => {
