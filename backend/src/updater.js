@@ -147,6 +147,14 @@ class Updater {
 
         if (await this.isGitRepo(cwd)) {
             console.log('[update] Updating host project repository from git');
+
+            let composeContent = null;
+            try {
+                composeContent = fs.readFileSync(composeFile, 'utf-8');
+            } catch (e) {
+                console.warn('[update] Could not read docker-compose.yml for backup, continuing');
+            }
+
             try {
                 const { stdout: fetchStdout, stderr: fetchStderr } = await execAsync('git fetch origin', { cwd, shell: '/bin/sh' });
                 if (fetchStderr) console.log('[update] git fetch stderr:', fetchStderr);
@@ -157,6 +165,15 @@ class Updater {
                 console.log('[update] Reset host project to origin/master:', resetStdout);
             } catch (e) {
                 console.warn('[update] Failed to update host git repository, continuing with compose rebuild:', e.message);
+            }
+
+            if (composeContent) {
+                try {
+                    fs.writeFileSync(composeFile, composeContent, 'utf-8');
+                    console.log('[update] Restored local docker-compose.yml');
+                } catch (e) {
+                    console.warn('[update] Could not restore docker-compose.yml:', e.message);
+                }
             }
         }
 
