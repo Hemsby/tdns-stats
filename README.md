@@ -63,38 +63,46 @@ Then open `http://your-host:3000` in a browser.
 
 ## Running with Docker
 
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/Hemsby/tdns-stats.git /opt/tdns-stats
+cd /opt/tdns-stats
+```
+
+### 2. Configure
+
 ```bash
 cp config.example.yml config.yml
 # edit config.yml with your server details
 ```
 
-Before starting, update the volume mount in `docker-compose.yml` to point to the absolute path of your project directory on the host:
+Before building/starting, if you cloned to a different location than mentioned above, you **must** ensure you update the volume mount in `docker-compose.yml` to point to the absolute path of the project directory on the host:
 
 ```yaml
+version: "3"
+
 services:
   tdns-stats:
     build: .
+    container_name: tdns-stats
     ports:
       - "3000:3000"
     volumes:
-      - /root/tdns-stats/config.yml:/etc/tdns-stats/config.yml:ro
+      - ./config.yml:/etc/tdns-stats/config.yml:ro
       - /var/run/docker.sock:/var/run/docker.sock
-      - /home/myuser/tdns-stats:/app/host-project
+      - <path to project on host>:/app/host-project
     restart: unless-stopped
 ```
 
-Replace `/home/myuser/tdns-stats` with the actual path to your project on the host. This mounts the full project directory into the container, which is required for the auto-update feature to rebuild the service using your host compose file.
-
-If your full project mount is mounted at a different path inside the container, set `HOST_PROJECT_PATH` to that path.
-
-The Docker image now includes `git` so the container can update the mounted host project before triggering `docker compose up -d --build`.
+Replace `<path to project on host>` with the path where you cloned the project to on the host. This mounts the full project directory into the container, which is required for the auto-update feature to rebuild the container using your host compose file.
 
 The updater runs the restart via a helper container outside the current service container, which avoids failed restarts when the container replaces itself.
 
-Then start the container:
+### 3. Build and Start
 
 ```bash
-docker compose up -d
+docker compose up -d --build
 ```
 
 The `config.yml` is mounted read-only into the container at `/etc/tdns-stats/config.yml`. To apply config changes, edit the file and run `docker compose restart`.
@@ -113,6 +121,8 @@ docker run -d \
 > **Note:** Running without Compose disables the auto-update feature, as it requires access to the Docker socket and the full project directory.
 
 ## Running as a systemd service
+
+Follow the same instructions for cloning as described above in [Running with Docker](#running-with-docker)
 
 Create `/etc/systemd/system/tdns-stats.service`:
 
@@ -134,7 +144,9 @@ WantedBy=multi-user.target
 
 **Important:** Use `Restart=always` (not `on-failure`) to enable the auto-update feature. When updates are triggered, the service exits gracefully and systemd automatically restarts it with the latest code.
 
-Then enable and start it:
+Ensure `config.yml` is copied to `/etc/tdns-stats/config.yml` (you **must** create this directory if it doesn't exist) and edited with your server details.
+
+Then enable and start the service:
 
 ```bash
 systemctl daemon-reload
@@ -155,10 +167,10 @@ The dashboard includes a built-in update checker that works with GitHub releases
 
 **How it works by deployment method:**
 
-| Method                | Mechanism                                                 |
-| --------------------- | --------------------------------------------------------- |
-| Docker (Compose only) | `docker compose pull` + `docker compose up -d --build`    |
-| Systemd               | `git pull origin master` + `systemctl restart tdns-stats` |
+| Method  | Mechanism                                                 |
+| ------- | --------------------------------------------------------- |
+| Docker  | `docker compose pull` + `docker compose up -d --build`    |
+| Systemd | `git pull origin master` + `systemctl restart tdns-stats` |
 
 **Requirements by deployment method:**
 
