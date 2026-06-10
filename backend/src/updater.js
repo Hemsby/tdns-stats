@@ -36,7 +36,12 @@ class Updater {
             return this.deploymentType;
         }
 
-        if (fs.existsSync('/etc/tdns-stats/config.yml')) {
+        const configPaths = [
+            '/etc/tdns-stats/config.yml',
+            ...(this.projectRoot ? [path.join(this.projectRoot, 'config.yml')] : [])
+        ];
+
+        if (configPaths.some(p => fs.existsSync(p))) {
             try {
                 const result = await execAsync('systemctl is-active tdns-stats 2>/dev/null', { shell: '/bin/sh' });
                 if (result.stdout.trim() === 'active') {
@@ -113,7 +118,10 @@ class Updater {
         }
 
         try {
-            const { stdout } = await execAsync("find / -maxdepth 5 -type f -name 'docker-compose.yml' 2>/dev/null | sort | head -n 20", { shell: '/bin/sh' });
+            const { stdout } = await execAsync(
+                "find / -maxdepth 5 -type f -name 'docker-compose.yml' 2>/dev/null | sort | head -n 20",
+                { shell: '/bin/sh' }
+            );
             const paths = String(stdout).trim().split('\n').filter(Boolean);
             if (paths.length > 0) {
                 const composeFile = paths[0];
@@ -124,7 +132,10 @@ class Updater {
         }
 
         const checked = candidates.map(p => path.join(p, 'docker-compose.yml')).join(', ');
-        throw new Error(`Docker compose file not found in any known mount path. Checked: ${checked}. Set HOST_PROJECT_PATH or TDNS_STATS_HOST_PROJECT_PATH to the mounted host project path.`);
+        throw new Error(
+            `Docker compose file not found in any known mount path. Checked: ${checked}. ` +
+            `Set HOST_PROJECT_PATH or TDNS_STATS_HOST_PROJECT_PATH to the mounted host project path.`
+        );
     }
 
     async updateDocker() {
@@ -147,11 +158,15 @@ class Updater {
             }
 
             try {
-                const { stdout: fetchStdout, stderr: fetchStderr } = await execAsync('git fetch origin', { cwd, shell: '/bin/sh' });
+                const { stdout: fetchStdout, stderr: fetchStderr } = await execAsync(
+                    'git fetch origin', { cwd, shell: '/bin/sh' }
+                );
                 if (fetchStderr) console.log('[update] git fetch stderr:', fetchStderr);
                 console.log('[update] Fetched updates:', fetchStdout);
 
-                const { stdout: resetStdout, stderr: resetStderr } = await execAsync('git reset --hard origin/master', { cwd, shell: '/bin/sh' });
+                const { stdout: resetStdout, stderr: resetStderr } = await execAsync(
+                    'git reset --hard origin/master', { cwd, shell: '/bin/sh' }
+                );
                 if (resetStderr) console.log('[update] git reset stderr:', resetStderr);
                 console.log('[update] Reset host project to origin/master:', resetStdout);
             } catch (e) {
@@ -169,7 +184,9 @@ class Updater {
         }
 
         try {
-            const { stdout: pullStdout, stderr: pullStderr } = await execAsync(`${composeCmd} -p tdns-stats -f ${composeFile} pull`, { cwd, shell: '/bin/sh' });
+            const { stdout: pullStdout, stderr: pullStderr } = await execAsync(
+                `${composeCmd} -p tdns-stats -f ${composeFile} pull`, { cwd, shell: '/bin/sh' }
+            );
             if (pullStderr) console.log('[update] docker compose pull stderr:', pullStderr);
             console.log('[update] Pull complete:', pullStdout);
         } catch (e) {
@@ -183,18 +200,27 @@ class Updater {
         try {
             const { stdout: containerIdOut } = await execAsync('hostname', { shell: '/bin/sh' });
             const containerId = containerIdOut.trim();
-            const { stdout: imageName } = await execAsync(`docker inspect --format='{{.Config.Image}}' ${containerId}`, { shell: '/bin/sh' });
+            const { stdout: imageName } = await execAsync(
+                `docker inspect --format='{{.Config.Image}}' ${containerId}`, { shell: '/bin/sh' }
+            );
             helperImage = imageName.trim();
             helperHostSource = await this.getHostMountSource(containerId, hostProject);
         } catch (e) {
         }
 
         const helperCmd = helperImage && helperHostSource
-            ? `docker run --rm -d -v /var/run/docker.sock:/var/run/docker.sock -v ${helperHostSource}:${hostProject} -w ${hostProject} ${helperImage} sh -c '${composeCmd} -p tdns-stats -f ${composeFile} up -d --build'`
-            : `${composeCmd} -p tdns-stats -f ${composeFile} up -d --build`; 
+            ? `docker run --rm -d \
+                -v /var/run/docker.sock:/var/run/docker.sock \
+                -v ${helperHostSource}:${hostProject} \
+                -w ${hostProject} \
+                ${helperImage} \
+                sh -c '${composeCmd} -p tdns-stats -f ${composeFile} up -d --build'`
+            : `${composeCmd} -p tdns-stats -f ${composeFile} up -d --build`;
 
         try {
-            const { stdout: helperStdout, stderr: helperStderr } = await execAsync(helperCmd, { cwd, shell: '/bin/sh' });
+            const { stdout: helperStdout, stderr: helperStderr } = await execAsync(
+                helperCmd, { cwd, shell: '/bin/sh' }
+            );
             if (helperStderr) console.log('[update] helper command stderr:', helperStderr);
             console.log('[update] Update triggered:', helperStdout.trim() || 'helper started');
         } catch (e) {
@@ -205,15 +231,30 @@ class Updater {
 
     async updateSystemd() {
         const cwd = this.projectRoot;
+
         console.log('[update] Executing git pull');
-        const { stdout: pullStdout, stderr: pullStderr } = await execAsync('git pull origin master', { cwd, shell: '/bin/sh' });
-        if (pullStderr) console.log('[update] git pull stderr:', pullStderr);
-        console.log('[update] Git pull complete:', pullStdout);
+        try {
+            const { stdout: pullStdout, stderr: pullStderr } = await execAsync(
+                'git pull origin master', { cwd, shell: '/bin/sh' }
+            );
+            if (pullStderr) console.log('[update] git pull stderr:', pullStderr);
+            console.log('[update] Git pull complete:', pullStdout);
+        } catch (e) {
+            console.error('[update] git pull failed:', e.message);
+            throw e;
+        }
 
         console.log('[update] Restarting systemd service');
-        const { stdout: restartStdout, stderr: restartStderr } = await execAsync('systemctl restart tdns-stats', { shell: '/bin/sh' });
-        if (restartStderr) console.log('[update] systemctl stderr:', restartStderr);
-        console.log('[update] Service restart triggered:', restartStdout);
+        try {
+            const { stdout: restartStdout, stderr: restartStderr } = await execAsync(
+                'systemctl restart tdns-stats', { shell: '/bin/sh' }
+            );
+            if (restartStderr) console.log('[update] systemctl stderr:', restartStderr);
+            console.log('[update] Service restart triggered:', restartStdout);
+        } catch (e) {
+            console.error('[update] systemctl restart failed:', e.message);
+            throw e;
+        }
     }
 }
 
