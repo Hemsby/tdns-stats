@@ -12,7 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 **IMPORTANT:** This major release contains a breaking change related to Docker deployments (see below).
 
-- Docker Compose deployments **must** be manually updated, you should first back up your `config.yml` file
+- Docker deployments **must** be manually updated, you should first back up your `config.yml` file
   and then follow the updated instructions in the [README](https://github.com/Hemsby/tdns-stats/blob/master/README.md) under the
   [Running with Docker](https://github.com/Hemsby/tdns-stats#running-with-docker) section to redeploy. This is required to fix multiple issues regarding
   Docker Compose deployments and the built-in update functionality. **NOTE:** Deployments via systemd
