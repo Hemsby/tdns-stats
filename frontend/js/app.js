@@ -1273,6 +1273,12 @@ const App = (() => {
             .replace(/"/g, '&quot;');
     }
 
+    const THEME_ICONS = {
+        system: `<svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor"><path d="M0 4s0-2 2-2h12s2 0 2 2v6s0 2-2 2h-4l1 2h1a.5.5 0 010 1H4a.5.5 0 010-1h1l1-2H2s-2 0-2-2zm1.398 0A1 1 0 001 4.5v5.086l.002.051c.014.24.117.48.307.67.19.189.43.293.691.293H14c.261 0 .501-.104.691-.293.19-.19.293-.43.307-.67L15 9.586V4.5a1 1 0 00-1-1H2a1 1 0 00-.602.5z"/></svg>`,
+        light:  `<svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor"><path d="M8 11a3 3 0 100-6 3 3 0 000 6zm0 1a4 4 0 100-8 4 4 0 000 8zm.5-9.5v-1a.5.5 0 00-1 0v1a.5.5 0 001 0zm0 9v1a.5.5 0 01-1 0v-1a.5.5 0 011 0zm-7.5-4.5h-1a.5.5 0 000 1h1a.5.5 0 000-1zm9 0h1a.5.5 0 010 1h-1a.5.5 0 010-1zM3.05 3.757a.5.5 0 00-.707.707l.707.707a.5.5 0 00.707-.707l-.707-.707zm9.193 9.193a.5.5 0 00-.707.707l.707.707a.5.5 0 00.707-.707l-.707-.707zm-9.9 0l-.707.707a.5.5 0 00.707.707l.707-.707a.5.5 0 00-.707-.707zm9.193-9.193l.707-.707a.5.5 0 10-.707-.707l-.707.707a.5.5 0 10.707.707z"/></svg>`,
+        dark:   `<svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor"><path d="M6 .278a.768.768 0 01.08.858 7.208 7.208 0 00-.878 3.46c0 4.021 3.278 7.277 7.318 7.277.527 0 1.04-.055 1.533-.16a.787.787 0 01.81.316.733.733 0 01-.031.893A8.349 8.349 0 018.344 16C3.734 16 0 12.286 0 7.71 0 4.266 2.114 1.312 5.124.06A.752.752 0 016 .278z"/></svg>`,
+    };
+
     function applyTheme(theme) {
         const root = document.documentElement;
         if (theme === 'dark') {
@@ -1283,17 +1289,46 @@ const App = (() => {
             root.removeAttribute('data-theme');
         }
         document.querySelectorAll('.theme-btn').forEach(b => b.classList.toggle('active', b.dataset.theme === theme));
+        const trigger = document.getElementById('themeTrigger');
+        if (trigger) trigger.innerHTML = THEME_ICONS[theme] || THEME_ICONS.system;
     }
 
     function initTheme() {
         const saved = localStorage.getItem('tdns-theme') || 'system';
         applyTheme(saved);
+
+        const switcher = document.getElementById('themeSwitcher');
+        const trigger  = document.getElementById('themeTrigger');
+        const dropdown = document.getElementById('themeDropdown');
+
+        if (!switcher || !trigger || !dropdown) return;
+
+        // Toggle dropdown open/close on trigger click
+        trigger.addEventListener('click', (e) => {
+            e.stopPropagation();
+            switcher.classList.toggle('open');
+        });
+
+        // Select a theme from the dropdown
         document.querySelectorAll('.theme-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 const t = btn.dataset.theme;
                 applyTheme(t);
                 localStorage.setItem('tdns-theme', t);
+                switcher.classList.remove('open');
             });
+        });
+
+        // Close on outside click
+        document.addEventListener('click', (e) => {
+            if (!switcher.contains(e.target)) {
+                switcher.classList.remove('open');
+            }
+        });
+
+        // Close on Escape
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') switcher.classList.remove('open');
         });
     }
 

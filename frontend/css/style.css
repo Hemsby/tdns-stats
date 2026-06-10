@@ -194,16 +194,45 @@ main { position: relative; z-index: 1; }
 
 /* Theme switcher */
 .theme-switcher {
-    display: flex; align-items: center;
-    background: var(--bg); border: 1px solid var(--border); border-radius: 5px; overflow: hidden;
+    position: relative;
+    flex-shrink: 0;
 }
-.theme-btn {
+/* The single visible trigger — shows only the active theme icon */
+.theme-trigger {
     display: flex; align-items: center; justify-content: center;
-    width: 26px; height: 24px; background: none; border: none;
-    color: var(--text-muted); cursor: pointer; transition: color .15s, background .15s;
+    width: 28px; height: 26px;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 5px;
+    color: var(--text-muted); cursor: pointer;
+    transition: color .15s, background .15s, border-color .15s;
+}
+.theme-trigger:hover { color: var(--text); border-color: var(--accent-blue); }
+.theme-switcher.open .theme-trigger {
+    color: var(--accent-blue); border-color: rgba(34,211,238,.4);
+    background: var(--accent-blue-bg);
+}
+/* Dropdown panel */
+.theme-dropdown {
+    display: none;
+    position: absolute; top: calc(100% + 6px); right: 0;
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 6px; overflow: hidden;
+    box-shadow: 0 8px 24px rgba(0,0,0,.4);
+    z-index: 200;
+    min-width: 110px;
+}
+.theme-switcher.open .theme-dropdown { display: block; }
+.theme-btn {
+    display: flex; align-items: center; gap: 9px;
+    width: 100%; padding: 7px 12px;
+    background: none; border: none;
+    color: var(--text-muted); cursor: pointer;
+    font-family: 'Chakra Petch', sans-serif; font-size: 11px; font-weight: 600;
+    letter-spacing: .4px; text-transform: uppercase;
+    transition: color .12s, background .12s;
+    white-space: nowrap;
 }
 .theme-btn:hover { color: var(--text); background: var(--bg-hover); }
-.theme-btn.active { color: var(--accent-blue); background: rgba(34,211,238,.08); }
+.theme-btn.active { color: var(--accent-blue); background: var(--accent-blue-bg); }
 
 /* Version info and update buttons */
 .version-info {
