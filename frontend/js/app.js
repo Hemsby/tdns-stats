@@ -26,7 +26,8 @@ const App = (() => {
         isCluster:     false,
         version:       null,
         updateAvailable: false,
-        updateStatus:  null,
+        updateStatus:   null,
+        updaterEnabled: false,
         healthCheckTimer: null,
         domainSearchServer: 'all',
         blockedLookup: false,
@@ -1429,7 +1430,10 @@ const App = (() => {
             const data = await res.json();
             if (data.version) {
                 state.version = data.version;
+                state.updaterEnabled = data.updaterEnabled;
                 document.getElementById('versionPill').textContent = 'v' + data.version;
+                setupUpdaterUI();
+                setupChangelog();
             }
         } catch (e) {
             console.error('Failed to fetch version:', e);
@@ -1595,9 +1599,14 @@ const App = (() => {
         });
     }
 
-    function setupUpdateButtons() {
-        document.getElementById('checkUpdatesBtn').addEventListener('click', checkUpdates);
-        document.getElementById('updateBtn').addEventListener('click', triggerUpdate);
+    function setupUpdaterUI() {
+        const checkBtn = document.getElementById('checkUpdatesBtn');
+        const updateBtn = document.getElementById('updateBtn');
+        if (state.updaterEnabled) {
+            checkBtn.hidden = false;
+            checkBtn.addEventListener('click', checkUpdates);
+            updateBtn.addEventListener('click', triggerUpdate);
+        }
     }
 
     function init() {
@@ -1606,8 +1615,6 @@ const App = (() => {
         if (state.timeRange === 'LastDay') startLastDayRefresh();
         initTheme();
         initMainTabs();
-        setupUpdateButtons();
-        setupChangelog();
         fetchVersion();
         updateChartHeading();
         Charts.init();

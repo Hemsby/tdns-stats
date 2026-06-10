@@ -1,10 +1,13 @@
+version: "3"
+
 services:
   tdns-stats:
     build: .
+    container_name: tdns-stats
     ports:
       - "3000:3000"
     volumes:
-      - /root/tdns-stats/config.yml:/etc/tdns-stats/config.yml:ro
+      - ./config.yml:/etc/tdns-stats/config.yml:ro
       - /var/run/docker.sock:/var/run/docker.sock
-      - /root/tdns-stats:/app/host-project
+      - /opt/tdns-stats:/app/host-project
     restart: unless-stopped

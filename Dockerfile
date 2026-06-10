@@ -9,6 +9,7 @@ RUN cd backend && npm install --production
 
 COPY backend/src ./backend/src
 COPY frontend    ./frontend
+COPY CHANGELOG.md ./
 
 EXPOSE 3000
 

@@ -26,7 +26,7 @@ See the [CHANGELOG](CHANGELOG.md) for a full history of changes.
 - Technitium DNS Server v15 or later
 - A query log app installed on each DNS server (e.g. Query Logs SQLite, MySQL, PostgreSQL) if you want the live feed and RTT metrics
 
-## Installation
+## Running locally
 
 ### 1. Clone the repository
 
@@ -63,38 +63,44 @@ Then open `http://your-host:3000` in a browser.
 
 ## Running with Docker
 
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/Hemsby/tdns-stats.git /opt/tdns-stats
+cd /opt/tdns-stats
+```
+
+### 2. Configure
+
 ```bash
 cp config.example.yml config.yml
 # edit config.yml with your server details
 ```
 
-Before starting, update the volume mount in `docker-compose.yml` to point to the absolute path of your project directory on the host:
+Before building/starting, if you cloned to a different location than mentioned above, you **must** ensure you update the volume mount in `docker-compose.yml` to point to the absolute path of the project directory on the host:
 
 ```yaml
+version: "3"
+
 services:
   tdns-stats:
     build: .
+    container_name: tdns-stats
     ports:
       - "3000:3000"
     volumes:
-      - /root/tdns-stats/config.yml:/etc/tdns-stats/config.yml:ro
+      - ./config.yml:/etc/tdns-stats/config.yml:ro
       - /var/run/docker.sock:/var/run/docker.sock
-      - /home/myuser/tdns-stats:/app/host-project
+      - <path-to-project>:/app/host-project
     restart: unless-stopped
 ```
 
-Replace `/home/myuser/tdns-stats` with the actual path to your project on the host. This mounts the full project directory into the container, which is required for the auto-update feature to rebuild the service using your host compose file.
+Replace `<path-to-project>` with the path where you cloned the project to on the host. This mounts the full project directory into the container, which is required for the auto-update feature to rebuild the container using your host compose file.
 
-If your full project mount is mounted at a different path inside the container, set `HOST_PROJECT_PATH` to that path.
-
-The Docker image now includes `git` so the container can update the mounted host project before triggering `docker compose up -d --build`.
-
-The updater runs the restart via a helper container outside the current service container, which avoids failed restarts when the container replaces itself.
-
-Then start the container:
+### 3. Build and Start
 
 ```bash
-docker compose up -d
+docker compose up -d --build # must be run from inside the project directory
 ```
 
 The `config.yml` is mounted read-only into the container at `/etc/tdns-stats/config.yml`. To apply config changes, edit the file and run `docker compose restart`.
@@ -113,6 +119,8 @@ docker run -d \
 > **Note:** Running without Compose disables the auto-update feature, as it requires access to the Docker socket and the full project directory.
 
 ## Running as a systemd service
+
+Follow the same instructions for cloning as described above in [Running with Docker](#running-with-docker)
 
 Create `/etc/systemd/system/tdns-stats.service`:
 
@@ -134,7 +142,9 @@ WantedBy=multi-user.target
 
 **Important:** Use `Restart=always` (not `on-failure`) to enable the auto-update feature. When updates are triggered, the service exits gracefully and systemd automatically restarts it with the latest code.
 
-Then enable and start it:
+Ensure `config.example.yml` is copied to `/etc/tdns-stats/config.yml` (you **must** create this directory if it doesn't exist) and edited with your server details.
+
+Then enable and start the service:
 
 ```bash
 systemctl daemon-reload
@@ -147,6 +157,7 @@ systemctl start tdns-stats
 The dashboard includes a built-in update checker that works with GitHub releases.
 
 **In the UI:**
+
 - Version number appears in the top-right corner
 - Click **Check for updates** to fetch the latest release from GitHub
 - If a newer version is available, click **Update** to trigger the update
@@ -154,15 +165,13 @@ The dashboard includes a built-in update checker that works with GitHub releases
 
 **How it works by deployment method:**
 
-| Method | Mechanism |
-|--------|-----------|
-| Git clone | `git fetch` + `git reset --hard origin/master`, then restarts |
-| Docker | `docker compose pull` + `docker compose up -d` |
+| Method  | Mechanism                                                 |
+| ------- | --------------------------------------------------------- |
+| Docker  | `docker compose pull` + `docker compose up -d --build`    |
 | Systemd | `git pull origin master` + `systemctl restart tdns-stats` |
 
 **Requirements by deployment method:**
 
-- **Git:** No additional requirements
 - **Systemd:** `Restart=always` in the service file (see above)
 - **Docker:** Requires two things in `docker-compose.yml`:
   - The Docker socket mounted: `/var/run/docker.sock:/var/run/docker.sock`
@@ -172,23 +181,23 @@ The dashboard includes a built-in update checker that works with GitHub releases
 
 All configuration lives in `config.yml` (see `config.example.yml` for a fully annotated example).
 
-| Key | Default | Description |
-|-----|---------|-------------|
-| `port` | `3000` | Port the web interface listens on |
-| `servers[].name` | required | Display name for the server |
-| `servers[].url` | required | Technitium API base URL (e.g. `http://ns1.example.com:5380`) |
-| `servers[].token` | required | API token |
-| `servers[].ignoreSsl` | `false` | Skip TLS certificate verification |
-| `servers[].queryLogsApp` | auto-detect | Name of the query log app on this server |
-| `servers[].color` | auto-assigned | Colour for this server in the UI |
-| `poll.statsInterval` | `10` | Seconds between stats refreshes |
-| `poll.feedInterval` | `3` | Seconds between live feed polls |
-| `poll.topInterval` | `30` | Seconds between top-list refreshes |
-| `poll.perfInterval` | `30` | Seconds between RTT/cache samples |
-| `feed.pageSize` | `20` | Log entries fetched per poll cycle |
-| `feed.maxEntries` | `200` | Maximum entries kept in the browser feed |
-| `top.limit` | `20` | Number of items in top domains/clients lists |
-| `rtt.sampleSize` | `500` | Log entries scanned per RTT sample |
+| Key                      | Default       | Description                                                  |
+| ------------------------ | ------------- | ------------------------------------------------------------ |
+| `port`                   | `3000`        | Port the web interface listens on                            |
+| `servers[].name`         | required      | Display name for the server                                  |
+| `servers[].url`          | required      | Technitium API base URL (e.g. `http://ns1.example.com:5380`) |
+| `servers[].token`        | required      | API token                                                    |
+| `servers[].ignoreSsl`    | `false`       | Skip TLS certificate verification                            |
+| `servers[].queryLogsApp` | auto-detect   | Name of the query log app on this server                     |
+| `servers[].color`        | auto-assigned | Colour for this server in the UI                             |
+| `poll.statsInterval`     | `10`          | Seconds between stats refreshes                              |
+| `poll.feedInterval`      | `3`           | Seconds between live feed polls                              |
+| `poll.topInterval`       | `30`          | Seconds between top-list refreshes                           |
+| `poll.perfInterval`      | `30`          | Seconds between RTT/cache samples                            |
+| `feed.pageSize`          | `20`          | Log entries fetched per poll cycle                           |
+| `feed.maxEntries`        | `200`         | Maximum entries kept in the browser feed                     |
+| `top.limit`              | `20`          | Number of items in top domains/clients lists                 |
+| `rtt.sampleSize`         | `500`         | Log entries scanned per RTT sample                           |
 
 ### Server colours
 
@@ -205,7 +214,7 @@ To serve over HTTPS without a reverse proxy, add an `https` block to `config.yml
 ```yaml
 https:
   cert: /etc/ssl/certs/tdns-stats.crt
-  key:  /etc/ssl/private/tdns-stats.key
+  key: /etc/ssl/private/tdns-stats.key
 ```
 
 Or using a single combined PEM file (certificate and private key in one file):
