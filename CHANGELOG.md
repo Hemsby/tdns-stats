@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-06-10
+
+### Changed
+
+**IMPORTANT:** This major release contains a breaking change related to Docker deployments (see below).
+
+- Docker Compose deployments **must** be manually updated, you should first back up your `config.yml` file
+  and then follow the updated instructions in the [README](https://github.com/Hemsby/tdns-stats/blob/master/README.md) under the
+  [Running with Docker](https://github.com/Hemsby/tdns-stats#running-with-docker) section to redeploy. This is required to fix multiple issues regarding
+  Docker Compose deployments and the built-in update functionality. **NOTE:** Deployments via systemd
+  service are not affected by this issue, and users do not need to take any action.
+- Hide update functionality in UI for plain Docker deployments (This functionality is only available when deployed
+  via Docker Compose or as a systemd service).
+
+### Removed
+
+- Built-in update functionality for bare-metal/development/manual `git clone` local deployments has been removed
+  (this functionality never fully worked for this type of deployment anyway).
+
 ## [1.8.1] - 2026-06-09
 
 ### Fixed
