@@ -100,7 +100,7 @@ Replace `<path-to-project>` with the path where you cloned the project to on the
 ### 3. Build and Start
 
 ```bash
-docker compose up -d --build
+docker compose up -d --build # must be run from inside the project directory
 ```
 
 The `config.yml` is mounted read-only into the container at `/etc/tdns-stats/config.yml`. To apply config changes, edit the file and run `docker compose restart`.
