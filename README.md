@@ -26,7 +26,7 @@ See the [CHANGELOG](CHANGELOG.md) for a full history of changes.
 - Technitium DNS Server v15 or later
 - A query log app installed on each DNS server (e.g. Query Logs SQLite, MySQL, PostgreSQL) if you want the live feed and RTT metrics
 
-## Installation
+## Running locally
 
 ### 1. Clone the repository
 
