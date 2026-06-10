@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-06-10
+
+### Changed
+
+- Updated Theme Selector to show current selected theme, and a dropdown to change theme (Reducing space required)
+- Update Check Icon enlarged to match Theme Selector Icon size.
+- Improved Console Logging to help with any update errors.
+
 ## [2.0.0] - 2026-06-10
 
 ### Changed
