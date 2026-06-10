@@ -89,7 +89,7 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      - ./config.yml:/etc/tdns-stats/config.yml:ro
+      - <path-to-project>/config.yml:/etc/tdns-stats/config.yml:ro
       - /var/run/docker.sock:/var/run/docker.sock
       - <path-to-project>:/app/host-project
     restart: unless-stopped
