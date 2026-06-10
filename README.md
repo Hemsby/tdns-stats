@@ -77,7 +77,7 @@ cp config.example.yml config.yml
 # edit config.yml with your server details
 ```
 
-Before building/starting, if you cloned to a different location than mentioned above, you **must** ensure you update the volume mount in `docker-compose.yml` to point to the absolute path of the project directory on the host:
+Before building/starting, if you cloned to a different location than mentioned above, you **must** ensure you update the volume mounts in `docker-compose.yml` to point to the absolute path of the project directory on the host:
 
 ```yaml
 version: "3"
