@@ -6,13 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## 2.0.2 - 2026-06-11
+
+### Fixed
+
+- Fixed a crash in Technitium DNS Server that would permanently stop all statistics from being saved when using the "Last Day" time range in the Query Chart for an extended period. The crash occurred when tdns-stats happened to read hourly statistics at the exact same moment the Technitium server was writing them, resulting in a NullReferenceException that disabled stats tracking until the server was manually restarted.
+
 ## [2.0.1] - 2026-06-10
 
 ### Changed
 
-- Updated Theme Selector to show current selected theme, and a dropdown to change theme (Reducing space required)
-- Update Check Icon enlarged to match Theme Selector Icon size.
-- Improved Console Logging to help with any update errors.
+- Updated Theme Selector to show current selected theme, and a dropdown to change theme (reducing space required)
+- Update check icon enlarged to match Theme Selector icon size.
+- Improved console logging to help with any update errors.
 
 ## [2.0.0] - 2026-06-10
 
@@ -37,7 +43,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
-- Fixed an issue where Changelog modal pop-up could not properly load the CHANGELOG.md file for users running via Docker deployment.
+- Fixed an issue where Changelog pop-up modal could not properly load the CHANGELOG.md file for users running via Docker deployment.
 - Preserve user changes to `docker-compose.yml` file such as (custom port mappings, environment variables and mount points) when updating through the dashboard when deployed via Docker.
 
 ## [1.8.0] - 2026-06-08
@@ -56,7 +62,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
-- Corrected Stat Cards Colours (They got overridden on a previous patch update).
+- Corrected Stat Cards colours (They got overridden on a previous patch update).
 - Refused queries now shown correctly in live feed. They were previously masked by Authoritative queries.
 - Removed Dropped and No Error from live feed filters as they individually are not required.
 
@@ -75,8 +81,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
-- Small Tidy of Code and Timers Functions
-- Slight Size increase of Check for Updates Button
+- Small tidy of code and timers functions
+- Slight size increase of Check for Updates button
 
 ## [1.7.4] - 2026-06-07
 
@@ -105,7 +111,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
-- Removed the Temporary Console Debug Options left behind from Develop
+- Removed the temporary console debug options left behind from Develop
 
 ## [1.7.0] - 2026-06-06
 
