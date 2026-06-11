@@ -410,6 +410,8 @@ const App = (() => {
             state.timeRange = e.target.value;
             updateChartHeading();
             if (state.timeRange === 'LastDay') {
+                refreshChart();
+                refreshTopLists();
                 startLastDayRefresh();
             } else {
                 stopLastDayRefresh();
@@ -1192,6 +1194,7 @@ const App = (() => {
 
     function computeSafeTarget(data) {
         const unsafe = new Set();
+        if (!data?.uptimestamps) return false;
         for (const ts of Object.values(data.uptimestamps)) {
             if (!ts) continue;
             const epoch = new Date(ts).getTime();
@@ -1695,7 +1698,11 @@ const App = (() => {
     function init() {
         const tr = document.getElementById('timeRangeSelect');
         if (tr) state.timeRange = tr.value;
-        if (state.timeRange === 'LastDay') startLastDayRefresh();
+        if (state.timeRange === 'LastDay') {
+            refreshChart();
+            refreshTopLists();
+            startLastDayRefresh();
+        }
         initTheme();
         initMainTabs();
         fetchVersion();
