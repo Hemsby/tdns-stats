@@ -172,6 +172,10 @@ async function getTopStats(server, statsType, limit, type, node, tzOffset) {
     return apiGet(server, path);
 }
 
+async function getMetrics(server) {
+    return apiGet(server, 'api/dashboard/metrics/json');
+}
+
 async function listCache(server, domain) {
     return apiGet(server, 'api/cache/list?domain=' + encodeURIComponent(domain) + '&direction=down');
 }
@@ -311,4 +315,4 @@ async function resolveBlockedDomain(server, domain) {
     };
 }
 
-module.exports = { getSessionInfo, getDashboard, getSettings, getClusterState, listQueryLogApps, discoverQueryLogsApp, getQueryLogs, getRttSample, getCacheMaxEntries, getTopStats, listCache, resolveBlockedDomain };
+module.exports = { getSessionInfo, getDashboard, getSettings, getClusterState, listQueryLogApps, discoverQueryLogsApp, getQueryLogs, getRttSample, getCacheMaxEntries, getTopStats, getMetrics, listCache, resolveBlockedDomain };

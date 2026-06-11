@@ -316,8 +316,7 @@ const App = (() => {
         syncSelects();
         loadAndApplyFeedFilters();
         renderClusterCards();
-        refreshChart();
-        refreshTopLists();
+        safeRefresh();
         renderPerfCards();
         Feed.render(state.feedServer, state.feedFilters);
     }
@@ -410,12 +409,12 @@ const App = (() => {
         el('timeRangeSelect') && (el('timeRangeSelect').onchange = e => {
             state.timeRange = e.target.value;
             updateChartHeading();
-            refreshChart();
-            refreshTopLists();
             if (state.timeRange === 'LastDay') {
                 startLastDayRefresh();
             } else {
                 stopLastDayRefresh();
+                refreshChart();
+                refreshTopLists();
             }
         });
         el('chartServerSelect') && (el('chartServerSelect').onchange = e => {
@@ -1123,6 +1122,14 @@ const App = (() => {
         }).join('');
     }
 
+    function renderTopListsFromData(data, statsType) {
+        const keyMap = { TopDomains: 'topDomains', TopBlockedDomains: 'topBlockedDomains', TopClients: 'topClients' };
+        const colorMap = { TopDomains: 'blue', TopBlockedDomains: 'red', TopClients: 'pur' };
+        const items = data[keyMap[statsType]] || [];
+        const colorClass = colorMap[statsType] || 'blue';
+        renderTopListItems(items, colorClass);
+    }
+
     // ---- Range-aware chart / top refresh ------------------------------------
     function updateChartHeading() {
         const headingMap = {
@@ -1178,43 +1185,84 @@ const App = (() => {
             .catch(() => {});
     }
 
-    // Allow periodic (60s) refresh of LastDay data for both query chart and top lists, regardless of polling interval
+    // ---- LastDay safe-refresh scheduling ------------------------------------
     let lastDayTimer = null;
+    const UNSAFE_MAINTENANCE_OFFSETS = [0, 10, 20, 30, 40, 50];
+    let lastDayRefreshTarget;
+
+    function computeSafeTarget(data) {
+        const unsafe = new Set();
+        for (const ts of Object.values(data.uptimestamps)) {
+            if (!ts) continue;
+            const epoch = new Date(ts).getTime();
+            const base = Math.floor(epoch / 1000) % 60;
+            const ticks = UNSAFE_MAINTENANCE_OFFSETS.map(o => (base + o) % 60);
+            for (const s of ticks) unsafe.add(s);
+        }
+        if (unsafe.size === 0) return false;
+        for (let s = 0; s < 60; s++) {
+            if (!unsafe.has(s)) {
+                lastDayRefreshTarget = s;
+                break;
+            }
+        }
+        return true;
+    }
 
     function startLastDayRefresh() {
         stopLastDayRefresh();
-        const doRefresh = () => {
-            Object.keys(state.rangeCache).forEach(key => {
-                if (key.includes(':LastDay')) delete state.rangeCache[key];
-            });
-            refreshChart();
-            refreshTopLists();
-        };
-        const scheduleNext = () => {
-            const now = Date.now();
-            const msUntilNextMinute = (60 - Math.floor(now / 1000) % 60) * 1000;
-            lastDayTimer = setTimeout(() => {
-                doRefresh();
-                scheduleNext();
-            }, msUntilNextMinute);
-        };
-        doRefresh();
-        scheduleNext();
+        scheduleNext(true);
     }
 
     function stopLastDayRefresh() {
         if (lastDayTimer) {
-            clearInterval(lastDayTimer);
+            clearTimeout(lastDayTimer);
             lastDayTimer = null;
         }
     }
 
-    function renderTopListsFromData(data, statsType) {
-        const keyMap = { TopDomains: 'topDomains', TopBlockedDomains: 'topBlockedDomains', TopClients: 'topClients' };
-        const colorMap = { TopDomains: 'blue', TopBlockedDomains: 'red', TopClients: 'pur' };
-        const items = data[keyMap[statsType]] || [];
-        const colorClass = colorMap[statsType] || 'blue';
-        renderTopListItems(items, colorClass);
+    function doRefresh() {
+        Object.keys(state.rangeCache).forEach(key => {
+            if (key.includes(':LastDay')) delete state.rangeCache[key];
+        });
+        refreshChart();
+        refreshTopLists();
+    }
+
+    function scheduleNext(initial) {
+        fetch('/api/metrics?_=' + Date.now())
+            .then(r => r.json())
+            .then(data => {
+                if (!computeSafeTarget(data)) {
+                    setTimeout(() => scheduleNext(), 2000);
+                    return;
+                }
+                if (initial && Math.floor(Date.now() / 1000) % 60 === lastDayRefreshTarget)
+                    doRefresh();
+                const sec = Math.floor(Date.now() / 1000) % 60;
+                let delay = (60 + lastDayRefreshTarget - sec) % 60 * 1000;
+                if (delay <= 500) delay += 60000;
+                lastDayTimer = setTimeout(() => { doRefresh(); scheduleNext(); }, delay);
+            })
+            .catch(() => {
+                setTimeout(() => scheduleNext(), 2000);
+            });
+    }
+
+    function safeRefresh() {
+        if (state.timeRange !== 'LastDay' || lastDayRefreshTarget === undefined) {
+            refreshChart();
+            refreshTopLists();
+            return;
+        }
+        const sec = Math.floor(Date.now() / 1000) % 60;
+        if (sec === lastDayRefreshTarget) {
+            doRefresh();
+            return;
+        }
+        let delay = (60 + lastDayRefreshTarget - sec) % 60 * 1000;
+        if (delay <= 500) delay += 60000;
+        setTimeout(() => doRefresh(), delay);
     }
 
     // ---- Helpers ------------------------------------------------------------

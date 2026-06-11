@@ -10,7 +10,7 @@ const yaml      = require('js-yaml');
 const fetch     = require('node-fetch');
 const Poller    = require('./poller');
 const Updater   = require('./updater');
-const { listQueryLogApps, discoverQueryLogsApp, getCacheMaxEntries, getDashboard, getTopStats, listCache, resolveBlockedDomain } = require('./technitium');
+const { listQueryLogApps, discoverQueryLogsApp, getCacheMaxEntries, getDashboard, getTopStats, listCache, getMetrics, resolveBlockedDomain } = require('./technitium');
 
 const PACKAGE = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf8'));
 const VERSION = PACKAGE.version;
@@ -274,6 +274,19 @@ async function start() {
 
     const VALID_TYPES = new Set(['LastHour', 'LastDay', 'LastWeek', 'LastMonth', 'LastYear']);
     const VALID_STATS = new Set(['TopDomains', 'TopBlockedDomains', 'TopClients']);
+
+    app.get('/api/metrics', async (req, res) => {
+        res.set('Cache-Control', 'no-store');
+        try {
+            const results = await Promise.allSettled(servers.map(s => getMetrics(s)));
+            const uptimestamps = {};
+            servers.forEach((s, i) => {
+                if (results[i].status === 'fulfilled')
+                    uptimestamps[s.name] = results[i].value.uptimestamp || null;
+            });
+            res.json({ uptimestamps });
+        } catch (e) { res.status(502).json({ error: e.message }); }
+    });
 
     app.get('/api/dashboard', async (req, res) => {
         const { server: serverName, type, tz } = req.query;
