@@ -10,7 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
-- Fixed a crash in Technitium DNS Server that would permanently stop all statistics from being saved when using the "Last Day" time range in the Query Chart for an extended period. The crash occurred when tdns-stats happened to read hourly statistics at the exact same moment the Technitium server was writing them, resulting in a NullReferenceException that disabled stats tracking until the server was manually restarted.
+- Fixed a crash in Technitium DNS Server that would permanently stop all statistics from being saved when using the "Last Day" time range in the Query Chart for an extended period. The crash occurred when tdns-stats happened to read hourly statistics at the exact same moment the Technitium server was writing them, resulting in a `NullReferenceException` that disabled stats tracking until the server was manually restarted.
 
 ## [2.0.1] - 2026-06-10
 
