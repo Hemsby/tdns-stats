@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- Last Day chart and Top Stats data is now pushed from the server instead of being polled by the browser. This prevents the NRE crash more reliably — the fix no longer relies on a browser timer that can drift or be throttled when the tab is backgrounded.
+
+## [2.0.3] - 2026-06-12
+
+### Changed
+
+- Minor UI tweaks to improve consistency (button hover states, font sizing in Top Stats card).
+
 ## [2.0.2] - 2026-06-11
 
 ### Fixed

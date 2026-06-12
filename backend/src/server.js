@@ -9,6 +9,7 @@ const fs        = require('fs');
 const yaml      = require('js-yaml');
 const fetch     = require('node-fetch');
 const Poller    = require('./poller');
+const { getUnsafeSeconds } = require('./poller');
 const Updater   = require('./updater');
 const { listQueryLogApps, discoverQueryLogsApp, getCacheMaxEntries, getDashboard, getTopStats, listCache, getMetrics, resolveBlockedDomain } = require('./technitium');
 
@@ -241,6 +242,19 @@ async function start() {
                     res.write(`data: ${JSON.stringify({ type: 'perf', server, data })}\n\n`);
                 }
             }
+            if (state.rangeData) {
+                for (const [key, data] of Object.entries(state.rangeData)) {
+                    const parts = key.split(':');
+                    const server = parts[0];
+                    const range = parts[1];
+                    const isTop = parts[2] === 'top';
+                    if (isTop) {
+                        res.write(`data: ${JSON.stringify({ type: 'range-top', range, server, data })}\n\n`);
+                    } else {
+                        res.write(`data: ${JSON.stringify({ type: 'range-dashboard', range, server, data })}\n\n`);
+                    }
+                }
+            }
         } catch (err) {
             console.error('[stream] Initial write failed:', err.message);
         }
@@ -288,11 +302,56 @@ async function start() {
         } catch (e) { res.status(502).json({ error: e.message }); }
     });
 
+    async function waitIfUnsafe() {
+        if (servers.length === 0) return;
+        const results = await Promise.allSettled(servers.map(s => getMetrics(s)));
+        const uptimestamps = {};
+        servers.forEach((s, i) => {
+            if (results[i].status === 'fulfilled')
+                uptimestamps[s.name] = results[i].value.uptimestamp || null;
+        });
+        const unsafe = getUnsafeSeconds(uptimestamps);
+        if (unsafe.size === 0) {
+            return;
+        }
+
+        const nowMs = Date.now();
+        const nowSec = Math.floor(nowMs / 1000) % 60;
+        const msOffset = nowMs % 1000;
+
+        if (unsafe.has(nowSec)) {
+            const waitMs = (1000 - msOffset) + 500;
+            await new Promise(r => setTimeout(r, Math.min(waitMs, 2000)));
+            return;
+        }
+
+        for (let s = nowSec + 1; s < nowSec + 60; s++) {
+            if (unsafe.has(s % 60)) {
+                const distMs = (s - nowSec) * 1000 - msOffset;
+                if (distMs >= 1500) {
+                    return;
+                }
+                const waitMs = distMs + 1500;
+                await new Promise(r => setTimeout(r, Math.min(waitMs, 2000)));
+                return;
+            }
+        }
+    }
+
+    app.get('/api/watch-server', (req, res) => {
+        const name = req.query.server;
+        if (name && servers.some(s => s.name === name)) {
+            poller.setWatchedServer(name);
+        }
+        res.json({ ok: true });
+    });
+
     app.get('/api/dashboard', async (req, res) => {
         const { server: serverName, type, tz } = req.query;
         const rangeType = getValidatedRangeType(type);
         const server = resolveServer(serverName);
         if (!server) return res.status(404).json({ error: 'Unknown server' });
+        if (rangeType !== 'LastHour') await waitIfUnsafe();
         try {
             const data = await getDashboard(server, rangeType, serverName === CLUSTER_KEY ? 'cluster' : null, parseInt(tz) || 0);
             res.json(data);
@@ -305,6 +364,7 @@ async function start() {
         const rangeType = getValidatedRangeType(type);
         const server = resolveServer(serverName);
         if (!server) return res.status(404).json({ error: 'Unknown server' });
+        if (rangeType !== 'LastHour') await waitIfUnsafe();
         try {
             const data = await getTopStats(server, statsType, config.top?.limit || 20, rangeType, serverName === CLUSTER_KEY ? 'cluster' : null, parseInt(tz) || 0);
             res.json(data);
