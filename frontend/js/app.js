@@ -186,6 +186,7 @@ const App = (() => {
                 renderPerfCards(); // show placeholders immediately on first server discovery
 
                 // Populate chart and top list data immediately, without waiting for first poll
+                watchServer(state.chartServer);
                 refreshChart();
                 refreshTopLists(true);
             }
@@ -220,6 +221,20 @@ const App = (() => {
         } else if (msg.type === 'viewer-count') {
             state.dashboardViewers = Math.max(0, Number(msg.data?.count) || 0);
             renderDashboardViewers();
+        } else if (msg.type === 'range-dashboard') {
+            const key = msg.server + ':' + msg.range;
+            state.rangeCache[key] = msg.data;
+            if (state.timeRange === msg.range && state.chartServer === msg.server) {
+                hideRangeLoading();
+                Charts.updateFromData(msg.data, getDatasetMode());
+            }
+        } else if (msg.type === 'range-top') {
+            state.rangeCache[msg.server + ':' + msg.range + ':TopDomains']        = { topDomains:        msg.data.domains || [] };
+            state.rangeCache[msg.server + ':' + msg.range + ':TopBlockedDomains'] = { topBlockedDomains: msg.data.blocked || [] };
+            state.rangeCache[msg.server + ':' + msg.range + ':TopClients']        = { topClients:        msg.data.clients || [] };
+            if (state.timeRange === msg.range && msg.server === state.topServer) {
+                refreshTopLists();
+            }
         } else if (msg.type === 'ping') {
             // No action needed, handleMessage already updated lastMsg
         }
@@ -316,7 +331,9 @@ const App = (() => {
         syncSelects();
         loadAndApplyFeedFilters();
         renderClusterCards();
-        safeRefresh();
+        watchServer(state.chartServer);
+        refreshChart();
+        refreshTopLists();
         renderPerfCards();
         Feed.render(state.feedServer, state.feedFilters);
     }
@@ -392,6 +409,11 @@ const App = (() => {
         if (fs) { fs.value = state.feedServer; updateSelDot('feedServerSelect', state.feedServer); }
     }
 
+    function watchServer(name) {
+        if (!name) return;
+        fetch('/api/watch-server?server=' + encodeURIComponent(name)).catch(() => {});
+    }
+
     function loadAndApplyFeedFilters() {
         state.feedFilters = loadFeedFilters(state.feedServer);
         document.querySelectorAll('.feed-filter-check').forEach(cb => {
@@ -409,19 +431,13 @@ const App = (() => {
         el('timeRangeSelect') && (el('timeRangeSelect').onchange = e => {
             state.timeRange = e.target.value;
             updateChartHeading();
-            if (state.timeRange === 'LastDay') {
-                refreshChart();
-                refreshTopLists();
-                startLastDayRefresh();
-            } else {
-                stopLastDayRefresh();
-                refreshChart();
-                refreshTopLists();
-            }
+            refreshChart();
+            refreshTopLists();
         });
         el('chartServerSelect') && (el('chartServerSelect').onchange = e => {
             state.chartServer = e.target.value;
             updateSelDot('chartServerSelect', state.chartServer);
+            watchServer(state.chartServer);
             refreshChart();
         });
         el('chartDatasetSelect') && (el('chartDatasetSelect').onchange = () => {
@@ -1147,23 +1163,36 @@ const App = (() => {
         }
     }
 
+    function showRangeLoading() {
+        const el = document.getElementById('chartLoading');
+        if (el) el.hidden = false;
+    }
+    function hideRangeLoading() {
+        const el = document.getElementById('chartLoading');
+        if (el) el.hidden = true;
+    }
+
     function refreshChart() {
         if (state.timeRange === 'LastHour') {
+            hideRangeLoading();
             Charts.update(state.nodes, state.chartServer, getDatasetMode());
             return;
         }
         const cacheKey = state.chartServer + ':' + state.timeRange;
         if (state.rangeCache[cacheKey]) {
+            hideRangeLoading();
             Charts.updateFromData(state.rangeCache[cacheKey], getDatasetMode());
             return;
         }
+        showRangeLoading();
         fetch('/api/dashboard?server=' + encodeURIComponent(state.chartServer) + '&type=' + state.timeRange + '&tz=' + new Date().getTimezoneOffset())
             .then(r => r.json())
             .then(data => {
                 state.rangeCache[cacheKey] = data;
+                hideRangeLoading();
                 Charts.updateFromData(data, getDatasetMode());
             })
-            .catch(() => {});
+            .catch(() => { hideRangeLoading(); });
     }
 
     function refreshTopLists(init) {
@@ -1178,6 +1207,7 @@ const App = (() => {
             renderTopListsFromData(state.rangeCache[cacheKey], statsType);
             return;
         }
+        document.getElementById('topContent').innerHTML = '<div class="no-data">Waiting for data…</div>';
         fetch('/api/top?server=' + encodeURIComponent(state.topServer) + '&type=' + state.timeRange + '&statsType=' + statsType + '&tz=' + new Date().getTimezoneOffset())
             .then(r => r.json())
             .then(data => {
@@ -1185,87 +1215,6 @@ const App = (() => {
                 renderTopListsFromData(data, statsType);
             })
             .catch(() => {});
-    }
-
-    // ---- LastDay safe-refresh scheduling ------------------------------------
-    let lastDayTimer = null;
-    const UNSAFE_MAINTENANCE_OFFSETS = [0, 10, 20, 30, 40, 50];
-    let lastDayRefreshTarget;
-
-    function computeSafeTarget(data) {
-        const unsafe = new Set();
-        if (!data?.uptimestamps) return false;
-        for (const ts of Object.values(data.uptimestamps)) {
-            if (!ts) continue;
-            const epoch = new Date(ts).getTime();
-            const base = Math.floor(epoch / 1000) % 60;
-            const ticks = UNSAFE_MAINTENANCE_OFFSETS.map(o => (base + o) % 60);
-            for (const s of ticks) unsafe.add(s);
-        }
-        if (unsafe.size === 0) return false;
-        for (let s = 0; s < 60; s++) {
-            if (!unsafe.has(s)) {
-                lastDayRefreshTarget = s;
-                break;
-            }
-        }
-        return true;
-    }
-
-    function startLastDayRefresh() {
-        stopLastDayRefresh();
-        scheduleNext(true);
-    }
-
-    function stopLastDayRefresh() {
-        if (lastDayTimer) {
-            clearTimeout(lastDayTimer);
-            lastDayTimer = null;
-        }
-    }
-
-    function doRefresh() {
-        Object.keys(state.rangeCache).forEach(key => {
-            if (key.includes(':LastDay')) delete state.rangeCache[key];
-        });
-        refreshChart();
-        refreshTopLists();
-    }
-
-    function scheduleNext(initial) {
-        fetch('/api/metrics?_=' + Date.now())
-            .then(r => r.json())
-            .then(data => {
-                if (!computeSafeTarget(data)) {
-                    setTimeout(() => scheduleNext(), 2000);
-                    return;
-                }
-                if (initial && Math.floor(Date.now() / 1000) % 60 === lastDayRefreshTarget)
-                    doRefresh();
-                const sec = Math.floor(Date.now() / 1000) % 60;
-                let delay = (60 + lastDayRefreshTarget - sec) % 60 * 1000;
-                if (delay <= 500) delay += 60000;
-                lastDayTimer = setTimeout(() => { doRefresh(); scheduleNext(); }, delay);
-            })
-            .catch(() => {
-                setTimeout(() => scheduleNext(), 2000);
-            });
-    }
-
-    function safeRefresh() {
-        if (state.timeRange !== 'LastDay' || lastDayRefreshTarget === undefined) {
-            refreshChart();
-            refreshTopLists();
-            return;
-        }
-        const sec = Math.floor(Date.now() / 1000) % 60;
-        if (sec === lastDayRefreshTarget) {
-            doRefresh();
-            return;
-        }
-        let delay = (60 + lastDayRefreshTarget - sec) % 60 * 1000;
-        if (delay <= 500) delay += 60000;
-        setTimeout(() => doRefresh(), delay);
     }
 
     // ---- Helpers ------------------------------------------------------------
@@ -1698,11 +1647,6 @@ const App = (() => {
     function init() {
         const tr = document.getElementById('timeRangeSelect');
         if (tr) state.timeRange = tr.value;
-        if (state.timeRange === 'LastDay') {
-            refreshChart();
-            refreshTopLists();
-            startLastDayRefresh();
-        }
         initTheme();
         initMainTabs();
         fetchVersion();

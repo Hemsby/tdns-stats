@@ -1,8 +1,49 @@
 'use strict';
 
-const { getDashboard, getTopStats, getQueryLogs, getRttSample, getSessionInfo, getClusterState } = require('./technitium');
+const { getDashboard, getTopStats, getQueryLogs, getRttSample, getSessionInfo, getClusterState, getMetrics } = require('./technitium');
 
 const CLUSTER_KEY = '__cluster';
+const UNSAFE_MAINTENANCE_OFFSETS = [0, 10, 20, 30, 40, 50];
+
+function getUnsafeSeconds(uptimestamps) {
+    const unsafe = new Set();
+    if (!uptimestamps) return unsafe;
+    for (const ts of Object.values(uptimestamps)) {
+        if (!ts) continue;
+        const base = Math.floor(new Date(ts).getTime() / 1000) % 60;
+        for (const o of UNSAFE_MAINTENANCE_OFFSETS) unsafe.add((base + o) % 60);
+    }
+    return unsafe;
+}
+
+function msUntilSafe(servers, uptimestamps) {
+    const unsafe = getUnsafeSeconds(uptimestamps);
+    if (unsafe.size === 0) return 0;
+
+    const nowMs = Date.now();
+    const nowSec = Math.floor(nowMs / 1000) % 60;
+    const msOffset = nowMs % 1000;
+
+    let targetSec = -1;
+    for (let s = 0; s < 60; s++) {
+        if (!unsafe.has(s)) {
+            targetSec = s;
+            break;
+        }
+    }
+    if (targetSec === -1) {
+        console.log('[safety] msUntilSafe: all seconds unsafe, waiting 60s');
+        return 60000;
+    }
+
+    // Calculate delay to arrive at the start of the target safe second
+    let delay = ((60 + targetSec - nowSec) % 60) * 1000 - msOffset;
+
+    if (delay > 0 && delay <= 1500) delay += 60000;
+    if (delay <= 0) delay = 0;
+
+    return delay;
+}
 
 class Poller {
     constructor(servers, broadcast, cfg) {
@@ -13,19 +54,23 @@ class Poller {
             feedInterval:  (cfg?.poll?.feedInterval  || 3)  * 1000,
             topInterval:   (cfg?.poll?.topInterval   || 30) * 1000,
             perfInterval:  (cfg?.poll?.perfInterval  || 30) * 1000,
+            rangeInterval: 60000,
             topLimit:      cfg?.top?.limit      || 20,
             rttSample:     cfg?.rtt?.sampleSize || 500,
             feedPageSize:  cfg?.feed?.pageSize  || 20,
         };
         this.state     = {};
         this.state.perf  = {};
+        this.state.rangeData = {};
         this._jitterState  = {};
         this.feedCursors   = {};
         this.clusterServer = null;
+        this._watchedServer = null;
         this._statsTimer = null;
         this._feedTimer  = null;
         this._topTimer   = null;
         this._perfTimer  = null;
+        this._rangeTimer = null;
         this._running    = false;
     }
 
@@ -34,10 +79,12 @@ class Poller {
         clearInterval(this._feedTimer);
         clearInterval(this._topTimer);
         clearInterval(this._perfTimer);
+        clearInterval(this._rangeTimer);
         this._statsTimer = null;
         this._feedTimer  = null;
         this._topTimer   = null;
         this._perfTimer  = null;
+        this._rangeTimer = null;
         this._running    = false;
     }
 
@@ -55,6 +102,7 @@ class Poller {
         this._pollFeed();
         this._pollTop();
         this._pollPerformance();
+        this._pollRangeData();
     }
 
     start() {
@@ -75,8 +123,90 @@ class Poller {
         this._startTimers();
     }
 
+    setWatchedServer(name) {
+        this._watchedServer = name;
+    }
+
     getState() {
         return this.state;
+    }
+
+    async _pollRangeData() {
+        const primary = this._watchedServer
+            ? this.servers.find(s => s.name === this._watchedServer)
+            : this.servers[0];
+        if (!primary) {
+            this._rangeTimer = setTimeout(() => this._pollRangeData(), this.cfg.rangeInterval);
+            return;
+        }
+
+        const metricsTargets = [primary];
+        if (this.clusterServer && this.clusterServer.name !== primary.name) metricsTargets.push(this.clusterServer);
+        const metricsResults = await Promise.allSettled(metricsTargets.map(s => getMetrics(s)));
+        const uptimestamps = {};
+        metricsTargets.forEach((s, i) => {
+            if (metricsResults[i].status === 'fulfilled')
+                uptimestamps[s.name] = metricsResults[i].value.uptimestamp || null;
+        });
+
+        const delay = msUntilSafe(metricsTargets, uptimestamps);
+        if (delay > 0) {
+            console.log(`[safety] _pollRangeData: delayed ${delay}ms`);
+            this._rangeTimer = setTimeout(() => this._pollRangeData(), delay);
+            return;
+        }
+
+        const rangeType = 'LastDay';
+        const tzOffset = 0;
+
+        try {
+            const data = await getDashboard(primary, rangeType, null, tzOffset);
+            const key = primary.name + ':' + rangeType;
+            this.state.rangeData[key] = data;
+            this.broadcast({ type: 'range-dashboard', range: rangeType, server: primary.name, data });
+        } catch (_) { /* ignore */ }
+
+        try {
+            const [topDomains, topBlocked, topClients] = await Promise.allSettled([
+                getTopStats(primary, 'TopDomains',        this.cfg.topLimit, rangeType),
+                getTopStats(primary, 'TopBlockedDomains', this.cfg.topLimit, rangeType),
+                getTopStats(primary, 'TopClients',        this.cfg.topLimit, rangeType)
+            ]);
+            const topData = {
+                domains: topDomains.status === 'fulfilled' ? (topDomains.value?.topDomains        || []) : [],
+                blocked: topBlocked.status === 'fulfilled' ? (topBlocked.value?.topBlockedDomains || []) : [],
+                clients: topClients.status === 'fulfilled' ? (topClients.value?.topClients        || []) : []
+            };
+            const key = primary.name + ':' + rangeType + ':top';
+            this.state.rangeData[key] = topData;
+            this.broadcast({ type: 'range-top', range: rangeType, server: primary.name, data: topData });
+        } catch (_) { /* ignore */ }
+
+        if (this.clusterServer) {
+            try {
+                const data = await getDashboard(this.clusterServer, rangeType, 'cluster', tzOffset);
+                const key = CLUSTER_KEY + ':' + rangeType;
+                this.state.rangeData[key] = data;
+                this.broadcast({ type: 'range-dashboard', range: rangeType, server: CLUSTER_KEY, data });
+            } catch (_) { /* ignore */ }
+
+            try {
+                const [topDomains, topBlocked, topClients] = await Promise.allSettled([
+                    getTopStats(this.clusterServer, 'TopDomains',        this.cfg.topLimit, rangeType, 'cluster'),
+                    getTopStats(this.clusterServer, 'TopBlockedDomains', this.cfg.topLimit, rangeType, 'cluster'),
+                    getTopStats(this.clusterServer, 'TopClients',        this.cfg.topLimit, rangeType, 'cluster')
+                ]);
+                const topData = {
+                    domains: topDomains.status === 'fulfilled' ? (topDomains.value?.topDomains        || []) : [],
+                    blocked: topBlocked.status === 'fulfilled' ? (topBlocked.value?.topBlockedDomains || []) : [],
+                    clients: topClients.status === 'fulfilled' ? (topClients.value?.topClients        || []) : []
+                };
+                const key = CLUSTER_KEY + ':' + rangeType + ':top';
+                this.state.rangeData[key] = topData;
+                this.broadcast({ type: 'range-top', range: rangeType, server: CLUSTER_KEY, data: topData });
+            } catch (_) { /* ignore */ }
+        }
+        this._rangeTimer = setTimeout(() => this._pollRangeData(), this.cfg.rangeInterval);
     }
 
     async _pollStats() {
@@ -222,6 +352,7 @@ class Poller {
             } catch (_) { /* ignore */ }
         }
     }
+
     async _pollPerformance() {
         for (const server of this.servers) {
             try {
@@ -284,3 +415,5 @@ class Poller {
 }
 
 module.exports = Poller;
+module.exports.msUntilSafe = msUntilSafe;
+module.exports.getUnsafeSeconds = getUnsafeSeconds;
