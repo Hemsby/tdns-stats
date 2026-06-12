@@ -205,7 +205,7 @@ main { position: relative; z-index: 1; }
     color: var(--text-muted); cursor: pointer;
     transition: color .15s, background .15s, border-color .15s;
 }
-.theme-trigger:hover { color: var(--text); border-color: var(--accent-blue); }
+.theme-trigger:hover { color: var(--text); background: var(--bg-hover); border-color: var(--accent-blue); }
 .theme-switcher.open .theme-trigger {
     color: var(--accent-blue); border-color: rgba(34,211,238,.4);
     background: var(--accent-blue-bg);
@@ -243,9 +243,9 @@ main { position: relative; z-index: 1; }
     padding: 3px 8px; background: var(--bg); border: 1px solid var(--border);
     border-radius: 4px; font-size: 10px; font-weight: 600; font-family: 'JetBrains Mono', monospace;
     color: var(--text-muted); letter-spacing: .3px; cursor: pointer;
-    transition: color .15s, border-color .15s;
+    transition: color .15s, background .15s, border-color .15s;
 }
-.version-pill:hover { color: var(--accent-blue); border-color: var(--accent-blue); }
+.version-pill:hover { color: var(--text); background: var(--bg-hover); border-color: var(--accent-blue); }
 .icon-btn {
     display: flex; align-items: center; justify-content: center;
     width: 26px; height: 24px; background: none; border: none;
@@ -497,7 +497,7 @@ main { position: relative; z-index: 1; }
 .top-row:hover { background: var(--bg-hover); }
 .top-rank { font-size: 10px; color: var(--text-dim); width: 18px; flex-shrink: 0; text-align: right; font-family: 'JetBrains Mono', monospace; }
 .top-name { flex: 1; font-size: 12px; font-family: 'JetBrains Mono', monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; text-align: left; }
-.top-sub  { flex: 3; font-size: 10px; color: var(--text-muted); margin-left: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; text-align: left; }
+.top-sub  { flex: 3; font-size: 11px; color: var(--text-muted); margin-left: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; text-align: left; }
 .top-bar-wrap { width: 80px; flex-shrink: 0; margin-left: auto; }
 .top-bar { height: 3px; background: var(--border-dim); border-radius: 2px; overflow: hidden; }
 .top-bar-fill { height: 100%; border-radius: 2px; transition: width .4s; }
@@ -857,7 +857,7 @@ main { position: relative; z-index: 1; }
 /* ---- Update overlay ---- */
 .update-overlay {
     position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(5, 8, 13, 0.85); backdrop-filter: blur(4px);
+    background: rgba(5, 8, 13, 0.65); backdrop-filter: blur(4px);
     display: flex; align-items: center; justify-content: center;
     z-index: 9999; animation: fadeIn .3s ease-in;
 }
