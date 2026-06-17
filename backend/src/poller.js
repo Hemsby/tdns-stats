@@ -23,6 +23,7 @@ class Poller {
         this.state.rangeData = {};
         this._jitterState  = {};
         this.feedCursors   = {};
+        this._feedPollInProgress = false;
         this.clusterServer = null;
         this._watchedServer = null;
         this._statsTimer = null;
@@ -224,30 +225,41 @@ class Poller {
     }
 
     async _pollFeed() {
+        if (this._feedPollInProgress) return;
+        this._feedPollInProgress = true;
+        try { await this._doFeedPoll(); } finally { this._feedPollInProgress = false; }
+    }
+
+    async _doFeedPoll() {
         for (const server of this.servers) {
             try {
                 const logs = await getQueryLogs(server, this.cfg.feedPageSize);
                 if (!logs) continue;
                 const entries = logs.entries || [];
                 const cursor  = this.feedCursors[server.name];
+                let cursorReset = false;
 
                 let fresh = entries;
                 if (cursor) {
-                    if (entries.length > 0 && entries[0].rowNumber < cursor) {
-                        // Newest entry is older than cursor — log was reset or rotated
-                        console.log(`${server.name}: feed cursor reset (was ${cursor}, latest is ${entries[0].rowNumber})`);
-                        fresh = entries;
-                    } else {
-                        const idx = entries.findIndex(e => e.rowNumber <= cursor);
-                        fresh = idx === -1 ? entries : entries.slice(0, idx);
+                    if (entries.length > 0) {
+                        const latestTs = new Date(entries[0].timestamp).getTime();
+                        if (latestTs < cursor) {
+                            // Timestamp went backwards — query log was reset or rotated
+                            console.log(`${server.name}: feed cursor reset (before: ${new Date(cursor).toISOString()} → after: ${entries[0].timestamp})`);
+                            fresh = entries;
+                            cursorReset = true;
+                        } else {
+                            const idx = entries.findIndex(e => new Date(e.timestamp).getTime() <= cursor);
+                            fresh = idx === -1 ? entries : entries.slice(0, idx);
+                        }
                     }
                 }
 
                 if (fresh.length > 0) {
-                    this.feedCursors[server.name] = entries[0]?.rowNumber;
-                    this.broadcast({ type: 'feed', server: server.name, data: fresh });
+                    this.feedCursors[server.name] = new Date(entries[0]?.timestamp).getTime();
+                    this.broadcast({ type: 'feed', server: server.name, data: fresh, cursorReset });
                 } else if (!cursor && entries.length > 0) {
-                    this.feedCursors[server.name] = entries[0]?.rowNumber;
+                    this.feedCursors[server.name] = new Date(entries[0]?.timestamp).getTime();
                 }
             } catch (err) { console.warn(`[feed] ${server.name}: ${err.message}`); }
         }

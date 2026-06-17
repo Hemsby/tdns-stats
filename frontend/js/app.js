@@ -1,6 +1,7 @@
 'use strict';
 
 const CLUSTER_KEY = '__cluster';
+const FOLLOW_CHART_KEY = '__follow_chart';
 
 const App = (() => {
     const state = {
@@ -181,7 +182,11 @@ const App = (() => {
                 if (!state.activeTab) state.activeTab = defaultTab;
                 const chartFallback = state.isCluster ? CLUSTER_KEY : names[0];
                 if (!state.chartServer) state.chartServer = chartFallback;
-                if (!state.topServer)   state.topServer   = chartFallback;
+                const isAggregate = state.activeTab === CLUSTER_KEY || state.activeTab === 'all';
+                if (!state.topServer) {
+                    state.topServer = isAggregate ? FOLLOW_CHART_KEY : state.activeTab;
+                }
+                state.feedServer = isAggregate ? 'all' : state.activeTab;
                 buildServerUI();
                 renderPerfCards(); // show placeholders immediately on first server discovery
 
@@ -202,12 +207,13 @@ const App = (() => {
         } else if (msg.type === 'feed') {
             state.lastFeedEvent = Date.now();
             setFeedStall(false);
-            Feed.add(msg.server, msg.data);
+            Feed.add(msg.server, msg.data, !!msg.cursorReset);
             Feed.scheduleRender(state.feedServer, state.feedFilters);
 
         } else if (msg.type === 'top') {
             state.top[msg.server] = msg.data;
-            if (msg.server === state.topServer && state.timeRange === 'LastHour') renderTopLists();
+            const effectiveTop = state.topServer === FOLLOW_CHART_KEY ? state.chartServer : state.topServer;
+            if (msg.server === effectiveTop && state.timeRange === 'LastHour') renderTopLists();
 
         } else if (msg.type === 'perf') {
             state.perf[msg.server] = msg.data;
@@ -234,7 +240,8 @@ const App = (() => {
             state.rangeCache[msg.server + ':' + msg.range + ':TopDomains']        = { topDomains:        msg.data.domains || [] };
             state.rangeCache[msg.server + ':' + msg.range + ':TopBlockedDomains'] = { topBlockedDomains: msg.data.blocked || [] };
             state.rangeCache[msg.server + ':' + msg.range + ':TopClients']        = { topClients:        msg.data.clients || [] };
-            if (state.timeRange === msg.range && msg.server === state.topServer) {
+            const effectiveTop = state.topServer === FOLLOW_CHART_KEY ? state.chartServer : state.topServer;
+            if (state.timeRange === msg.range && msg.server === effectiveTop) {
                 refreshTopLists();
             }
         } else if (msg.type === 'ping') {
@@ -317,11 +324,11 @@ const App = (() => {
 
         if (key === CLUSTER_KEY) {
             state.chartServer = CLUSTER_KEY;
-            state.topServer   = CLUSTER_KEY;
+            state.topServer   = FOLLOW_CHART_KEY;
             state.feedServer  = 'all';
         } else if (key === 'all') {
             state.chartServer = state.serverNames[0] || null;
-            state.topServer   = state.serverNames[0] || null;
+            state.topServer   = FOLLOW_CHART_KEY;
             state.feedServer  = 'all';
         } else {
             state.chartServer = key;
@@ -330,6 +337,7 @@ const App = (() => {
         }
 
         document.querySelectorAll('.stab').forEach(b => b.classList.toggle('active', b.dataset.key === key));
+        toggleServerSelects();
         syncSelects();
         loadAndApplyFeedFilters();
         renderClusterCards();
@@ -353,16 +361,20 @@ const App = (() => {
         const clusterOption = state.isCluster ? [{ value: CLUSTER_KEY, label: 'Cluster (aggregate)' }] : [];
         const serverOptions = state.serverNames.map(n => ({ value: n, label: n }));
 
-        ['chartServerSelect', 'topServerSelect'].forEach(id => {
-            populateSelect(id, [...clusterOption, ...serverOptions], state[id === 'chartServerSelect' ? 'chartServer' : 'topServer']);
-            injectSelDot(id);
-        });
+        populateSelect('chartServerSelect', [...clusterOption, ...serverOptions], state.chartServer);
+        injectSelDot('chartServerSelect');
+
+        const followOption = [{ value: FOLLOW_CHART_KEY, label: 'Follow chart' }];
+        const topSelected = state.topServer === FOLLOW_CHART_KEY ? FOLLOW_CHART_KEY : state.topServer;
+        populateSelect('topServerSelect', [...followOption, ...clusterOption, ...serverOptions], topSelected);
+        injectSelDot('topServerSelect');
 
         populateSelect('feedServerSelect', [{ value: 'all', label: 'All servers' }, ...serverOptions], state.feedServer);
         injectSelDot('feedServerSelect');
 
         buildDomainSearchSelect();
 
+        toggleServerSelects();
         syncSelects();
         addSelectListeners();
     }
@@ -398,7 +410,8 @@ const App = (() => {
     function updateSelDot(selectId, key) {
         const dot = document.getElementById(selectId + 'Dot');
         if (!dot) return;
-        const color = serverColor(key);
+        const effectiveKey = (selectId === 'topServerSelect' && key === FOLLOW_CHART_KEY) ? state.chartServer : key;
+        const color = serverColor(effectiveKey);
         dot.className = 'sel-dot' + (color ? ' ' + color : '');
     }
 
@@ -409,6 +422,16 @@ const App = (() => {
         if (ts) { ts.value = state.topServer || ''; updateSelDot('topServerSelect', state.topServer); }
         const fs = document.getElementById('feedServerSelect');
         if (fs) { fs.value = state.feedServer; updateSelDot('feedServerSelect', state.feedServer); }
+    }
+
+    function toggleServerSelects() {
+        const isSingle = state.activeTab !== CLUSTER_KEY && state.activeTab !== 'all';
+        ['chartServerSelect', 'topServerSelect', 'feedServerSelect'].forEach(id => {
+            const sel = document.getElementById(id);
+            if (sel) sel.hidden = isSingle;
+            const dot = document.getElementById(id + 'Dot');
+            if (dot) dot.hidden = isSingle;
+        });
     }
 
     function watchServer(name) {
@@ -441,6 +464,10 @@ const App = (() => {
             updateSelDot('chartServerSelect', state.chartServer);
             watchServer(state.chartServer);
             refreshChart();
+            if (state.topServer === FOLLOW_CHART_KEY) {
+                updateSelDot('topServerSelect', state.topServer);
+                refreshTopLists();
+            }
         });
         el('chartDatasetSelect') && (el('chartDatasetSelect').onchange = () => {
             refreshChart();
@@ -450,12 +477,6 @@ const App = (() => {
             state.topServer = e.target.value;
             updateSelDot('topServerSelect', state.topServer);
             refreshTopLists();
-            state.feedServer = e.target.value === CLUSTER_KEY ? 'all' : e.target.value;
-            const feedSel = el('feedServerSelect');
-            if (feedSel) feedSel.value = state.feedServer;
-            updateSelDot('feedServerSelect', state.feedServer);
-            loadAndApplyFeedFilters();
-            Feed.render(state.feedServer, state.feedFilters);
         });
         el('feedServerSelect') && (el('feedServerSelect').onchange = e => {
             state.feedServer = e.target.value;
@@ -1118,7 +1139,8 @@ const App = (() => {
 
     // ---- Top lists ----------------------------------------------------------
     function renderTopLists() {
-        const top = state.top[state.topServer];
+        const effectiveServer = state.topServer === FOLLOW_CHART_KEY ? state.chartServer : state.topServer;
+        const top = state.top[effectiveServer];
         let items = [], colorClass = 'blue';
         if (top) {
             if (state.topTab === 'domains') { items = top.domains || []; colorClass = 'blue'; }
@@ -1201,13 +1223,14 @@ const App = (() => {
     }
 
     function refreshTopLists(init) {
+        const effectiveServer = state.topServer === FOLLOW_CHART_KEY ? state.chartServer : state.topServer;
         if (state.timeRange === 'LastHour' && !init) {
             renderTopLists();
             return;
         }
         const statsTypeMap = { domains: 'TopDomains', blocked: 'TopBlockedDomains', clients: 'TopClients' };
         const statsType = statsTypeMap[state.topTab] || 'TopDomains';
-        const cacheKey = state.topServer + ':' + state.timeRange + ':' + statsType;
+        const cacheKey = effectiveServer + ':' + state.timeRange + ':' + statsType;
         if (state.rangeCache[cacheKey]) {
             renderTopListsFromData(state.rangeCache[cacheKey], statsType);
             return;

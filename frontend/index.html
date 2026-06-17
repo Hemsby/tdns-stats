@@ -11,76 +11,80 @@
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-    <header class="topbar">
-        <div class="topbar-brand">
-            <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="10"/>
-                <circle cx="12" cy="12" r="4"/>
-                <line x1="12" y1="2" x2="12" y2="6"/>
-                <line x1="12" y1="18" x2="12" y2="22"/>
-                <line x1="2" y1="12" x2="6" y2="12"/>
-                <line x1="18" y1="12" x2="22" y2="12"/>
-            </svg>
-            <span class="brand-name">Technitium Statistics</span>
-        </div>
-        <nav class="main-tabs" id="mainTabs">
-            <button class="main-tab-btn active" data-tab="dashboard">
-                <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-                    <rect x="3" y="3" width="7" height="9"/>
-                    <rect x="14" y="3" width="7" height="5"/>
-                    <rect x="14" y="12" width="7" height="9"/>
-                    <rect x="3" y="16" width="7" height="5"/>
+    <div class="navbar">
+        <header class="topbar">
+            <div class="topbar-brand">
+                <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <circle cx="12" cy="12" r="4"/>
+                    <line x1="12" y1="2" x2="12" y2="6"/>
+                    <line x1="12" y1="18" x2="12" y2="22"/>
+                    <line x1="2" y1="12" x2="6" y2="12"/>
+                    <line x1="18" y1="12" x2="22" y2="12"/>
                 </svg>
-                Dashboard
-            </button>
-            <button class="main-tab-btn" data-tab="other-stats">
-                <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-                    <circle cx="11" cy="11" r="8"/>
-                    <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-                </svg>
-                Cache &amp; Blocked
-            </button>
-        </nav>
-        <div class="topbar-status" id="serverIndicators"></div>
-        <div class="topbar-right">
-            <span class="server-pill viewers dashboard-viewers" id="dashboardViewers" title="Active dashboard viewers">
-                <span class="pill-dot"></span>0 viewers
-            </span>
-            <div class="version-info">
-                <span class="version-pill" id="versionPill" title="View Changelog">v?.?.?</span>
-                <button class="icon-btn" id="checkUpdatesBtn" title="Check for updates" hidden>
-                    <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M8 3a5 5 0 014.95 4H12a.5.5 0 010 1H8.5a.5.5 0 01-.5-.5V4a.5.5 0 011 0v1.6A4 4 0 004 8a.5.5 0 000 1 5 5 0 015-5z"/><path d="M8 13a5 5 0 01-4.95-4H4a.5.5 0 010-1h3.5a.5.5 0 01.5.5v3.5a.5.5 0 01-1 0v-1.6A4 4 0 0012 8a.5.5 0 000-1 5 5 0 01-4 5z"/></svg>
-                </button>
-                <button class="icon-btn" id="updateBtn" title="Update available" hidden>
-                    <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M8 1a.5.5 0 01.5.5v11.793l3.146-3.147a.5.5 0 01.708.708l-4 4a.5.5 0 01-.708 0l-4-4a.5.5 0 01.708-.708L7.5 13.293V1.5A.5.5 0 018 1z"/></svg>
-                </button>
-                <span class="update-status" id="updateStatus" hidden></span>
+                <span class="brand-name">Technitium Statistics</span>
             </div>
-            <div class="theme-switcher" id="themeSwitcher">
-                <button class="theme-trigger" id="themeTrigger" title="Change theme">
-                    <!-- icon updated by JS to match active theme -->
+            <nav class="main-tabs" id="mainTabs">
+                <button class="main-tab-btn active" data-tab="dashboard">
+                    <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                        <rect x="3" y="3" width="7" height="9"/>
+                        <rect x="14" y="3" width="7" height="5"/>
+                        <rect x="14" y="12" width="7" height="9"/>
+                        <rect x="3" y="16" width="7" height="5"/>
+                    </svg>
+                    Dashboard
                 </button>
-                <div class="theme-dropdown" id="themeDropdown">
-                    <button class="theme-btn" data-theme="system">
-                        <svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor"><path d="M0 4s0-2 2-2h12s2 0 2 2v6s0 2-2 2h-4l1 2h1a.5.5 0 010 1H4a.5.5 0 010-1h1l1-2H2s-2 0-2-2zm1.398 0A1 1 0 001 4.5v5.086l.002.051c.014.24.117.48.307.67.19.189.43.293.691.293H14c.261 0 .501-.104.691-.293.19-.19.293-.43.307-.67L15 9.586V4.5a1 1 0 00-1-1H2a1 1 0 00-.602.5z"/></svg>
-                        System
+                <button class="main-tab-btn" data-tab="other-stats">
+                    <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                        <circle cx="11" cy="11" r="8"/>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                    </svg>
+                    Cache &amp; Blocked
+                </button>
+            </nav>
+            <div class="topbar-status" id="serverIndicators"></div>
+            <div class="topbar-right">
+                <span class="server-pill viewers dashboard-viewers" id="dashboardViewers" title="Active dashboard viewers">
+                    <span class="pill-dot"></span>0 viewers
+                </span>
+                <div class="version-info">
+                    <span class="version-pill" id="versionPill" title="View Changelog">v?.?.?</span>
+                    <button class="icon-btn" id="checkUpdatesBtn" title="Check for updates" hidden>
+                        <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M8 3a5 5 0 014.95 4H12a.5.5 0 010 1H8.5a.5.5 0 01-.5-.5V4a.5.5 0 011 0v1.6A4 4 0 004 8a.5.5 0 000 1 5 5 0 015-5z"/><path d="M8 13a5 5 0 01-4.95-4H4a.5.5 0 010-1h3.5a.5.5 0 01.5.5v3.5a.5.5 0 01-1 0v-1.6A4 4 0 0012 8a.5.5 0 000-1 5 5 0 01-4 5z"/></svg>
                     </button>
-                    <button class="theme-btn" data-theme="light">
-                        <svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor"><path d="M8 11a3 3 0 100-6 3 3 0 000 6zm0 1a4 4 0 100-8 4 4 0 000 8zm.5-9.5v-1a.5.5 0 00-1 0v1a.5.5 0 001 0zm0 9v1a.5.5 0 01-1 0v-1a.5.5 0 011 0zm-7.5-4.5h-1a.5.5 0 000 1h1a.5.5 0 000-1zm9 0h1a.5.5 0 010 1h-1a.5.5 0 010-1zM3.05 3.757a.5.5 0 00-.707.707l.707.707a.5.5 0 00.707-.707l-.707-.707zm9.193 9.193a.5.5 0 00-.707.707l.707.707a.5.5 0 00.707-.707l-.707-.707zm-9.9 0l-.707.707a.5.5 0 00.707.707l.707-.707a.5.5 0 00-.707-.707zm9.193-9.193l.707-.707a.5.5 0 10-.707-.707l-.707.707a.5.5 0 10.707.707z"/></svg>
-                        Light
+                    <button class="icon-btn" id="updateBtn" title="Update available" hidden>
+                        <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M8 1a.5.5 0 01.5.5v11.793l3.146-3.147a.5.5 0 01.708.708l-4 4a.5.5 0 01-.708 0l-4-4a.5.5 0 01.708-.708L7.5 13.293V1.5A.5.5 0 018 1z"/></svg>
                     </button>
-                    <button class="theme-btn" data-theme="dark">
-                        <svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor"><path d="M6 .278a.768.768 0 01.08.858 7.208 7.208 0 00-.878 3.46c0 4.021 3.278 7.277 7.318 7.277.527 0 1.04-.055 1.533-.16a.787.787 0 01.81.316.733.733 0 01-.031.893A8.349 8.349 0 018.344 16C3.734 16 0 12.286 0 7.71 0 4.266 2.114 1.312 5.124.06A.752.752 0 016 .278z"/></svg>
-                        Dark
-                    </button>
+                    <span class="update-status" id="updateStatus" hidden></span>
                 </div>
+                <div class="theme-switcher" id="themeSwitcher">
+                    <button class="theme-trigger" id="themeTrigger" title="Change theme">
+                        <!-- icon updated by JS to match active theme -->
+                    </button>
+                    <div class="theme-dropdown" id="themeDropdown">
+                        <button class="theme-btn" data-theme="system">
+                            <svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor"><path d="M0 4s0-2 2-2h12s2 0 2 2v6s0 2-2 2h-4l1 2h1a.5.5 0 010 1H4a.5.5 0 010-1h1l1-2H2s-2 0-2-2zm1.398 0A1 1 0 001 4.5v5.086l.002.051c.014.24.117.48.307.67.19.189.43.293.691.293H14c.261 0 .501-.104.691-.293.19-.19.293-.43.307-.67L15 9.586V4.5a1 1 0 00-1-1H2a1 1 0 00-.602.5z"/></svg>
+                            System
+                        </button>
+                        <button class="theme-btn" data-theme="light">
+                            <svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor"><path d="M8 11a3 3 0 100-6 3 3 0 000 6zm0 1a4 4 0 100-8 4 4 0 000 8zm.5-9.5v-1a.5.5 0 00-1 0v1a.5.5 0 001 0zm0 9v1a.5.5 0 01-1 0v-1a.5.5 0 011 0zm-7.5-4.5h-1a.5.5 0 000 1h1a.5.5 0 000-1zm9 0h1a.5.5 0 010 1h-1a.5.5 0 010-1zM3.05 3.757a.5.5 0 00-.707.707l.707.707a.5.5 0 00.707-.707l-.707-.707zm9.193 9.193a.5.5 0 00-.707.707l.707.707a.5.5 0 00.707-.707l-.707-.707zm-9.9 0l-.707.707a.5.5 0 00.707.707l.707-.707a.5.5 0 00-.707-.707zm9.193-9.193l.707-.707a.5.5 0 10-.707-.707l-.707.707a.5.5 0 10.707.707z"/></svg>
+                            Light
+                        </button>
+                        <button class="theme-btn" data-theme="dark">
+                            <svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor"><path d="M6 .278a.768.768 0 01.08.858 7.208 7.208 0 00-.878 3.46c0 4.021 3.278 7.277 7.318 7.277.527 0 1.04-.055 1.533-.16a.787.787 0 01.81.316.733.733 0 01-.031.893A8.349 8.349 0 018.344 16C3.734 16 0 12.286 0 7.71 0 4.266 2.114 1.312 5.124.06A.752.752 0 016 .278z"/></svg>
+                            Dark
+                        </button>
+                    </div>
+                </div>
+                <span class="conn-indicator" id="connIndicator" title="Stream connection">
+                    <span class="conn-dot"></span>
+                </span>
+                <span class="last-updated" id="lastUpdated">Connecting...</span>
             </div>
-            <span class="conn-indicator" id="connIndicator" title="Stream connection">
-                <span class="conn-dot"></span>
-            </span>
-            <span class="last-updated" id="lastUpdated">Connecting...</span>
-        </div>
-    </header>
+        </header>
+
+        <nav class="server-tabs" id="serverTabs"></nav>
+    </div>
 
     <div class="update-overlay" id="updateOverlay" hidden>
         <div class="update-overlay-content">
@@ -101,8 +105,6 @@
     </div>
 
     <div id="dashboardView">
-        <nav class="server-tabs" id="serverTabs"></nav>
-
         <main class="content">
             <section class="cluster-cards" id="clusterCards"></section>
 

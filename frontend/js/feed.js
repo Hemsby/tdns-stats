@@ -20,16 +20,43 @@ const Feed = (() => {
         render(lastFilter, lastBlocked);
     }
 
-    function add(serverName, newEntries) {
+    function add(serverName, newEntries, cursorReset) {
+        if (cursorReset) {
+            // Log rotated — clear all seen IDs and entries for this server
+            let writeIdx = 0;
+            for (let i = 0; i < entries.length; i++) {
+                if (entries[i]._server === serverName) {
+                    seen.delete(entries[i]._server + ':' + entries[i].rowNumber);
+                } else {
+                    entries[writeIdx++] = entries[i];
+                }
+            }
+            entries.length = writeIdx;
+        }
+
         const deduped = [];
         for (const e of newEntries) {
             const id = serverName + ':' + e.rowNumber;
             if (seen.has(id)) continue;
             seen.add(id);
-            deduped.push({ ...e, _server: serverName });
+            deduped.push({ ...e, _server: serverName, _time: new Date(e.timestamp).getTime() });
         }
         if (deduped.length === 0) return;
-        entries.unshift(...deduped);
+
+        // Insert by timestamp descending (primary), with rowNumber descending
+        // within the same server as a tiebreaker for equal timestamps.
+        // Timestamp MUST take priority over rowNumber — entries from one server
+        // that arrive with a newer timestamp than another server's existing entries
+        // must go to the front, not to the old position of that server's prior entries.
+        for (const entry of deduped) {
+            const pos = entries.findIndex(e =>
+                e._time < entry._time ||
+                (e._time === entry._time && e._server === serverName && e.rowNumber < entry.rowNumber)
+            );
+            entries.splice(pos === -1 ? entries.length : pos, 0, entry);
+        }
+
+        // Evict oldest entries beyond MAX_ENTRIES
         if (entries.length > MAX_ENTRIES) {
             const evicted = entries.splice(MAX_ENTRIES);
             for (const ev of evicted) {
@@ -90,19 +117,13 @@ const Feed = (() => {
             return;
         }
 
-        const existing = list.querySelectorAll('.feed-row');
-        const existingIds = new Set([...existing].map(el => el.dataset.id));
-
-        // Build fragment so we do one DOM insertion per batch, not one per row
         const frag = document.createDocumentFragment();
-        let added = 0;
-        for (const e of filtered.slice(0, MAX_ENTRIES)) {
-            const id = `${e._server}:${e.rowNumber}`;
-            if (existingIds.has(id)) continue;
-
+        const max = Math.min(filtered.length, MAX_ENTRIES);
+        for (let i = 0; i < max; i++) {
+            const e = filtered[i];
             const row = document.createElement('div');
             row.className = 'feed-row ' + rowClass(e);
-            row.dataset.id = id;
+            row.dataset.id = `${e._server}:${e.rowNumber}`;
 
             const ts    = formatTime(e.timestamp);
             const srvCls  = colorMap[e._server] ? ' ' + colorMap[e._server] : '';
@@ -140,17 +161,9 @@ const Feed = (() => {
                 '<span class="feed-type '   + badgeCls + '">'            + esc(badgeText) + '</span>';
 
             frag.appendChild(row);
-            added++;
         }
 
-        if (added > 0) {
-            const placeholder = list.querySelector('.no-data');
-            if (placeholder) placeholder.remove();
-            list.insertBefore(frag, list.firstChild);
-            // Trim overflow rows
-            const rows = list.querySelectorAll('.feed-row');
-            for (let i = MAX_ENTRIES; i < rows.length; i++) rows[i].remove();
-        }
+        list.replaceChildren(frag);
     }
 
     function getLatClass(n) {
