@@ -6,17 +6,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
-## [2.0.5] - 2026-06-17
+## [2.1.0] - 2026-06-17
+
+### Added
+
+- Top Stats card now defaults to "Follow chart" on aggregate (Cluster / All servers) tabs, showing data for the same server selected in the Query Chart.
+
+### Changed
+
+- Server selection dropdowns (Chart, Top Stats, Feed) are now hidden on individual server tabs since they are not applicable.
+- Navbar (topbar and server tabs) now properly stays fixed at the top of the page when scrolling on desktop.
 
 ### Fixed
 
-- Live feed no longer potentially shows duplicate (past) entries when returning from a backgrounded tab - entries are de-duplicated before entering the display queue and are kept in correct chronological order.
+- Live feed no longer clears valid entries when a server's query log rowNumber counter drifts backward — cursor comparison now uses timestamps instead of rowNumbers, eliminating false log rotation detections.
+- Live feed entries from different servers are now correctly ordered by timestamp instead of by arrival order.
+
+## [2.0.5] - 2026-06-17
 
 ### Changed
 
 - Perf card now displays cache Hit Rate, Miss Rate, and Population immediately from dashboard stats, without waiting for RTT samples to arrive.
 - All time range data (including LastDay, LastWeek, LastMonth, LastYear) is now continuously pushed via SSE from a background server-side poller, eliminating HTTP fetch requests from the browser entirely.
 - All ranges now use only native Technitium API range types instead of the Custom range type. This prevents the NRE scenario entirely as the only trigger path is now completely removed.
+
+### Fixed
+
+- Live feed no longer potentially shows duplicate (past) entries when returning from a backgrounded tab - entries are de-duplicated before entering the display queue and are kept in correct arrival order.
 
 ## [2.0.4] - 2026-06-12
 
