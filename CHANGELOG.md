@@ -14,12 +14,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
-- Server selection dropdowns (Chart, Top Stats, Feed) are now hidden on individual server tabs since they are not applicable.
+- Server selection dropdowns (Chart, Top Stats, Feed) are now hidden on individual server/node tabs since they are not applicable.
 - Navbar (topbar and server tabs) now properly stays fixed at the top of the page when scrolling on desktop.
 
 ### Fixed
 
-- Live feed no longer clears valid entries when a server's query log rowNumber counter drifts backward — cursor comparison now uses timestamps instead of rowNumbers, eliminating false log rotation detections.
+- Live feed no longer clears valid entries when a server's query log rowNumber counter drifts backward - cursor comparison now uses timestamps instead of rowNumbers, eliminating false log rotation detections.
 - Live feed entries from different servers are now correctly ordered by timestamp instead of by arrival order.
 
 ## [2.0.5] - 2026-06-17
