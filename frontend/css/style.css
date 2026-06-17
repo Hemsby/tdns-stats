@@ -300,7 +300,9 @@ main { position: relative; z-index: 1; }
 /* Offset fixed navbar height on desktop */
 @media (min-width: 769px) {
     #dashboardView { padding-top: 96px; }
+    #cacheBlockedView { padding-top: 96px; }
 }
+
 
 .stab {
     padding: 10px 18px; background: none; border: none; border-bottom: 2px solid transparent;
@@ -666,6 +668,9 @@ main { position: relative; z-index: 1; }
     flex-direction: column;
     gap: 4px;
 }
+
+
+
 .record-meta {
     color: var(--text-dim);
     font-size: 10px;
