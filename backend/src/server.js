@@ -9,9 +9,8 @@ const fs        = require('fs');
 const yaml      = require('js-yaml');
 const fetch     = require('node-fetch');
 const Poller    = require('./poller');
-const { getUnsafeSeconds } = require('./poller');
 const Updater   = require('./updater');
-const { listQueryLogApps, discoverQueryLogsApp, getCacheMaxEntries, getDashboard, getTopStats, listCache, getMetrics, resolveBlockedDomain } = require('./technitium');
+const { listQueryLogApps, discoverQueryLogsApp, getCacheMaxEntries, listCache, resolveBlockedDomain } = require('./technitium');
 
 const PACKAGE = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf8'));
 const VERSION = PACKAGE.version;
@@ -180,14 +179,6 @@ async function start() {
 
     const app = express();
 
-    function getValidatedRangeType(type) {
-        return VALID_TYPES.has(type) ? type : 'LastHour';
-    }
-
-    function resolveServer(serverName) {
-        return serverName === CLUSTER_KEY ? servers[0] : servers.find(s => s.name === serverName);
-    }
-
     app.use(helmet({
         contentSecurityPolicy: {
             useDefaults: false,
@@ -277,66 +268,17 @@ async function start() {
     app.get('/api/config', (req, res) => {
         const fallback = config.serverColors || ['blue', 'green', 'ora', 'pur', 'teal', 'yel'];
         const serverColors = {};
+        const cacheMaxEntries = {};
         servers.forEach((s, i) => {
             serverColors[s.name] = s.color || (Array.isArray(fallback) ? fallback[i % fallback.length] : 'blue');
+            cacheMaxEntries[s.name] = s.cacheMaxEntries || 0;
         });
         res.json({
             maxEntries: config.feed?.maxEntries || 200,
             serverColors,
+            cacheMaxEntries,
         });
     });
-
-    const VALID_TYPES = new Set(['LastHour', 'LastDay', 'LastWeek', 'LastMonth', 'LastYear']);
-    const VALID_STATS = new Set(['TopDomains', 'TopBlockedDomains', 'TopClients']);
-
-    app.get('/api/metrics', async (req, res) => {
-        res.set('Cache-Control', 'no-store');
-        try {
-            const results = await Promise.allSettled(servers.map(s => getMetrics(s)));
-            const uptimestamps = {};
-            servers.forEach((s, i) => {
-                if (results[i].status === 'fulfilled')
-                    uptimestamps[s.name] = results[i].value.uptimestamp || null;
-            });
-            res.json({ uptimestamps });
-        } catch (e) { res.status(502).json({ error: e.message }); }
-    });
-
-    async function waitIfUnsafe() {
-        if (servers.length === 0) return;
-        const results = await Promise.allSettled(servers.map(s => getMetrics(s)));
-        const uptimestamps = {};
-        servers.forEach((s, i) => {
-            if (results[i].status === 'fulfilled')
-                uptimestamps[s.name] = results[i].value.uptimestamp || null;
-        });
-        const unsafe = getUnsafeSeconds(uptimestamps);
-        if (unsafe.size === 0) {
-            return;
-        }
-
-        const nowMs = Date.now();
-        const nowSec = Math.floor(nowMs / 1000) % 60;
-        const msOffset = nowMs % 1000;
-
-        if (unsafe.has(nowSec)) {
-            const waitMs = (1000 - msOffset) + 500;
-            await new Promise(r => setTimeout(r, Math.min(waitMs, 2000)));
-            return;
-        }
-
-        for (let s = nowSec + 1; s < nowSec + 60; s++) {
-            if (unsafe.has(s % 60)) {
-                const distMs = (s - nowSec) * 1000 - msOffset;
-                if (distMs >= 1500) {
-                    return;
-                }
-                const waitMs = distMs + 1500;
-                await new Promise(r => setTimeout(r, Math.min(waitMs, 2000)));
-                return;
-            }
-        }
-    }
 
     app.get('/api/watch-server', (req, res) => {
         const name = req.query.server;
@@ -344,31 +286,6 @@ async function start() {
             poller.setWatchedServer(name);
         }
         res.json({ ok: true });
-    });
-
-    app.get('/api/dashboard', async (req, res) => {
-        const { server: serverName, type, tz } = req.query;
-        const rangeType = getValidatedRangeType(type);
-        const server = resolveServer(serverName);
-        if (!server) return res.status(404).json({ error: 'Unknown server' });
-        if (rangeType !== 'LastHour') await waitIfUnsafe();
-        try {
-            const data = await getDashboard(server, rangeType, serverName === CLUSTER_KEY ? 'cluster' : null, parseInt(tz) || 0);
-            res.json(data);
-        } catch (e) { res.status(502).json({ error: e.message }); }
-    });
-
-    app.get('/api/top', async (req, res) => {
-        const { server: serverName, type, statsType, tz } = req.query;
-        if (!VALID_STATS.has(statsType)) return res.status(400).json({ error: 'Invalid statsType' });
-        const rangeType = getValidatedRangeType(type);
-        const server = resolveServer(serverName);
-        if (!server) return res.status(404).json({ error: 'Unknown server' });
-        if (rangeType !== 'LastHour') await waitIfUnsafe();
-        try {
-            const data = await getTopStats(server, statsType, config.top?.limit || 20, rangeType, serverName === CLUSTER_KEY ? 'cluster' : null, parseInt(tz) || 0);
-            res.json(data);
-        } catch (e) { res.status(502).json({ error: e.message }); }
     });
 
     app.get('/api/cache/search', async (req, res) => {

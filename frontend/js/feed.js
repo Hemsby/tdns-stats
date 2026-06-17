@@ -3,6 +3,7 @@
 const Feed = (() => {
     let MAX_ENTRIES = 200;
     const entries = [];
+    const seen   = new Set();
 
     let renderTimer  = null;
     let lastFilter   = 'all';
@@ -20,10 +21,22 @@ const Feed = (() => {
     }
 
     function add(serverName, newEntries) {
+        const deduped = [];
         for (const e of newEntries) {
-            entries.unshift({ ...e, _server: serverName });
+            const id = serverName + ':' + e.rowNumber;
+            if (seen.has(id)) continue;
+            seen.add(id);
+            deduped.push({ ...e, _server: serverName });
         }
-        if (entries.length > MAX_ENTRIES) entries.length = MAX_ENTRIES;
+        if (deduped.length === 0) return;
+        entries.unshift(...deduped);
+        if (entries.length > MAX_ENTRIES) {
+            const evicted = entries.splice(MAX_ENTRIES);
+            for (const ev of evicted) {
+                const id = ev._server + ':' + ev.rowNumber;
+                seen.delete(id);
+            }
+        }
     }
 
     // Debounce: batch rapid feed updates from multiple servers into one render

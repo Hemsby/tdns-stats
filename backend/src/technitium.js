@@ -51,40 +51,33 @@ async function getSessionInfo(server) {
     };
 }
 
-function getLocalMidnightDate(tzOffset, daysAgo) {
-    const now = Date.now();
-    const localOffsetMs = -tzOffset * 60 * 1000;
-    const dayMs = 24 * 3600 * 1000;
-    return new Date(Math.floor((now + localOffsetMs) / dayMs) * dayMs - localOffsetMs - daysAgo * dayMs);
+function normalizeLabels(mainChartData, type) {
+    if (!mainChartData?.labels?.length) return;
+    const count = mainChartData.labels.length;
+    const CFG = {
+        LastHour:  { start: 1, init: d => d.setUTCSeconds(0, 0),           sub: (d, i) => d.setUTCMinutes(d.getUTCMinutes() - i), fmt: 'HH:mm' },
+        LastDay:   { start: 1, init: d => d.setUTCMinutes(0, 0, 0),      sub: (d, i) => d.setUTCHours(d.getUTCHours() - i),  fmt: 'HH:mm' },
+        LastWeek:  { start: 0, init: d => d.setUTCHours(0, 0, 0, 0),     sub: (d, i) => d.setUTCDate(d.getUTCDate() - i),   fmt: 'dd/MM' },
+        LastMonth: { start: 0, init: d => d.setUTCHours(0, 0, 0, 0),     sub: (d, i) => d.setUTCDate(d.getUTCDate() - i),   fmt: 'dd/MM' },
+        LastYear:  { start: 1, init: d => { d.setUTCHours(12,0,0,0); d.setUTCDate(1); }, sub: (d, i) => d.setUTCMonth(d.getUTCMonth() - i), fmt: 'MM/yyyy' },
+    };
+    const cfg = CFG[type];
+    if (!cfg) return;
+    const now = new Date();
+    cfg.init(now);
+    const labels = [];
+    for (let i = count - 1 + cfg.start; i >= cfg.start; i--) { const d = new Date(now); cfg.sub(d, i); labels.push(d.toISOString()); }
+    mainChartData.labels = labels;
+    mainChartData.labelFormat = cfg.fmt;
 }
-
-function getCustomDateParams(tzOffset, days) {
-    const start = getLocalMidnightDate(tzOffset, days);
-    const end = getLocalMidnightDate(tzOffset, 0);
-    return 'start=' + start.toISOString() + '&end=' + end.toISOString();
-}
-
-function trimLastDataPoint(mainChartData) {
-    if (!mainChartData || !mainChartData.labels || !mainChartData.datasets) return;
-    mainChartData.labels.pop();
-    for (const ds of mainChartData.datasets) {
-        if (ds.data) ds.data.pop();
-    }
-}
-
-const CUSTOM_RANGES = { LastWeek: 7, LastMonth: 31 };
 
 async function getDashboard(server, type, node, tzOffset) {
-    const days = CUSTOM_RANGES[type];
-    let path = days
-        ? 'api/dashboard/stats/get?type=Custom&utc=true&' + getCustomDateParams(tzOffset, days)
-        : 'api/dashboard/stats/get?type=' + (type || 'LastHour') + '&utc=true';
+    const resolvedType = type || 'LastHour';
+    let path = 'api/dashboard/stats/get?type=' + resolvedType + '&utc=true';
     if (node) path += '&node=' + encodeURIComponent(node);
     const data = await apiGet(server, path);
-    if (days) {
-        trimLastDataPoint(data.mainChartData);
-        data.mainChartData.tzOffset = tzOffset;
-    }
+    normalizeLabels(data.mainChartData, resolvedType);
+    if (data.mainChartData) data.mainChartData.tzOffset = tzOffset;
     return data;
 }
 
@@ -163,17 +156,10 @@ async function getCacheMaxEntries(server) {
     } catch (_) { return 0; }
 }
 
-async function getTopStats(server, statsType, limit, type, node, tzOffset) {
-    const days = CUSTOM_RANGES[type];
-    let path = days
-        ? 'api/dashboard/stats/getTop?type=Custom&utc=true&statsType=' + statsType + '&limit=' + limit + '&' + getCustomDateParams(tzOffset, days)
-        : 'api/dashboard/stats/getTop?type=' + (type || 'LastHour') + '&utc=true&statsType=' + statsType + '&limit=' + limit;
+async function getTopStats(server, statsType, limit, type, node) {
+    let path = 'api/dashboard/stats/getTop?type=' + (type || 'LastHour') + '&utc=true&statsType=' + statsType + '&limit=' + limit;
     if (node) path += '&node=' + encodeURIComponent(node);
     return apiGet(server, path);
-}
-
-async function getMetrics(server) {
-    return apiGet(server, 'api/dashboard/metrics/json');
 }
 
 async function listCache(server, domain) {
@@ -315,4 +301,4 @@ async function resolveBlockedDomain(server, domain) {
     };
 }
 
-module.exports = { getSessionInfo, getDashboard, getSettings, getClusterState, listQueryLogApps, discoverQueryLogsApp, getQueryLogs, getRttSample, getCacheMaxEntries, getTopStats, getMetrics, listCache, resolveBlockedDomain };
+module.exports = { getSessionInfo, getDashboard, getSettings, getClusterState, listQueryLogApps, discoverQueryLogsApp, getQueryLogs, getRttSample, getCacheMaxEntries, getTopStats, listCache, resolveBlockedDomain };

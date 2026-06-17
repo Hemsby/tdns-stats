@@ -226,7 +226,9 @@ const App = (() => {
             state.rangeCache[key] = msg.data;
             if (state.timeRange === msg.range && state.chartServer === msg.server) {
                 hideRangeLoading();
-                Charts.updateFromData(msg.data, getDatasetMode());
+                const data = msg.data;
+                if (data.mainChartData) data.mainChartData.tzOffset = new Date().getTimezoneOffset();
+                Charts.updateFromData(data, getDatasetMode());
             }
         } else if (msg.type === 'range-top') {
             state.rangeCache[msg.server + ':' + msg.range + ':TopDomains']        = { topDomains:        msg.data.domains || [] };
@@ -1050,6 +1052,20 @@ const App = (() => {
         const card = document.createElement('div');
         card.className = 'srv-card perf-card';
 
+        const node = state.nodes[name];
+        const st = node?.stats?.stats || {};
+        const cachedEntries = st.cachedEntries || 0;
+        const totalCached = st.totalCached || 0;
+        const totalRecursive = st.totalRecursive || 0;
+        const denominator = totalRecursive + totalCached;
+        const statsHitRate = denominator > 0 ? Math.round(totalCached / denominator * 100) : 0;
+
+        const cacheMax = state.cacheMaxEntries?.[name] || 0;
+        const cachePopHtml = cacheMax > 0
+            ? Math.round(cachedEntries / cacheMax * 100) + '%'
+            : fmtNum(cachedEntries);
+        const cachePopLabel = cacheMax > 0 ? 'Cache Pop.' : 'Entries';
+
         if (!perf) {
             card.innerHTML =
                 '<div class="srv-card-header">' +
@@ -1065,22 +1081,17 @@ const App = (() => {
                 '</div>' +
                 '<div class="srv-card-role" style="margin-top:6px"><span class="perf-section-label">Cache</span></div>' +
                 '<div class="srv-stats-grid">' +
-                statMini('Hit Rate',  '--', 'green') +
-                statMini('Miss Rate', '--', 'red') +
-                statMini('Entries',   '--', 'teal') +
-                statMini('Impact',    '--', 'pur') +
+                statMini('Hit Rate',     statsHitRate + '%',     'green') +
+                statMini('Miss Rate',    (100 - statsHitRate) + '%', 'red') +
+                statMini(cachePopLabel,  cachePopHtml,      'teal') +
+                statMini('Impact',       '--',              'pur') +
                 '</div>';
             return card;
         }
 
         const rtt   = perf.rtt   || {};
-        const cache = perf.cache || {};
-
-        const cachePopHtml  = cache.maxEntries > 0
-            ? Math.round(cache.entries / cache.maxEntries * 100) + '%'
-            : fmtNum(cache.entries);
-        const cachePopLabel = cache.maxEntries > 0 ? 'Cache Pop.' : 'Entries';
-        const missRate = 100 - (cache.hitRate || 0);
+        const hitRate = perf.cache?.hitRate || 0;
+        const missRate = parseFloat((100 - hitRate).toFixed(1));
 
         card.innerHTML =
             '<div class="srv-card-header">' +
@@ -1096,10 +1107,10 @@ const App = (() => {
             '</div>' +
             '<div class="srv-card-role" style="margin-top:6px"><span class="perf-section-label">Cache</span></div>' +
             '<div class="srv-stats-grid">' +
-            statMini('Hit Rate',    cache.hitRate + '%',                              'green') +
-            statMini('Miss Rate',   + missRate.toFixed(1) + '%',                      'red') +
-            statMini(cachePopLabel, cachePopHtml,                                     'teal') +
-            statMini('Impact',      fmtMs(perf.impact),                               'pur') +
+            statMini('Hit Rate',    hitRate + '%',     'green') +
+            statMini('Miss Rate',   missRate + '%',     'red') +
+            statMini(cachePopLabel, cachePopHtml,                  'teal') +
+            statMini('Impact',      fmtMs(perf.impact),            'pur') +
             '</div>';
 
         return card;
@@ -1181,18 +1192,12 @@ const App = (() => {
         const cacheKey = state.chartServer + ':' + state.timeRange;
         if (state.rangeCache[cacheKey]) {
             hideRangeLoading();
-            Charts.updateFromData(state.rangeCache[cacheKey], getDatasetMode());
+            const data = state.rangeCache[cacheKey];
+            if (data.mainChartData) data.mainChartData.tzOffset = new Date().getTimezoneOffset();
+            Charts.updateFromData(data, getDatasetMode());
             return;
         }
         showRangeLoading();
-        fetch('/api/dashboard?server=' + encodeURIComponent(state.chartServer) + '&type=' + state.timeRange + '&tz=' + new Date().getTimezoneOffset())
-            .then(r => r.json())
-            .then(data => {
-                state.rangeCache[cacheKey] = data;
-                hideRangeLoading();
-                Charts.updateFromData(data, getDatasetMode());
-            })
-            .catch(() => { hideRangeLoading(); });
     }
 
     function refreshTopLists(init) {
@@ -1208,13 +1213,6 @@ const App = (() => {
             return;
         }
         document.getElementById('topContent').innerHTML = '<div class="no-data">Waiting for data…</div>';
-        fetch('/api/top?server=' + encodeURIComponent(state.topServer) + '&type=' + state.timeRange + '&statsType=' + statsType + '&tz=' + new Date().getTimezoneOffset())
-            .then(r => r.json())
-            .then(data => {
-                state.rangeCache[cacheKey] = data;
-                renderTopListsFromData(data, statsType);
-            })
-            .catch(() => {});
     }
 
     // ---- Helpers ------------------------------------------------------------
@@ -1658,6 +1656,7 @@ const App = (() => {
             .then(r => r.json())
             .then(cfg => {
                 if (cfg.serverColors && typeof cfg.serverColors === 'object') state.serverColorMap = cfg.serverColors;
+                if (cfg.cacheMaxEntries && typeof cfg.cacheMaxEntries === 'object') state.cacheMaxEntries = cfg.cacheMaxEntries;
                 Feed.init(cfg.maxEntries);
             })
             .catch(() => {})
