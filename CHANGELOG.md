@@ -6,11 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [2.0.5] - 2026-06-17
+
+### Fixed
+
+- Live Feed no longer potentially shows duplicate (past) entries when returning from a backgrounded tab - entries are de-duplicated before entering the display queue and are kept in correct chronological order.
+
+### Changed
+
+- Perf card now displays cache Hit Rate, Miss Rate, and Cache Pop immediately from dashboard stats, without waiting for RTT samples to arrive.
+- All time range data (including LastDay, LastWeek, LastMonth, LastYear) is now continuously pushed via SSE from a background server-side poller, eliminating HTTP fetch requests from the browser entirely.
+- All ranges now use only native Technitium API range types instead of the Custom range type. This prevents the NRE scenario completely as the only trigger path is now completely removed.
+
 ## [2.0.4] - 2026-06-12
 
 ### Changed
 
-- Last Day chart and Top Stats data is now pushed from the server instead of being polled by the browser. This prevents the NRE crash more reliably — the fix no longer relies on a browser timer that can drift or be throttled when the tab is backgrounded.
+- Last Day chart and Top Stats data is now pushed from the server instead of being polled by the browser. This prevents the NRE crash more reliably - the fix no longer relies on a browser timer that can drift or be throttled when the tab is backgrounded.
 
 ## [2.0.3] - 2026-06-12
 
