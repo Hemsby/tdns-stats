@@ -95,7 +95,7 @@ services:
     restart: unless-stopped
 ```
 
-Replace `<path-to-project>` with the path where you cloned the project to on the host. This mounts the full project directory into the container, which is required for the auto-update feature to rebuild the container using your host compose file.
+Replace `<path-to-project>` with the path where you cloned the project to on the host. This mounts the full project directory into the container, which is required for the auto-update feature to rebuild the container using the host compose file.
 
 ### 3. Build and Start
 
