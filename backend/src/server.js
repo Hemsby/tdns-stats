@@ -270,7 +270,7 @@ async function start() {
         const serverColors = {};
         const cacheMaxEntries = {};
         servers.forEach((s, i) => {
-            serverColors[s.name] = s.color || (Array.isArray(fallback) ? fallback[i % fallback.length] : 'blue');
+            serverColors[s.name] = s.color || fallback[i % fallback.length];
             cacheMaxEntries[s.name] = s.cacheMaxEntries || 0;
         });
         res.json({

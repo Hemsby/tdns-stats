@@ -57,6 +57,7 @@ class Poller {
         this._feedTimer  = setInterval(() => this._pollFeed(),        this.cfg.feedInterval);
         this._topTimer   = setInterval(() => this._pollTop(),         this.cfg.topInterval);
         this._perfTimer  = setInterval(() => this._pollPerformance(), this.cfg.perfInterval);
+        this._rangeTimer = setInterval(() => this._pollRangeData(), this.cfg.rangeInterval);
         this._longRangeTimer = setInterval(() => this._pollLongRangeData(), 900000);
         this._running    = true;
     }
@@ -92,7 +93,6 @@ class Poller {
         this._watchedServer = name;
         const server = this.servers.find(s => s.name === name);
         if (!server) return;
-        if (this._rangeTimer) { clearTimeout(this._rangeTimer); this._rangeTimer = null; }
         this._pollRangeData();
         this._pollLongRangeData();
     }
@@ -130,14 +130,10 @@ class Poller {
         const primary = this._watchedServer
             ? this.servers.find(s => s.name === this._watchedServer)
             : this.servers[0];
-        if (!primary) {
-            this._rangeTimer = setTimeout(() => this._pollRangeData(), this.cfg.rangeInterval);
-            return;
-        }
+        if (!primary) return;
 
         await this._fetchRangeData('LastDay', primary, false);
         if (this.clusterServer) await this._fetchRangeData('LastDay', this.clusterServer, true);
-        this._rangeTimer = setTimeout(() => this._pollRangeData(), this.cfg.rangeInterval);
     }
 
     async _pollLongRangeData() {
