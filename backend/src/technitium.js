@@ -226,6 +226,9 @@ function normalizeExtraKey(key) {
     return String(key || '').trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
+// Parses semicolon/newline-separated key=value or key:value strings,
+// handling multi-line values where a line after a key with no value
+// becomes that key's value.
 function parseDnsClientExtraText(value) {
     if (!value) return {};
     const raw = String(value);

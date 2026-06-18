@@ -870,7 +870,7 @@ const App = (() => {
         const cluster = state.nodes[CLUSTER_KEY];
         if (!cluster) return;
 
-        // Aggregate stat card (full width)
+        // Aggregate stat card
         container.appendChild(buildAggregateCard(cluster));
 
         // Per-node stat cards
