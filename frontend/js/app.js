@@ -393,6 +393,9 @@ const App = (() => {
 
         populateSelect('domainSearchServerSelect', options, selected);
         state.domainSearchServer = selected;
+
+        const sel = document.getElementById('domainSearchServerSelect');
+        if (sel) sel.hidden = state.serverNames.length <= 1;
     }
 
     function injectSelDot(selectId) {
