@@ -351,7 +351,6 @@ class Poller {
                         mean:    +mean.toFixed(2),
                         p99:     +p99.toFixed(2),
                         jitter:  +jitter.toFixed(2),
-                        samples: rtts.length
                     },
                     cache: {
                         hitRate:    +hitRate.toFixed(1),
