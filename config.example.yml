@@ -47,9 +47,6 @@ feed:
 top:
   limit: 20            # number of items in top domains/clients lists
 
-rtt:
-  sampleSize: 500      # number of log entries scanned per RTT sample
-
 # Optional: override the default auto-assigned colour order
 # serverColors:
 #   - blue

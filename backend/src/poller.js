@@ -15,13 +15,11 @@ class Poller {
             perfInterval:  (cfg?.poll?.perfInterval  || 30) * 1000,
             rangeInterval: 60000,
             topLimit:      cfg?.top?.limit      || 20,
-            rttSample:     cfg?.rtt?.sampleSize || 500,
             feedPageSize:  cfg?.feed?.pageSize  || 20,
         };
         this.state     = {};
         this.state.perf  = {};
         this.state.rangeData = {};
-        this._jitterState  = {};
         this.feedCursors   = {};
         this._feedPollInProgress = false;
         this.clusterServer = null;
@@ -306,16 +304,30 @@ class Poller {
     async _pollPerformance() {
         for (const server of this.servers) {
             try {
-                const rtts = await getRttSample(server, this.cfg.rttSample);
-                if (rtts.length === 0) continue;
+                const st = this.state.nodes?.[server.name]?.stats?.stats || {};
+                const totalRecursive = st.totalRecursive || 0;
+
+                // No stats yet or zero recursive in the last hour — nothing to compute
+                if (!totalRecursive) {
+                    delete this.state.perf[server.name];
+                    this.broadcast({ type: 'perf', server: server.name, data: null });
+                    continue;
+                }
+
+                const sampleSize = Math.min(totalRecursive, 500);
+                const rtts = await getRttSample(server, sampleSize);
+                if (rtts.length === 0) {
+                    delete this.state.perf[server.name];
+                    this.broadcast({ type: 'perf', server: server.name, data: null });
+                    continue;
+                }
 
                 // 1. Calculate Jitter (RFC 3550 EWMA)
-                // We do this before sorting to maintain temporal order (newest to oldest)
-                let j = this._jitterState[server.name] || 0;
+                // Computed fresh each cycle from the current batch's temporal order (newest to oldest)
+                let j = 0;
                 for (let i = 1; i < rtts.length; i++) {
                     j += (Math.abs(rtts[i] - rtts[i - 1]) - j) / 16;
                 }
-                this._jitterState[server.name] = j;
                 const jitter = j;
 
                 // 2. Statistical Metrics (requires sorted array)
@@ -324,12 +336,10 @@ class Poller {
                 const median = rtts[Math.floor(rtts.length / 2)];
                 const p99    = rtts[Math.min(Math.floor(rtts.length * 0.99), rtts.length - 1)];
 
-                const st = this.state.nodes?.[server.name]?.stats?.stats || {};
-                const totalQueries   = st.totalQueries    || 0;
-                const totalRecursive = st.totalRecursive   || 0;
-                const totalCached    = st.totalCached      || 0;
-                const cachedEntries  = st.cachedEntries    || 0;
-                const cacheMax       = server.cacheMaxEntries || 0;
+                const totalQueries  = st.totalQueries   || 0;
+                const totalCached   = st.totalCached     || 0;
+                const cachedEntries = st.cachedEntries   || 0;
+                const cacheMax      = server.cacheMaxEntries || 0;
 
                 const denominator = totalRecursive + totalCached;
                 const hitRate     = denominator > 0 ? (totalCached / denominator) * 100 : 0;
