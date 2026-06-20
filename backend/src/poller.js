@@ -14,6 +14,7 @@ class Poller {
             topInterval:   (cfg?.poll?.topInterval   || 30) * 1000,
             perfInterval:  (cfg?.poll?.perfInterval  || 30) * 1000,
             rangeInterval: 60000,
+            longRangeInterval: 900000,
             topLimit:      cfg?.top?.limit      || 20,
             feedPageSize:  cfg?.feed?.pageSize  || 20,
         };
@@ -55,8 +56,8 @@ class Poller {
         this._feedTimer  = setInterval(() => this._pollFeed(),        this.cfg.feedInterval);
         this._topTimer   = setInterval(() => this._pollTop(),         this.cfg.topInterval);
         this._perfTimer  = setInterval(() => this._pollPerformance(), this.cfg.perfInterval);
-        this._rangeTimer = setInterval(() => this._pollRangeData(), this.cfg.rangeInterval);
-        this._longRangeTimer = setInterval(() => this._pollLongRangeData(), 900000);
+        this._rangeTimer = setInterval(() => this._pollRangeData(),   this.cfg.rangeInterval);
+        this._longRangeTimer = setInterval(() => this._pollLongRangeData(), this.cfg.longRangeInterval);
         this._running    = true;
     }
 
