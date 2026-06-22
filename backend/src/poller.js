@@ -32,6 +32,7 @@ class Poller {
         this._rangeTimer = null;
         this._longRangeTimer = null;
         this._running    = false;
+        this._rangeRefreshPending = false;
     }
 
     _clearTimers() {
@@ -66,8 +67,8 @@ class Poller {
         this._pollFeed();
         this._pollTop();
         this._pollPerformance();
-        this._pollRangeData();
-        this._pollLongRangeData();
+        // Range data is fetched on-demand via refreshRangeData() when an SSE
+        // client connects — avoids double-fetching on first client after idle.
     }
 
     start() {
@@ -88,7 +89,22 @@ class Poller {
         this._startTimers();
     }
 
+    refreshRangeData() {
+        if (this._rangeRefreshPending) return;
+        this._rangeRefreshPending = true;
+        Promise.allSettled([
+            this._pollRangeData(),
+            new Promise(r => setTimeout(r, 2500)).then(() => this._pollLongRangeData())
+        ]).finally(() => { this._rangeRefreshPending = false; });
+    }
+
     setWatchedServer(name) {
+        if (name === CLUSTER_KEY) {
+            this._pollRangeData();
+            this._pollLongRangeData();
+            return;
+        }
+        if (name === this._watchedServer) return;
         this._watchedServer = name;
         const server = this.servers.find(s => s.name === name);
         if (!server) return;
@@ -130,7 +146,6 @@ class Poller {
             ? this.servers.find(s => s.name === this._watchedServer)
             : this.servers[0];
         if (!primary) return;
-
         await this._fetchRangeData('LastDay', primary, false);
         if (this.clusterServer) await this._fetchRangeData('LastDay', this.clusterServer, true);
     }
@@ -140,7 +155,6 @@ class Poller {
             ? this.servers.find(s => s.name === this._watchedServer)
             : this.servers[0];
         if (!primary) return;
-
         for (const type of ['LastWeek', 'LastMonth', 'LastYear']) {
             await this._fetchRangeData(type, primary, false);
             if (this.clusterServer) await this._fetchRangeData(type, this.clusterServer, true);

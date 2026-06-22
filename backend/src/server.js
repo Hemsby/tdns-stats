@@ -233,19 +233,9 @@ async function start() {
                     res.write(`data: ${JSON.stringify({ type: 'perf', server, data })}\n\n`);
                 }
             }
-            if (state.rangeData) {
-                for (const [key, data] of Object.entries(state.rangeData)) {
-                    const parts = key.split(':');
-                    const server = parts[0];
-                    const range = parts[1];
-                    const isTop = parts[2] === 'top';
-                    if (isTop) {
-                        res.write(`data: ${JSON.stringify({ type: 'range-top', range, server, data })}\n\n`);
-                    } else {
-                        res.write(`data: ${JSON.stringify({ type: 'range-dashboard', range, server, data })}\n\n`);
-                    }
-                }
-            }
+            // Fetch all range data fresh on every SSE connect so the client
+            // never sees stale chart or top list data after reconnect.
+            poller.refreshRangeData();
         } catch (err) {
             console.error('[stream] Initial write failed:', err.message);
         }
@@ -282,7 +272,7 @@ async function start() {
 
     app.get('/api/watch-server', (req, res) => {
         const name = req.query.server;
-        if (name && servers.some(s => s.name === name)) {
+        if (name && (name === CLUSTER_KEY || servers.some(s => s.name === name))) {
             poller.setWatchedServer(name);
         }
         res.json({ ok: true });

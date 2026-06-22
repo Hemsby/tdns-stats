@@ -144,6 +144,7 @@ const App = (() => {
             state.connected = true;
             setConnDot('connected');
             document.getElementById('lastUpdated').textContent = 'Connected';
+            watchServer(state.chartServer);
         };
 
         es.onerror = (err) => {
@@ -1692,6 +1693,26 @@ const App = (() => {
             if (!state.connected || state.lastFeedEvent === null) return;
             setFeedStall(Date.now() - state.lastFeedEvent > 120000);
         }, 15000);
+
+        const reconnectSSE = () => {
+            setTimeout(() => {
+                closeEventSource();
+                clearConnectionTimers();
+                connect();
+            }, 0);
+        };
+
+        // Tab becomes visible after 15+ min hidden → reconnect immediately.
+        let hiddenSince = 0;
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'hidden') {
+                hiddenSince = Date.now();
+            } else if (document.visibilityState === 'visible' && hiddenSince > 0) {
+                if (Date.now() - hiddenSince < 900000) return;
+                reconnectSSE();
+            }
+        });
+
     }
 
     return { init };
