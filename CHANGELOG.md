@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-06-22
+
+### Changed
+
+- Perf card now derives its RTT sample size dynamically from the last hour's total recursive query count instead of a fixed config value - scales automatically with traffic, capped at the last 500 queries (freshest data for both low/high volume servers).
+- Perf card now shows "waiting for data..." when no recursive queries are available to compute metrics instead of "collecting samples...".
+- Perf card no longer displays the "X recursive samples" badge in the card header.
+- Deprecated `rtt.sampleSize` configuration option - this is no longer required.
+
+### Fixed
+
+- Dashboard no longer freezes after extended idle periods — all time range data (LastDay - LastYear) now correctly reaches the frontend regardless of which tab or chart option is selected.
+- Query Chart and Top Stats now show fresh data immediately on tab return after being backgrounded, SSE reconnect, or server restart instead of displaying stale cached data.
+
 ## [2.1.2] - 2026-06-17
 
 ### Changed
