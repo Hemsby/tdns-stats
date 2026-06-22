@@ -10,7 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
-- SSE connection handler no longer accumulates orphaned connections in memory after unexpected disconnects, preventing server memory from growing unboundedly over time.
+- SSE connection handler no longer accumulates orphaned connections in memory after unexpected disconnects, preventing server memory use from growing unboundedly over time.
 - Cache & Blocked tab domain search now validates input against RFC 1035 label constraints (max 253 octets, labels ≤63 octets, no leading/trailing/consecutive dots, no leading/trailing hyphens, at least one dot required) and performs checks on the raw input before normalization strips dot characters, ensuring malformed domains are rejected rather than silently sanitised.
 
 ## [2.2.0] - 2026-06-22
