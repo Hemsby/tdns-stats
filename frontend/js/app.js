@@ -594,8 +594,20 @@ const App = (() => {
         const btn = document.querySelector('#domainSearchForm .search-btn');
         if (!input || !summary || !results) return;
 
-        const domain = input.value.trim().replace(/^\.+|\.+$/g, '').toLowerCase();
-        if (!domain) return;
+        const rawDomain = input.value.trim();
+        if (!rawDomain) return;
+        if (rawDomain.startsWith('.') || rawDomain.endsWith('.')) {
+            summary.className = 'domain-search-summary domain-search-error';
+            summary.textContent = 'Domain cannot start or end with a dot';
+            return;
+        }
+        if (rawDomain.includes('..')) {
+            summary.className = 'domain-search-summary domain-search-error';
+            summary.textContent = 'Domain cannot contain consecutive dots';
+            return;
+        }
+
+        const domain = rawDomain.toLowerCase();
 
         state.domainSearchServer = serverSel?.value || state.domainSearchServer || 'all';
         state.blockedLookup = document.getElementById('blockedResultCheckbox')?.checked || false;

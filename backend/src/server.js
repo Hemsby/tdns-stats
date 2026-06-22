@@ -211,9 +211,12 @@ async function start() {
         let ping = null;
         const cleanup = () => {
             const removed = clients.delete(res);
-            if (clients.size === 0) poller.pause();
-            if (removed) broadcastViewerCount();
+            if (removed) {
+                if (clients.size === 0) poller.pause();
+                broadcastViewerCount();
+            }
             if (ping) clearInterval(ping);
+            ping = null;
         };
 
         res.on('error', (err) => {
@@ -238,6 +241,7 @@ async function start() {
             poller.refreshRangeData();
         } catch (err) {
             console.error('[stream] Initial write failed:', err.message);
+            cleanup();
         }
 
         ping = setInterval(() => {
@@ -279,11 +283,16 @@ async function start() {
     });
 
     app.get('/api/cache/search', async (req, res) => {
+        const rawDomain = String(req.query.domain || '').trim();
         const domain = normalizeDomain(req.query.domain);
         const serverName = String(req.query.server || 'all');
         const blockedLookup = String(req.query.blocked || '').toLowerCase() === '1' || String(req.query.blocked || '').toLowerCase() === 'true';
-        if (!domain) return res.status(400).json({ error: 'Domain is required' });
-        if (domain.length > 253 || !/^[a-z0-9_*.-]+$/.test(domain)) return res.status(400).json({ error: 'Invalid domain' });
+        if (!rawDomain) return res.status(400).json({ error: 'Domain is required' });
+        if (rawDomain.startsWith('.') || rawDomain.endsWith('.')) return res.status(400).json({ error: 'Domain cannot start or end with a dot' });
+        if (rawDomain.includes('..')) return res.status(400).json({ error: 'Domain cannot contain consecutive dots' });
+        if (rawDomain.length > 253) return res.status(400).json({ error: 'Domain too long (max 253 characters)' });
+        if (!/^[a-z0-9]([a-z0-9\-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9\-]*[a-z0-9])?)+$/.test(domain)) return res.status(400).json({ error: 'Invalid domain format' });
+        if (domain.split('.').some(label => label.length > 63)) return res.status(400).json({ error: 'Domain label too long (max 63 characters)' });
 
         const state = poller.getState();
         const cluster = state.nodes?.__cluster;
