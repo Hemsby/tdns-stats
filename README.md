@@ -197,7 +197,7 @@ All configuration lives in `config.yml` (see `config.example.yml` for a fully an
 | `feed.pageSize`          | `20`          | Log entries fetched per poll cycle                           |
 | `feed.maxEntries`        | `200`         | Maximum entries kept in the browser feed                     |
 | `top.limit`              | `20`          | Number of items in top domains/clients lists                 |
-| `rtt.sampleSize`         | `500`         | Log entries scanned per RTT sample                           |
+
 
 ### Server colours
 

@@ -143,9 +143,9 @@ async function getRttSample(server, limit) {
     if (!server.queryLogsApp) return [];
     const name = encodeURIComponent(server.queryLogsApp.name);
     const classPath = encodeURIComponent(server.queryLogsApp.classPath);
-    const res = await apiGet(server, 'api/logs/query?name=' + name + '&classPath=' + classPath + '&entriesPerPage=' + limit + '&descendingOrder=true');
+    const res = await apiGet(server, 'api/logs/query?name=' + name + '&classPath=' + classPath + '&responseType=Recursive&entriesPerPage=' + limit + '&descendingOrder=true');
     return (res?.entries || [])
-        .filter(e => e.responseType === 'Recursive' && typeof e.responseRtt === 'number')
+        .filter(e => typeof e.responseRtt === 'number')
         .map(e => e.responseRtt);
 }
 

@@ -144,6 +144,7 @@ const App = (() => {
             state.connected = true;
             setConnDot('connected');
             document.getElementById('lastUpdated').textContent = 'Connected';
+            watchServer(state.chartServer);
         };
 
         es.onerror = (err) => {
@@ -1082,7 +1083,7 @@ const App = (() => {
         const totalCached = st.totalCached || 0;
         const totalRecursive = st.totalRecursive || 0;
         const denominator = totalRecursive + totalCached;
-        const statsHitRate = denominator > 0 ? Math.round(totalCached / denominator * 100) : 0;
+        const statsHitRate = denominator > 0 ? Math.round(totalCached / denominator * 100) : null;
 
         const cacheMax = state.cacheMaxEntries?.[name] || 0;
         const cachePopHtml = cacheMax > 0
@@ -1094,7 +1095,7 @@ const App = (() => {
             card.innerHTML =
                 '<div class="srv-card-header">' +
                 '<span class="srv-card-name">' + esc(name) + '</span>' +
-                '<span class="srv-card-version perf-samples">collecting samples...</span>' +
+                '<span class="srv-card-version perf-samples">waiting for data...</span>' +
                 '</div>' +
                 '<div class="srv-card-role"><span class="perf-section-label">RTT</span></div>' +
                 '<div class="srv-stats-grid">' +
@@ -1105,8 +1106,8 @@ const App = (() => {
                 '</div>' +
                 '<div class="srv-card-role" style="margin-top:6px"><span class="perf-section-label">Cache</span></div>' +
                 '<div class="srv-stats-grid">' +
-                statMini('Hit Rate',     statsHitRate + '%',     'green') +
-                statMini('Miss Rate',    (100 - statsHitRate) + '%', 'red') +
+                statMini('Hit Rate',     statsHitRate !== null ? statsHitRate + '%' : '--', 'green') +
+                statMini('Miss Rate',    statsHitRate !== null ? (100 - statsHitRate) + '%' : '--', 'red') +
                 statMini(cachePopLabel,  cachePopHtml,      'teal') +
                 statMini('Impact',       '--',              'pur') +
                 '</div>';
@@ -1120,7 +1121,6 @@ const App = (() => {
         card.innerHTML =
             '<div class="srv-card-header">' +
             '<span class="srv-card-name">' + esc(name) + '</span>' +
-            '<span class="srv-card-version perf-samples">' + (rtt.samples || 0) + ' recursive sample' + ((rtt.samples === 1) ? '' : 's') + '</span>' +
             '</div>' +
             '<div class="srv-card-role"><span class="perf-section-label">RTT</span></div>' +
             '<div class="srv-stats-grid">' +
@@ -1693,6 +1693,26 @@ const App = (() => {
             if (!state.connected || state.lastFeedEvent === null) return;
             setFeedStall(Date.now() - state.lastFeedEvent > 120000);
         }, 15000);
+
+        const reconnectSSE = () => {
+            setTimeout(() => {
+                closeEventSource();
+                clearConnectionTimers();
+                connect();
+            }, 0);
+        };
+
+        // Tab becomes visible after 15+ min hidden → reconnect immediately.
+        let hiddenSince = 0;
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'hidden') {
+                hiddenSince = Date.now();
+            } else if (document.visibilityState === 'visible' && hiddenSince > 0) {
+                if (Date.now() - hiddenSince < 900000) return;
+                reconnectSSE();
+            }
+        });
+
     }
 
     return { init };

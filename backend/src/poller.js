@@ -14,14 +14,13 @@ class Poller {
             topInterval:   (cfg?.poll?.topInterval   || 30) * 1000,
             perfInterval:  (cfg?.poll?.perfInterval  || 30) * 1000,
             rangeInterval: 60000,
+            longRangeInterval: 900000,
             topLimit:      cfg?.top?.limit      || 20,
-            rttSample:     cfg?.rtt?.sampleSize || 500,
             feedPageSize:  cfg?.feed?.pageSize  || 20,
         };
         this.state     = {};
         this.state.perf  = {};
         this.state.rangeData = {};
-        this._jitterState  = {};
         this.feedCursors   = {};
         this._feedPollInProgress = false;
         this.clusterServer = null;
@@ -33,6 +32,7 @@ class Poller {
         this._rangeTimer = null;
         this._longRangeTimer = null;
         this._running    = false;
+        this._rangeRefreshPending = false;
     }
 
     _clearTimers() {
@@ -57,8 +57,8 @@ class Poller {
         this._feedTimer  = setInterval(() => this._pollFeed(),        this.cfg.feedInterval);
         this._topTimer   = setInterval(() => this._pollTop(),         this.cfg.topInterval);
         this._perfTimer  = setInterval(() => this._pollPerformance(), this.cfg.perfInterval);
-        this._rangeTimer = setInterval(() => this._pollRangeData(), this.cfg.rangeInterval);
-        this._longRangeTimer = setInterval(() => this._pollLongRangeData(), 900000);
+        this._rangeTimer = setInterval(() => this._pollRangeData(),   this.cfg.rangeInterval);
+        this._longRangeTimer = setInterval(() => this._pollLongRangeData(), this.cfg.longRangeInterval);
         this._running    = true;
     }
 
@@ -67,8 +67,8 @@ class Poller {
         this._pollFeed();
         this._pollTop();
         this._pollPerformance();
-        this._pollRangeData();
-        this._pollLongRangeData();
+        // Range data is fetched on-demand via refreshRangeData() when an SSE
+        // client connects — avoids double-fetching on first client after idle.
     }
 
     start() {
@@ -89,7 +89,22 @@ class Poller {
         this._startTimers();
     }
 
+    refreshRangeData() {
+        if (this._rangeRefreshPending) return;
+        this._rangeRefreshPending = true;
+        Promise.allSettled([
+            this._pollRangeData(),
+            new Promise(r => setTimeout(r, 2500)).then(() => this._pollLongRangeData())
+        ]).finally(() => { this._rangeRefreshPending = false; });
+    }
+
     setWatchedServer(name) {
+        if (name === CLUSTER_KEY) {
+            this._pollRangeData();
+            this._pollLongRangeData();
+            return;
+        }
+        if (name === this._watchedServer) return;
         this._watchedServer = name;
         const server = this.servers.find(s => s.name === name);
         if (!server) return;
@@ -131,7 +146,6 @@ class Poller {
             ? this.servers.find(s => s.name === this._watchedServer)
             : this.servers[0];
         if (!primary) return;
-
         await this._fetchRangeData('LastDay', primary, false);
         if (this.clusterServer) await this._fetchRangeData('LastDay', this.clusterServer, true);
     }
@@ -141,7 +155,6 @@ class Poller {
             ? this.servers.find(s => s.name === this._watchedServer)
             : this.servers[0];
         if (!primary) return;
-
         for (const type of ['LastWeek', 'LastMonth', 'LastYear']) {
             await this._fetchRangeData(type, primary, false);
             if (this.clusterServer) await this._fetchRangeData(type, this.clusterServer, true);
@@ -306,16 +319,30 @@ class Poller {
     async _pollPerformance() {
         for (const server of this.servers) {
             try {
-                const rtts = await getRttSample(server, this.cfg.rttSample);
-                if (rtts.length === 0) continue;
+                const st = this.state.nodes?.[server.name]?.stats?.stats || {};
+                const totalRecursive = st.totalRecursive || 0;
+
+                // No stats yet or zero recursive in the last hour — nothing to compute
+                if (!totalRecursive) {
+                    delete this.state.perf[server.name];
+                    this.broadcast({ type: 'perf', server: server.name, data: null });
+                    continue;
+                }
+
+                const sampleSize = Math.min(totalRecursive, 500);
+                const rtts = await getRttSample(server, sampleSize);
+                if (rtts.length === 0) {
+                    delete this.state.perf[server.name];
+                    this.broadcast({ type: 'perf', server: server.name, data: null });
+                    continue;
+                }
 
                 // 1. Calculate Jitter (RFC 3550 EWMA)
-                // We do this before sorting to maintain temporal order (newest to oldest)
-                let j = this._jitterState[server.name] || 0;
+                // Computed fresh each cycle from the current batch's temporal order (newest to oldest)
+                let j = 0;
                 for (let i = 1; i < rtts.length; i++) {
                     j += (Math.abs(rtts[i] - rtts[i - 1]) - j) / 16;
                 }
-                this._jitterState[server.name] = j;
                 const jitter = j;
 
                 // 2. Statistical Metrics (requires sorted array)
@@ -324,12 +351,10 @@ class Poller {
                 const median = rtts[Math.floor(rtts.length / 2)];
                 const p99    = rtts[Math.min(Math.floor(rtts.length * 0.99), rtts.length - 1)];
 
-                const st = this.state.nodes?.[server.name]?.stats?.stats || {};
-                const totalQueries   = st.totalQueries    || 0;
-                const totalRecursive = st.totalRecursive   || 0;
-                const totalCached    = st.totalCached      || 0;
-                const cachedEntries  = st.cachedEntries    || 0;
-                const cacheMax       = server.cacheMaxEntries || 0;
+                const totalQueries  = st.totalQueries   || 0;
+                const totalCached   = st.totalCached     || 0;
+                const cachedEntries = st.cachedEntries   || 0;
+                const cacheMax      = server.cacheMaxEntries || 0;
 
                 const denominator = totalRecursive + totalCached;
                 const hitRate     = denominator > 0 ? (totalCached / denominator) * 100 : 0;
@@ -341,7 +366,6 @@ class Poller {
                         mean:    +mean.toFixed(2),
                         p99:     +p99.toFixed(2),
                         jitter:  +jitter.toFixed(2),
-                        samples: rtts.length
                     },
                     cache: {
                         hitRate:    +hitRate.toFixed(1),
