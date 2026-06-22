@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [2.2.1] - 2026-06-22
+
+### Fixed
+
+- SSE connection handler no longer accumulates orphaned connections in memory after unexpected disconnects, preventing server memory from growing unboundedly over time.
+- Cache & Blocked tab domain search now validates input against RFC 1035 label constraints (max 253 octets, labels ≤63 octets, no leading/trailing/consecutive dots, no leading/trailing hyphens, at least one dot required) and performs checks on the raw input before normalization strips dot characters, ensuring malformed domains are rejected rather than silently sanitised.
+
 ## [2.2.0] - 2026-06-22
 
 ### Changed
@@ -17,7 +24,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
-- Dashboard no longer freezes after extended idle periods — all time range data (LastDay - LastYear) now correctly reaches the frontend regardless of which tab or chart option is selected.
+- Dashboard no longer freezes after extended idle periods - all time range data (LastDay - LastYear) now correctly reaches the frontend regardless of which tab or chart option is selected.
 - Query Chart and Top Stats now show fresh data immediately on tab return after being backgrounded, SSE reconnect, or server restart instead of displaying stale cached data.
 
 ## [2.1.2] - 2026-06-17
