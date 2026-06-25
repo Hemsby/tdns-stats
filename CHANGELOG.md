@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [2.2.2] - 2026-06-25
+
+### Fixed
+
+- Resolved remaining cases where the dashboard could appear to freeze after an extended idle period (e.g. DPMS display sleep).
+
 ## [2.2.1] - 2026-06-22
 
 ### Fixed
