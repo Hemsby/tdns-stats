@@ -1706,23 +1706,24 @@ const App = (() => {
             setFeedStall(Date.now() - state.lastFeedEvent > 120000);
         }, 15000);
 
-        const reconnectSSE = () => {
-            setTimeout(() => {
-                closeEventSource();
-                clearConnectionTimers();
-                connect();
-            }, 0);
-        };
+        // Trigger a render refresh after extended idle (DPMS sleep, tab backgrounded, etc) -
+        // browser can stall compositing until a user interaction event, leaving stale DOM
+        // visible. Any pointermove or tab-return resets the 15-min cooldown.
+        let lastInteraction = Date.now();
+        function refreshAfterIdle() {
+            const idle = Date.now() - lastInteraction > 900000;
+            lastInteraction = Date.now();
+            if (!idle) return;
 
-        // Tab becomes visible after 15+ min hidden → reconnect immediately.
-        let hiddenSince = 0;
+            refreshChart();
+            refreshTopLists();
+            renderPerfCards();
+            renderClusterCards();
+            Feed.render(state.feedServer, state.feedFilters);
+        }
+        document.addEventListener('pointermove', refreshAfterIdle);
         document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'hidden') {
-                hiddenSince = Date.now();
-            } else if (document.visibilityState === 'visible' && hiddenSince > 0) {
-                if (Date.now() - hiddenSince < 900000) return;
-                reconnectSSE();
-            }
+            if (document.visibilityState === 'visible') refreshAfterIdle();
         });
 
     }
