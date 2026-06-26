@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [2.2.3] - 2026-06-26
+
+### Changed
+
+- Replaced native `<select>` elements with custom dropdowns that respect the current theme (Chromium on Linux cannot style the native select popup, making it illegible in dark mode).
+
+### Fixed
+
+- Time range selection no longer falls out of sync with the chart on page refresh when the browser restores a previously selected value.
+- Light theme readability improvements: muted text and orange accent now meet WCAG AA contrast requirements.
+- Mid-range latency feed entries now use yellow instead of orange for better distinction from error states.
+- Live feed latency display no longer shows `---` for non-finite or missing values.
+- Other minor UI consistency improvements.
+
 ## [2.2.2] - 2026-06-25
 
 ### Fixed
