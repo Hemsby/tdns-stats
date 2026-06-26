@@ -180,7 +180,7 @@ const Feed = (() => {
             return '';
         }
 
-        if (n == null || n === undefined) return '---';
+        if (n == null || n === undefined || !Number.isFinite(n)) return '';
         if (n === 0)   return '0.0ms';
         if (n >= 1000) return (n / 1000).toFixed(2) + 's';
         return n.toFixed(1) + 'ms';
