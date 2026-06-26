@@ -273,6 +273,115 @@ const App = (() => {
             sel.appendChild(opt);
         }
         if (selectedValue != null) sel.value = selectedValue;
+        syncCustomSelect(id);
+    }
+
+    // ---- Custom dropdown for <select> elements ----
+    function initCustomSelect(id) {
+        const sel = getElement(id);
+        if (!sel || sel.dataset._cs) return;
+        sel.dataset._cs = '1';
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'custom-select';
+        wrapper.dataset.cs = id;
+
+        const trigger = document.createElement('button');
+        trigger.className = 'custom-select-trigger';
+        trigger.type = 'button';
+
+        const valueSpan = document.createElement('span');
+        valueSpan.className = 'custom-select-value';
+
+        const arrow = document.createElement('span');
+        arrow.className = 'custom-select-arrow';
+        arrow.innerHTML = '<svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M3.5 5 L8 10 L12.5 5 L13.9 6.4 L8 11.7 L2.1 6.4 Z"/></svg>';
+
+        trigger.appendChild(valueSpan);
+        trigger.appendChild(arrow);
+
+        const dropdown = document.createElement('div');
+        dropdown.className = 'custom-select-dropdown';
+        dropdown.hidden = true;
+
+        const sizing = document.createElement('div');
+        sizing.className = 'custom-select-sizing';
+        const sizingInner = document.createElement('div');
+        sizingInner.className = 'custom-select-sizing-inner';
+        const sizingArrow = arrow.cloneNode(true);
+        sizingArrow.className = 'custom-select-sizing-arrow';
+        sizing.appendChild(sizingInner);
+        sizing.appendChild(sizingArrow);
+
+        wrapper.appendChild(trigger);
+        wrapper.appendChild(dropdown);
+        wrapper.appendChild(sizing);
+        sel.parentNode.insertBefore(wrapper, sel.nextSibling);
+
+        if (sel.hidden) wrapper.hidden = true;
+        sel.style.display = 'none';
+
+        syncCustomSelect(id);
+
+        trigger.addEventListener('click', e => {
+            e.stopPropagation();
+            const opening = dropdown.hidden;
+            if (opening) closeAllCustomSelects();
+            dropdown.hidden = !opening;
+            wrapper.classList.toggle('open', opening);
+        });
+
+        dropdown.addEventListener('click', e => {
+            e.stopPropagation();
+            const opt = e.target.closest('.custom-select-opt');
+            if (!opt) return;
+            const val = opt.dataset.value;
+            if (sel.value !== val) {
+                sel.value = val;
+                sel.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            dropdown.hidden = true;
+            wrapper.classList.remove('open');
+            syncCustomSelect(id);
+        });
+
+        if (!document._csInitialized) {
+            document._csInitialized = true;
+            document.addEventListener('click', closeAllCustomSelects);
+        }
+    }
+
+    function syncCustomSelect(id) {
+        const sel = getElement(id);
+        if (!sel || !sel.dataset._cs) return;
+        const wrapper = document.querySelector(`.custom-select[data-cs="${id}"]`);
+        if (!wrapper) return;
+
+        const menu = wrapper.querySelector('.custom-select-dropdown');
+        menu.innerHTML = '';
+        const sizingInner = wrapper.querySelector('.custom-select-sizing-inner');
+        sizingInner.innerHTML = '';
+        for (const opt of sel.options) {
+            const btn = document.createElement('button');
+            btn.className = 'custom-select-opt' + (opt.selected ? ' selected' : '');
+            btn.type = 'button';
+            btn.textContent = opt.textContent;
+            btn.dataset.value = opt.value;
+            menu.appendChild(btn);
+
+            const span = document.createElement('span');
+            span.textContent = opt.textContent;
+            sizingInner.appendChild(span);
+        }
+
+        wrapper.querySelector('.custom-select-value').textContent = sel.options[sel.selectedIndex]?.textContent || '';
+    }
+
+    function closeAllCustomSelects() {
+        document.querySelectorAll('.custom-select-dropdown').forEach(d => {
+            d.hidden = true;
+            d.closest('.custom-select').classList.remove('open');
+        });
     }
 
     function serverColor(key) {
@@ -378,6 +487,19 @@ const App = (() => {
         toggleServerSelects();
         syncSelects();
         addSelectListeners();
+
+        initCustomSelect('timeRangeSelect');
+        // Browser form-restore may update the select after App.init() reads it
+        const trSel = document.getElementById('timeRangeSelect');
+        if (trSel && state.timeRange !== trSel.value) {
+            state.timeRange = trSel.value;
+            updateChartHeading();
+        }
+        initCustomSelect('chartServerSelect');
+        initCustomSelect('chartDatasetSelect');
+        initCustomSelect('topServerSelect');
+        initCustomSelect('feedServerSelect');
+        initCustomSelect('domainSearchServerSelect');
     }
 
     function buildDomainSearchSelect() {
@@ -421,11 +543,11 @@ const App = (() => {
 
     function syncSelects() {
         const cs = document.getElementById('chartServerSelect');
-        if (cs) { cs.value = state.chartServer || ''; updateSelDot('chartServerSelect', state.chartServer); }
+        if (cs) { cs.value = state.chartServer || ''; updateSelDot('chartServerSelect', state.chartServer); syncCustomSelect('chartServerSelect'); }
         const ts = document.getElementById('topServerSelect');
-        if (ts) { ts.value = state.topServer || ''; updateSelDot('topServerSelect', state.topServer); }
+        if (ts) { ts.value = state.topServer || ''; updateSelDot('topServerSelect', state.topServer); syncCustomSelect('topServerSelect'); }
         const fs = document.getElementById('feedServerSelect');
-        if (fs) { fs.value = state.feedServer; updateSelDot('feedServerSelect', state.feedServer); }
+        if (fs) { fs.value = state.feedServer; updateSelDot('feedServerSelect', state.feedServer); syncCustomSelect('feedServerSelect'); }
     }
 
     function toggleServerSelects() {
@@ -435,6 +557,8 @@ const App = (() => {
             if (sel) sel.hidden = isSingle;
             const dot = document.getElementById(id + 'Dot');
             if (dot) dot.hidden = isSingle;
+            const custom = document.querySelector(`.custom-select[data-cs="${id}"]`);
+            if (custom) custom.hidden = isSingle;
         });
     }
 
@@ -582,7 +706,7 @@ const App = (() => {
         if (results) results.innerHTML = '';
         if (blockedSection) blockedSection.innerHTML = '';
         // optionally reset server select to 'all'
-        if (serverSel) serverSel.value = state.domainSearchServer || 'all';
+        if (serverSel) { serverSel.value = state.domainSearchServer || 'all'; syncCustomSelect('domainSearchServerSelect'); }
     }
 
     async function searchDomainCache() {
@@ -924,7 +1048,7 @@ const App = (() => {
         card.innerHTML =
             '<div class="srv-card-header">' +
             '<span class="srv-card-name">Cluster</span>' +
-            '<span class="srv-card-version">' + esc(cluster.clusterDomain || '') + '</span>' +
+            '<span class="card-badge">' + esc(cluster.clusterDomain || '') + '</span>' +
             '</div>' +
             '<div class="srv-card-role"><span class="node-badge primary">Cluster</span></div>' +
             '<div class="srv-stats-grid">' +
@@ -990,7 +1114,7 @@ const App = (() => {
             card.innerHTML =
                 '<div class="srv-card-header">' +
                 '<span class="srv-card-name">' + esc(name) + '</span>' +
-                '<span class="srv-card-version" style="color:var(--accent-red)">offline</span>' +
+                '<span class="card-badge" style="color:var(--accent-red)">offline</span>' +
                 '</div>';
             return card;
         }
@@ -1018,7 +1142,7 @@ const App = (() => {
         card.innerHTML =
             '<div class="srv-card-header">' +
             '<span class="srv-card-name">' + esc(node.dnsServerDomain || name) + '</span>' +
-            '<span class="srv-card-version">v' + esc(node.version) + '</span>' +
+            '<span class="card-badge">v' + esc(node.version) + '</span>' +
             '</div>' +
             (roleBadge ? '<div class="srv-card-role">' + roleBadge + '</div>' : '') +
             '<div class="srv-stats-grid">' +
@@ -1107,7 +1231,7 @@ const App = (() => {
             card.innerHTML =
                 '<div class="srv-card-header">' +
                 '<span class="srv-card-name">' + esc(name) + '</span>' +
-                '<span class="srv-card-version perf-samples">waiting for data...</span>' +
+                '<span class="card-badge">waiting for data...</span>' +
                 '</div>' +
                 '<div class="srv-card-role"><span class="perf-section-label">RTT</span></div>' +
                 '<div class="srv-stats-grid">' +
