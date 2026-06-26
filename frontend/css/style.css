@@ -781,9 +781,10 @@ main { position: relative; z-index: 1; }
 .feed-list::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 2px; }
 
 .feed-filter-btn {
-    padding: 3px 8px; background: none; border: 1px solid var(--border); border-radius: 3px;
-    color: var(--text-muted); cursor: pointer; display: flex; align-items: center;
-    transition: color .15s, background .15s, border-color .15s;
+    display: flex; align-items: center; justify-content: center;
+    height: 24px; padding: 0 8px; background: none; border: 1px solid var(--border);
+    border-radius: 4px; color: var(--text-muted); cursor: pointer;
+    transition: color .15s, background .15s, border-color .15s; flex-shrink: 0;
 }
 .feed-filter-btn:hover { color: var(--text); background: var(--bg-hover); border-color: var(--accent-blue); }
 .feed-filter-menu {
