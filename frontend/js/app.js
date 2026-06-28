@@ -179,6 +179,7 @@ const App = (() => {
 
             if (names.length > 0 && (state.serverNames.join(',') !== names.join(',') || wasCluster !== state.isCluster)) {
                 state.serverNames = names;
+                updateServerDisplay();
                 const defaultTab = state.isCluster ? CLUSTER_KEY : names[0];
                 if (!state.activeTab) state.activeTab = defaultTab;
                 const chartFallback = state.isCluster ? CLUSTER_KEY : names[0];
@@ -188,6 +189,9 @@ const App = (() => {
                     state.topServer = isAggregate ? FOLLOW_CHART_KEY : state.activeTab;
                 }
                 state.feedServer = isAggregate ? 'all' : state.activeTab;
+                // Initialize feed panel data-tab-type for responsive CSS
+                const fp = document.getElementById('feedPanel');
+                if (fp) fp.dataset.tabType = isAggregate ? 'aggregate' : 'single';
                 buildServerUI();
                 renderPerfCards(); // show placeholders immediately on first server discovery
 
@@ -447,6 +451,12 @@ const App = (() => {
         }
 
         document.querySelectorAll('.stab').forEach(b => b.classList.toggle('active', b.dataset.key === key));
+        // Set data-tab-type on feed panel for responsive feed column visibility
+        const feedPanel = document.getElementById('feedPanel');
+        if (feedPanel) {
+            feedPanel.dataset.tabType = (key === 'all' || key === CLUSTER_KEY) ? 'aggregate' : 'single';
+        }
+        updateServerDisplay();
         toggleServerSelects();
         syncSelects();
         loadAndApplyFeedFilters();
@@ -1170,16 +1180,78 @@ const App = (() => {
                '</span><span class="stat-mini-value ' + colorClass + '">' + esc(value) + '</span></div>';
     }
 
+    // ---- Server display name map -------------------------------------------
+    function getServerDisplayMap() {
+        const names = state.serverNames;
+        if (names.length < 2) return {};
+        const parts = names.map(n => n.split('.').reverse());
+        const suffix = [];
+        for (let i = 0; i < parts[0].length; i++) {
+            const part = parts[0][i];
+            if (parts.every(p => p[i] === part)) {
+                suffix.push(part);
+            } else {
+                break;
+            }
+        }
+        if (suffix.length < 2) return {};
+        const common = suffix.reverse().join('.');
+        const map = {};
+        for (const n of names) {
+            map[n] = n.endsWith('.' + common) ? n.slice(0, -common.length - 1) : n;
+        }
+        return map;
+    }
+
+    function updateServerDisplay() {
+        const map = getServerDisplayMap();
+        Feed.setServerDisplayMap(map);
+        const abbrev = Object.keys(map).length > 0;
+        const fp = document.getElementById('feedPanel');
+        if (fp) fp.classList.toggle('feed-server-abbrev', abbrev);
+    }
+
     // ---- Server indicators --------------------------------------------------
+    function shortName(fqdn) {
+        if (!fqdn) return '';
+        const dot = fqdn.indexOf('.');
+        return dot > 0 ? fqdn.substring(0, dot) : fqdn;
+    }
+
+    let indicatorObs = null;
+
     function renderServerIndicators() {
         const el = document.getElementById('serverIndicators');
         if (!el) return;
-        el.innerHTML = state.serverNames.map(name => {
+        if (indicatorObs) indicatorObs.disconnect();
+        updateIndicatorDisplayMode();
+        indicatorObs = new ResizeObserver(() => requestAnimationFrame(updateIndicatorDisplayMode));
+        indicatorObs.observe(el);
+    }
+
+    function updateIndicatorDisplayMode() {
+        const container = document.getElementById('serverIndicators');
+        if (!container) return;
+
+        // Render full names directly (no .pill-name wrapper — text overflows pill due to overflow:visible, so scrollWidth detects it)
+        container.innerHTML = state.serverNames.map(name => {
             const node = state.nodes[name];
             const ok = node && !node.error;
-            return '<span class="server-pill ' + (ok ? 'online' : 'offline') + '">' +
+            return '<span class="server-pill ' + (ok ? 'online' : 'offline') + '" title="' + esc(name) + '">' +
                    '<span class="pill-dot"></span>' + esc(name) + '</span>';
         }).join('');
+
+        const overflows = container.scrollWidth > container.clientWidth;
+
+        if (overflows) {
+            // Full names overflow — switch to abbreviated
+            container.innerHTML = state.serverNames.map(name => {
+                const node = state.nodes[name];
+                const ok = node && !node.error;
+                return '<span class="server-pill ' + (ok ? 'online' : 'offline') + '" title="' + esc(name) + '">' +
+                       '<span class="pill-dot"></span>' + esc(shortName(name)) + '</span>';
+            }).join('');
+        }
     }
 
     function renderDashboardViewers() {

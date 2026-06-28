@@ -10,8 +10,11 @@ const Feed = (() => {
     let lastBlocked  = false;
     let colorMap     = {};
     let paused       = false;
+    let serverDisplayMap = {};
 
     function init(maxEntries) { if (maxEntries > 0) MAX_ENTRIES = maxEntries; }
+
+    function setServerDisplayMap(map) { serverDisplayMap = map; }
 
     function setColors(map) {
         colorMap = map;
@@ -150,9 +153,10 @@ const Feed = (() => {
             const rtt     = fmtMs(rttVal, e.responseType);
             const latCls  = getLatClass(rttVal);
 
+            const srvName = serverDisplayMap[e._server] || e._server;
             row.innerHTML =
                 '<span class="feed-time">'   + esc(ts)                  + '</span>' +
-                '<span class="feed-server' + srvCls + '">' + esc(e._server) + '</span>' +
+                '<span class="feed-server' + srvCls + '" title="' + esc(e._server) + '">' + esc(srvName) + '</span>' +
                 '<span class="feed-client" title="' + esc(e.clientIpAddress) + '">' + esc(e.clientIpAddress) + '</span>' +
                 '<span class="feed-proto">'  + esc(e.protocol || '')     + '</span>' +
                 '<span class="feed-qtype">'  + esc(e.qtype || '')        + '</span>' +
@@ -216,5 +220,5 @@ const Feed = (() => {
             .replace(/"/g, '&quot;');
     }
 
-    return { init, add, scheduleRender, render, setColors, setPaused, setFilters };
+    return { init, add, scheduleRender, render, setColors, setPaused, setFilters, setServerDisplayMap };
 })();
