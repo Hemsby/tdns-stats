@@ -1496,6 +1496,7 @@ body::before {
     gap: 2px 6px;
     padding: 4px 10px;
   }
+  .feed-client, .feed-type { margin-left: auto; }
   .feed-qtype { display: none; }
   .feed-proto { display: none; }
 
