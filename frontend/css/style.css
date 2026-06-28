@@ -1430,7 +1430,6 @@ body::before {
 
 /* ---- Tablet Landscape: ≤1024px ---- */
 @media (max-width: 1024px) {
-  .dashboard-viewers { display: none; }
   .feed-row {
     grid-template-columns: 56px 60px 90px 1fr 50px auto;
     grid-template-areas: "time server client domain latency type";
@@ -1444,6 +1443,7 @@ body::before {
 @media (max-width: 900px) {
   .bottom-grid { grid-template-columns: 1fr; }
   .srv-stats-grid--wide { grid-template-columns: repeat(4, 1fr); }
+  .dashboard-viewers { display: none; }
   .version-info { display: none; }
   .chart-wrap { height: 200px; }
 }
@@ -1456,7 +1456,6 @@ body::before {
   .topbar { padding: 0 14px; gap: 10px; }
   .server-tabs { padding: 0 14px; top: auto; }
   .chart-controls { flex-wrap: wrap; }
-  .theme-switcher { display: none; }
   .server-pill { font-size: 10px; gap: 4px; padding: 2px 6px; }
 }
 
