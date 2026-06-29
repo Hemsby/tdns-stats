@@ -434,7 +434,7 @@ main { position: relative; z-index: 1; min-height: 0; flex: 1; }
 .feed-pause-btn.paused { color: var(--accent-green); border-color: rgba(52,211,153,.4); background: rgba(52,211,153,.05); }
 
 /* ---- Cluster stat cards ---- */
-.cluster-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+.cluster-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 12px; }
 
 .srv-card {
     background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px;
@@ -510,7 +510,7 @@ main { position: relative; z-index: 1; min-height: 0; flex: 1; }
 .stat-mini-label {
     font-size: 7px; color: var(--text-dim);
     text-transform: uppercase; letter-spacing: .7px; font-weight: 700;
-    font-family: 'Chakra Petch', sans-serif;
+    font-family: 'Chakra Petch', sans-serif; white-space: nowrap;
 }
 .stat-mini-value {
     font-size: 13px; font-weight: 600;
@@ -1044,6 +1044,11 @@ main { position: relative; z-index: 1; min-height: 0; flex: 1; }
     .topbar { padding: 0 14px; gap: 10px; }
     .server-tabs { padding: 0 14px; top: auto; }
     .chart-controls { flex-wrap: wrap; }
+    .domain-search-form { grid-template-columns: 1fr; }
+    .search-btn { width: 100%; }
+    .srv-stats-grid { grid-template-columns: repeat(2, 1fr); gap: 6px; }
+    .stat-mini { gap: 2px; }
+    .stat-mini-value { font-size: 12px; }
     .server-pill { font-size: 10px; gap: 4px; padding: 2px 6px; }
 }
 
@@ -1052,8 +1057,7 @@ main { position: relative; z-index: 1; min-height: 0; flex: 1; }
     .card-header { flex-direction: column; align-items: flex-start; gap: 8px; }
     .chart-controls { width: 100%; }
     .chart-wrap { height: 180px; }
-    .domain-search-form { grid-template-columns: 1fr; }
-    .search-btn { width: 100%; }
+
     .top-bar-wrap { width: 50px; }
     .top-sub { display: none; }
     .node-time { display: none; }
@@ -1071,7 +1075,6 @@ main { position: relative; z-index: 1; min-height: 0; flex: 1; }
     .chart-wrap { height: 160px; }
     .node-ip { display: none; }
     .top-bar-wrap { display: none; }
-    .srv-stats-grid { grid-template-columns: repeat(2, 1fr); }
     .top-lists, .feed-panel { min-height: auto; }
 
     .feed-panel[data-tab-type="aggregate"] .feed-row {
