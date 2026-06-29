@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [2.2.4] - 2026-06-29
+
+### Fixed
+
+- Auto-update no longer fails when `build:` in `docker-compose.yml` is set to an absolute path instead of `.` - the helper container now mounts the host project source at its original path so the build context is always resolvable.
+
 ## [2.2.3] - 2026-06-26
 
 ### Changed
