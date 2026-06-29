@@ -208,10 +208,15 @@ class Updater {
         } catch (e) {
         }
 
+        const extraMount = (helperHostSource && helperHostSource !== hostProject)
+            ? `-v ${helperHostSource}:${helperHostSource}`
+            : '';
+
         const helperCmd = helperImage && helperHostSource
             ? `docker run --rm -d \
                 -v /var/run/docker.sock:/var/run/docker.sock \
                 -v ${helperHostSource}:${hostProject} \
+                ${extraMount} \
                 -w ${hostProject} \
                 ${helperImage} \
                 sh -c '${composeCmd} -p tdns-stats -f ${composeFile} up -d --build'`
