@@ -184,7 +184,7 @@ async function start() {
             useDefaults: false,
             directives: {
                 defaultSrc:    ["'self'"],
-                scriptSrc:     ["'self'", "'unsafe-inline'", "cdn.jsdelivr.net"],
+                scriptSrc:     ["'self'", "cdn.jsdelivr.net"],
                 styleSrc:      ["'self'", "'unsafe-inline'", "cdn.jsdelivr.net", "fonts.googleapis.com"],
                 fontSrc:       ["'self'", "fonts.gstatic.com", "cdn.jsdelivr.net"],
                 imgSrc:        ["'self'", "data:"],
@@ -443,6 +443,7 @@ async function start() {
     });
 
     app.post('/api/updates/trigger', async (req, res) => {
+        if (!updater.capable) return res.status(403).json({ error: 'Updater not available' });
         try {
             broadcast({
                 type: 'update-status',

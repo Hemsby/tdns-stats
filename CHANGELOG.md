@@ -6,6 +6,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [2.2.6] - 2026-06-30
+
+### Fixed
+
+- Update trigger endpoint now returns 403 if the updater is not configured, preventing unauthenticated restarts from the network.
+- Cluster server is now re-elected on the next poll after a failure, rather than serving stale aggregate data indefinitely.
+- Cluster node URLs are validated to `http`/`https` only before being placed in hrefs.
+- Removed `unsafe-inline` from the `scriptSrc` Content Security Policy directive; no inline scripts exist in the project.
+- Removed dead code (`cluster.js`) that was never imported.
+
+## [2.2.5] - 2026-06-30
+
+### Added
+
+- Cluster and individual node stat cards now follow the selected time range (Last Day, Week, Month, Year). Cards show a loading state while range data is in flight and update as each server's data arrives. RTT and performance cards are unaffected and remain live data only.
+
+### Changed
+
+- Backend now fetches range dashboard data for all configured servers, not just the chart-selected server, so every node card has period-correct totals regardless of which server is active in the chart.
+
+### Fixed
+
+- HTTP connections to the Technitium API are now reused across poll intervals via persistent keep-alive agents, eliminating redundant TCP and TLS handshakes on every request. Plain HTTP, verified HTTPS, and self-signed HTTPS each get a dedicated singleton agent.
+- `getSessionInfo` was using the deprecated node-fetch v2 `timeout` option; it now uses `AbortController` consistent with all other API calls.
+
 ## [2.2.4] - 2026-06-29
 
 ### Fixed

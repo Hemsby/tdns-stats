@@ -535,6 +535,7 @@ main { position: relative; z-index: 1; min-height: 0; flex: 1; }
     letter-spacing: .8px; color: var(--text-dim); font-family: 'Chakra Petch', sans-serif;
 }
 .srv-card-footer { display: flex; gap: 8px; align-items: center; margin-top: 2px; }
+.srv-card-loading { font-size: 11px; color: var(--text-muted); padding: 12px 0 4px; }
 .blocked-pct { font-size: 10px; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; min-width: 50px; }
 .blocked-bar { flex: 1; height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
 .blocked-bar-fill { height: 100%; background: var(--accent-red); border-radius: 2px; transition: width .6s ease; box-shadow: 0 0 4px var(--accent-red); }

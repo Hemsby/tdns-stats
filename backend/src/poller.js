@@ -116,7 +116,7 @@ class Poller {
         return this.state;
     }
 
-    async _fetchRangeData(rangeType, server, isCluster) {
+    async _fetchRangeData(rangeType, server, isCluster, skipTop = false) {
         const node = isCluster ? 'cluster' : null;
         const serverKey = isCluster ? CLUSTER_KEY : server.name;
         try {
@@ -124,6 +124,8 @@ class Poller {
             this.state.rangeData[serverKey + ':' + rangeType] = data;
             this.broadcast({ type: 'range-dashboard', range: rangeType, server: serverKey, data });
         } catch (_) { /* ignore */ }
+
+        if (skipTop) return;
 
         try {
             const [topDomains, topBlocked, topClients] = await Promise.allSettled([
@@ -142,21 +144,25 @@ class Poller {
     }
 
     async _pollRangeData() {
-        const primary = this._watchedServer
+        const watched = this._watchedServer
             ? this.servers.find(s => s.name === this._watchedServer)
             : this.servers[0];
-        if (!primary) return;
-        await this._fetchRangeData('LastDay', primary, false);
+        if (!watched) return;
+        for (const server of this.servers) {
+            await this._fetchRangeData('LastDay', server, false, server !== watched);
+        }
         if (this.clusterServer) await this._fetchRangeData('LastDay', this.clusterServer, true);
     }
 
     async _pollLongRangeData() {
-        const primary = this._watchedServer
+        const watched = this._watchedServer
             ? this.servers.find(s => s.name === this._watchedServer)
             : this.servers[0];
-        if (!primary) return;
+        if (!watched) return;
         for (const type of ['LastWeek', 'LastMonth', 'LastYear']) {
-            await this._fetchRangeData(type, primary, false);
+            for (const server of this.servers) {
+                await this._fetchRangeData(type, server, false, server !== watched);
+            }
             if (this.clusterServer) await this._fetchRangeData(type, this.clusterServer, true);
         }
     }
@@ -208,7 +214,9 @@ class Poller {
                     clusterNodes:  enrichedNodes,
                     stats:         clusterDash
                 };
-            } catch (_) { /* cluster server unreachable */ }
+            } catch (_) {
+                this.clusterServer = null; // allow re-election on next poll
+            }
         }
 
         this.state.nodes = nodes;

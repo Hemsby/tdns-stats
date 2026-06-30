@@ -1,14 +1,16 @@
 'use strict';
 
 const fetch = require('node-fetch');
+const http  = require('http');
 const https = require('https');
 
+const _agentHttp     = new http.Agent({ keepAlive: true });
+const _agentHttps    = new https.Agent({ keepAlive: true });
+const _agentInsecure = new https.Agent({ keepAlive: true, rejectUnauthorized: false });
+
 function makeAgent(server) {
-    if (!server.ignoreSsl || !server.url.startsWith('https')) return undefined;
-    if (!server._agent) {
-        server._agent = new https.Agent({ rejectUnauthorized: false });
-    }
-    return server._agent;
+    if (!server.url.startsWith('https')) return _agentHttp;
+    return server.ignoreSsl ? _agentInsecure : _agentHttps;
 }
 
 function authHeaders(server) {
