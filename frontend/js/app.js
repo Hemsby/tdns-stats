@@ -237,6 +237,9 @@ const App = (() => {
                 if (data.mainChartData) data.mainChartData.tzOffset = new Date().getTimezoneOffset();
                 Charts.updateFromData(data, getDatasetMode());
             }
+            if (msg.range === state.timeRange && isCardServerVisible(msg.server)) {
+                renderClusterCards();
+            }
         } else if (msg.type === 'range-top') {
             state.rangeCache[msg.server + ':' + msg.range + ':TopDomains']        = { topDomains:        msg.data.domains || [] };
             state.rangeCache[msg.server + ':' + msg.range + ':TopBlockedDomains'] = { topBlockedDomains: msg.data.blocked || [] };
@@ -586,6 +589,7 @@ const App = (() => {
             updateChartHeading();
             refreshChart();
             refreshTopLists();
+            renderClusterCards();
         });
         el('chartServerSelect') && (el('chartServerSelect').onchange = e => {
             state.chartServer = e.target.value;
@@ -985,6 +989,13 @@ const App = (() => {
     }
 
     // ---- Render cards / cluster view ----------------------------------------
+    function isCardServerVisible(serverKey) {
+        if (state.activeTab === CLUSTER_KEY || state.activeTab === 'all') {
+            return serverKey === CLUSTER_KEY || state.serverNames.includes(serverKey);
+        }
+        return serverKey === state.activeTab;
+    }
+
     function renderClusterCards() {
         const container = document.getElementById('clusterCards');
         if (!container) return;
@@ -1029,7 +1040,25 @@ const App = (() => {
     }
 
     function buildAggregateCard(cluster) {
-        const st = cluster.stats?.stats || {};
+        let st;
+        if (state.timeRange === 'LastHour') {
+            st = cluster.stats?.stats || {};
+        } else {
+            const cached = state.rangeCache[CLUSTER_KEY + ':' + state.timeRange];
+            if (!cached) {
+                const card = document.createElement('div');
+                card.className = 'srv-card';
+                card.innerHTML =
+                    '<div class="srv-card-header">' +
+                    '<span class="srv-card-name">Cluster</span>' +
+                    '<span class="card-badge">' + esc(cluster.clusterDomain || '') + '</span>' +
+                    '</div>' +
+                    '<div class="srv-card-role"><span class="node-badge primary">Cluster</span></div>' +
+                    '<div class="srv-card-loading">Loading…</div>';
+                return card;
+            }
+            st = cached.stats || {};
+        }
         const total   = st.totalQueries      || 0;
         const blocked = st.totalBlocked      || 0;
         const cached  = st.totalCached       || 0;
@@ -1119,7 +1148,21 @@ const App = (() => {
             return card;
         }
 
-        const st = node.stats?.stats || {};
+        let st;
+        if (state.timeRange === 'LastHour') {
+            st = node.stats?.stats || {};
+        } else {
+            const rangeEntry = state.rangeCache[name + ':' + state.timeRange];
+            if (!rangeEntry) {
+                card.innerHTML =
+                    '<div class="srv-card-header">' +
+                    '<span class="srv-card-name">' + esc(node.dnsServerDomain || name) + '</span>' +
+                    '<span class="card-badge">Loading…</span>' +
+                    '</div>';
+                return card;
+            }
+            st = rangeEntry.stats || {};
+        }
         const total   = st.totalQueries      || 0;
         const blocked = st.totalBlocked      || 0;
         const cached  = st.totalCached       || 0;
