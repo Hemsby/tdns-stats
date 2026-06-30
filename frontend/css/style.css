@@ -848,7 +848,7 @@ main { position: relative; z-index: 1; min-height: 0; flex: 1; }
 .feed-server.pur   { color: var(--accent-pur); }
 .feed-server.ora   { color: var(--accent-ora); }
 .feed-client { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; grid-area: client; }
-.feed-proto  { font-size: 9px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .5px; font-weight: 700; font-family: 'Chakra Petch', sans-serif; grid-area: proto; }
+.feed-proto  { font-size: 9px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .5px; font-weight: 700; font-family: 'Chakra Petch', sans-serif; grid-area: proto; align-self: center; justify-self: center; }
 .feed-qtype  { font-size: 9px; color: var(--accent-blue); font-weight: 700; font-family: 'JetBrains Mono', monospace; text-align: center; grid-area: qtype; }
 .feed-domain { font-family: 'JetBrains Mono', monospace; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; grid-area: domain; }
 .feed-latency { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text-muted); text-align: right; grid-area: latency; }
@@ -978,14 +978,14 @@ main { position: relative; z-index: 1; min-height: 0; flex: 1; }
 }
 @media (max-width: 1199px) {
     .feed-panel[data-tab-type="single"] .feed-row {
-        grid-template-columns: 56px 90px 36px 1fr 50px min-content;
-        grid-template-areas: "time client qtype domain latency type";
+        grid-template-columns: 56px 90px 32px 36px 1fr 50px min-content;
+        grid-template-areas: "time client proto qtype domain latency type";
     }
 }
 @media (max-width: 900px) {
     .feed-panel[data-tab-type="single"] .feed-row {
-        grid-template-columns: 56px 90px 32px 1fr 50px min-content;
-        grid-template-areas: "time client qtype domain latency type";
+        grid-template-columns: 56px 90px 32px 36px 1fr 50px min-content;
+        grid-template-areas: "time client proto qtype domain latency type";
     }
 }
 
@@ -995,11 +995,10 @@ main { position: relative; z-index: 1; min-height: 0; flex: 1; }
     .main-tab-btn .tab-label { display: none; }
 
     .feed-row {
-        grid-template-columns: 56px var(--srv-w) 90px 36px 1fr 50px min-content;
-        grid-template-areas: "time server client qtype domain latency type";
+        grid-template-columns: 56px var(--srv-w) 90px 32px 36px 1fr 50px min-content;
+        grid-template-areas: "time server client proto qtype domain latency type";
     }
     .bottom-grid { grid-template-columns: 1fr; }
-    .feed-proto { display: none; }
     .chart-wrap { height: 220px; }
 }
 
@@ -1015,8 +1014,8 @@ main { position: relative; z-index: 1; min-height: 0; flex: 1; }
     .chart-wrap { height: 200px; }
 
     .feed-row {
-        grid-template-columns: 56px var(--srv-w) 90px 32px 1fr 50px min-content;
-        grid-template-areas: "time server client qtype domain latency type";
+        grid-template-columns: 56px var(--srv-w) 90px 32px 36px 1fr 50px min-content;
+        grid-template-areas: "time server client proto qtype domain latency type";
     }
 }
 
@@ -1034,6 +1033,15 @@ main { position: relative; z-index: 1; min-height: 0; flex: 1; }
     .stat-mini { gap: 2px; }
     .stat-mini-value { font-size: 12px; }
     .server-pill { font-size: 10px; gap: 4px; padding: 2px 6px; }
+    .feed-proto { display: none; }
+    .feed-row {
+        grid-template-columns: 56px var(--srv-w) 90px 36px 1fr 50px min-content;
+        grid-template-areas: "time server client qtype domain latency type";
+    }
+    .feed-panel[data-tab-type="single"] .feed-row {
+        grid-template-columns: 56px 90px 36px 1fr 50px min-content;
+        grid-template-areas: "time client qtype domain latency type";
+    }
 }
 
 /* ---- Phone Landscape: ≤600px ---- */
