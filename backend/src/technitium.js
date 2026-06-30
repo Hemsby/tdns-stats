@@ -1,12 +1,16 @@
 'use strict';
 
 const fetch = require('node-fetch');
+const http  = require('http');
 const https = require('https');
 
+const _agentHttp     = new http.Agent({ keepAlive: true });
+const _agentHttps    = new https.Agent({ keepAlive: true });
+const _agentInsecure = new https.Agent({ keepAlive: true, rejectUnauthorized: false });
+
 function makeAgent(server) {
-    return server.ignoreSsl && server.url.startsWith('https')
-        ? new https.Agent({ rejectUnauthorized: false })
-        : undefined;
+    if (!server.url.startsWith('https')) return _agentHttp;
+    return server.ignoreSsl ? _agentInsecure : _agentHttps;
 }
 
 function authHeaders(server) {
@@ -34,21 +38,27 @@ async function apiGet(server, path) {
 
 async function getSessionInfo(server) {
     const url = `${server.url.replace(/\/$/, '')}/api/user/session/get`;
-    const res = await fetch(url, {
-        agent:   makeAgent(server),
-        headers: authHeaders(server),
-        timeout: 8000
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    if (data.status !== 'ok') throw new Error(data.errorMessage || 'API error');
-    return {
-        version:            data.info?.version,
-        dnsServerDomain:    data.info?.dnsServerDomain,
-        clusterInitialized: data.info?.clusterInitialized || false,
-        clusterDomain:      data.info?.clusterDomain || null,
-        clusterNodes:       data.info?.clusterNodes  || null,
-    };
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    try {
+        const res = await fetch(url, {
+            agent:   makeAgent(server),
+            headers: authHeaders(server),
+            signal:  controller.signal,
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (data.status !== 'ok') throw new Error(data.errorMessage || 'API error');
+        return {
+            version:            data.info?.version,
+            dnsServerDomain:    data.info?.dnsServerDomain,
+            clusterInitialized: data.info?.clusterInitialized || false,
+            clusterDomain:      data.info?.clusterDomain || null,
+            clusterNodes:       data.info?.clusterNodes  || null,
+        };
+    } finally {
+        clearTimeout(timer);
+    }
 }
 
 function normalizeLabels(mainChartData, type) {
