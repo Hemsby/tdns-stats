@@ -214,7 +214,9 @@ class Poller {
                     clusterNodes:  enrichedNodes,
                     stats:         clusterDash
                 };
-            } catch (_) { /* cluster server unreachable */ }
+            } catch (_) {
+                this.clusterServer = null; // allow re-election on next poll
+            }
         }
 
         this.state.nodes = nodes;

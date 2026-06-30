@@ -1116,7 +1116,7 @@ const App = (() => {
             return '<tr class="node-row">' +
                 '<td><span class="node-dot ' + stateClass + '"></span> <span class="node-name">' + esc(n.name) + '</span></td>' +
                 '<td>' + typeBadge + '</td>' +
-                '<td class="node-url"><a href="' + esc(url) + '" target="_blank">' + esc(url) + '</a></td>' +
+                '<td class="node-url"><a href="' + esc(safeUrl(url)) + '" target="_blank">' + esc(url) + '</a></td>' +
                 '<td class="node-ip">' + esc(ip) + '</td>' +
                 '<td class="node-time">up ' + esc(upSince) + '</td>' +
                 '<td class="node-time">' + esc(lastSeen) + '</td>' +
@@ -1474,6 +1474,13 @@ const App = (() => {
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;');
+    }
+
+    function safeUrl(url) {
+        try {
+            const p = new URL(url);
+            return (p.protocol === 'http:' || p.protocol === 'https:') ? url : '#';
+        } catch (_) { return '#'; }
     }
 
     const THEME_ICONS = {
