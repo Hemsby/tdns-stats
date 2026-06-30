@@ -4,9 +4,11 @@ const fetch = require('node-fetch');
 const https = require('https');
 
 function makeAgent(server) {
-    return server.ignoreSsl && server.url.startsWith('https')
-        ? new https.Agent({ rejectUnauthorized: false })
-        : undefined;
+    if (!server.ignoreSsl || !server.url.startsWith('https')) return undefined;
+    if (!server._agent) {
+        server._agent = new https.Agent({ rejectUnauthorized: false });
+    }
+    return server._agent;
 }
 
 function authHeaders(server) {
@@ -34,21 +36,27 @@ async function apiGet(server, path) {
 
 async function getSessionInfo(server) {
     const url = `${server.url.replace(/\/$/, '')}/api/user/session/get`;
-    const res = await fetch(url, {
-        agent:   makeAgent(server),
-        headers: authHeaders(server),
-        timeout: 8000
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    if (data.status !== 'ok') throw new Error(data.errorMessage || 'API error');
-    return {
-        version:            data.info?.version,
-        dnsServerDomain:    data.info?.dnsServerDomain,
-        clusterInitialized: data.info?.clusterInitialized || false,
-        clusterDomain:      data.info?.clusterDomain || null,
-        clusterNodes:       data.info?.clusterNodes  || null,
-    };
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    try {
+        const res = await fetch(url, {
+            agent:   makeAgent(server),
+            headers: authHeaders(server),
+            signal:  controller.signal,
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (data.status !== 'ok') throw new Error(data.errorMessage || 'API error');
+        return {
+            version:            data.info?.version,
+            dnsServerDomain:    data.info?.dnsServerDomain,
+            clusterInitialized: data.info?.clusterInitialized || false,
+            clusterDomain:      data.info?.clusterDomain || null,
+            clusterNodes:       data.info?.clusterNodes  || null,
+        };
+    } finally {
+        clearTimeout(timer);
+    }
 }
 
 function normalizeLabels(mainChartData, type) {

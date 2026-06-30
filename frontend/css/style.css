@@ -126,15 +126,19 @@ main { position: relative; z-index: 1; min-height: 0; flex: 1; }
 .topbar-brand { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
 .brand-icon { width: 22px; height: 22px; color: var(--accent-blue); filter: drop-shadow(0 0 5px currentColor); }
 .brand-name { font-weight: 700; font-size: 14px; letter-spacing: 1.2px; text-transform: uppercase; }
-.topbar-status { display: flex; align-items: center; gap: 8px; flex: 1; white-space: nowrap; overflow: hidden; }
+.topbar-status { display: flex; align-items: center; gap: 8px; flex: 1; white-space: nowrap; overflow: hidden; min-width: 0; }
 
 /* Topbar server pills: shrink with ellipsis on one line */
 .topbar-status .server-pill {
-    white-space: nowrap; overflow: visible;
-    flex-shrink: 1;
+    white-space: nowrap; overflow: hidden;
+    flex-shrink: 0;
     min-width: 0;
     max-width: none;
 }
+.pill-name-full { display: inline; }
+.pill-name-short { display: none; }
+#serverIndicators.short-mode .pill-name-full { display: none; }
+#serverIndicators.short-mode .pill-name-short { display: inline; }
 
 .topbar-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; margin-left: auto; }
 .last-updated { font-size: 10px; color: var(--text-dim); font-family: 'JetBrains Mono', monospace; letter-spacing: .4px; }
@@ -823,13 +827,10 @@ main { position: relative; z-index: 1; min-height: 0; flex: 1; }
     background: var(--bg-hover); border-color: var(--border);
 }
 .feed-row {
-    display: grid; grid-template-columns: 56px 60px 90px 32px 40px 1fr 50px auto; grid-template-areas: "time server client proto qtype domain latency type";
+    display: grid; grid-template-columns: 56px var(--srv-w) 90px 32px 36px 1fr 50px min-content; grid-template-areas: "time server client proto qtype domain latency type";
     gap: 8px; align-items: center; padding: 5px 14px;
     border-bottom: 1px solid var(--border-dim); border-left: 2px solid transparent;
     transition: background .1s;
-}
-.feed-server-abbrev .feed-row {
-    grid-template-columns: 56px auto 90px 32px 40px 1fr 50px auto;
 }
 .feed-row:hover    { background: var(--bg-hover); }
 .feed-row.blocked  { background: var(--accent-red-row); border-left-color: var(--accent-red); opacity: 0.95; }
@@ -853,10 +854,11 @@ main { position: relative; z-index: 1; min-height: 0; flex: 1; }
 .feed-latency.lat-low  { color: var(--accent-green); }
 .feed-latency.lat-mid  { color: var(--accent-yel); }
 .feed-latency.lat-high { color: var(--accent-red); }
+.feed-latencytype { display: contents; grid-area: latencytype; }
 .feed-type   {
     font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 3px;
     text-align: center; white-space: nowrap; letter-spacing: .5px; text-transform: uppercase;
-    font-family: 'Chakra Petch', sans-serif; grid-area: type;
+    font-family: 'Chakra Petch', sans-serif; grid-area: type; justify-self: end;
 }
 .feed-type.noerror      { background: var(--accent-green-bg); color: var(--accent-green); }
 .feed-type.blocked      { background: var(--accent-red-bg);   color: var(--accent-red); }
@@ -966,37 +968,25 @@ main { position: relative; z-index: 1; min-height: 0; flex: 1; }
     font-size: 12px; color: var(--text-dim); letter-spacing: .2px;
 }
 
+/* ===== Responsive ===== */
 /* ---- Single-server tab: hide feed-server column ---- */
 .feed-panel[data-tab-type="single"] .feed-server { display: none; }
 .feed-panel[data-tab-type="single"] .feed-row {
-    grid-template-columns: 56px 90px 32px 40px 1fr 50px auto;
+    grid-template-columns: 56px 90px 32px 36px 1fr 50px min-content;
     grid-template-areas: "time client proto qtype domain latency type";
 }
 @media (max-width: 1199px) {
     .feed-panel[data-tab-type="single"] .feed-row {
-        grid-template-columns: 56px 90px 40px 1fr 50px auto;
+        grid-template-columns: 56px 90px 36px 1fr 50px min-content;
         grid-template-areas: "time client qtype domain latency type";
     }
 }
-@media (max-width: 1024px) {
+@media (max-width: 900px) {
     .feed-panel[data-tab-type="single"] .feed-row {
-        grid-template-columns: 56px 90px 1fr 50px auto;
-        grid-template-areas: "time client domain latency type";
+        grid-template-columns: 56px 90px 32px 1fr 50px min-content;
+        grid-template-areas: "time client qtype domain latency type";
     }
 }
-@media (max-width: 480px) {
-    .feed-panel[data-tab-type="single"] .feed-row {
-        grid-template-columns: 46px 1fr auto;
-        grid-template-areas:
-            "time time client"
-            "domain domain domain"
-            "latency latency type";
-        gap: 2px 6px;
-        padding: 4px 10px;
-    }
-}
-
-/* ===== Responsive ===== */
 
 /* ---- Small Desktop: ≤1199px ---- */
 @media (max-width: 1199px) {
@@ -1004,36 +994,29 @@ main { position: relative; z-index: 1; min-height: 0; flex: 1; }
     .main-tab-btn .tab-label { display: none; }
 
     .feed-row {
-        grid-template-columns: 56px 60px 90px 40px 1fr 50px auto;
+        grid-template-columns: 56px var(--srv-w) 90px 36px 1fr 50px min-content;
         grid-template-areas: "time server client qtype domain latency type";
     }
-    .feed-server-abbrev .feed-row {
-        grid-template-columns: 56px auto 90px 40px 1fr 50px auto;
-    }
+    .bottom-grid { grid-template-columns: 1fr; }
     .feed-proto { display: none; }
     .chart-wrap { height: 220px; }
 }
 
 /* ---- Tablet Landscape: ≤1024px ---- */
 @media (max-width: 1024px) {
-    .feed-row {
-        grid-template-columns: 56px 60px 90px 1fr 50px auto;
-        grid-template-areas: "time server client domain latency type";
-    }
-    .feed-server-abbrev .feed-row {
-        grid-template-columns: 56px auto 90px 1fr 50px auto;
-    }
-    .feed-qtype { display: none; }
     .chart-wrap { height: 200px; }
 }
 
 /* ---- Compact Tablet: ≤900px ---- */
 @media (max-width: 900px) {
-    .bottom-grid { grid-template-columns: 1fr; }
     .srv-stats-grid--wide { grid-template-columns: repeat(4, 1fr); }
-    .dashboard-viewers { display: none; }
     .version-info { display: none; }
     .chart-wrap { height: 200px; }
+
+    .feed-row {
+        grid-template-columns: 56px var(--srv-w) 90px 32px 1fr 50px min-content;
+        grid-template-areas: "time server client qtype domain latency type";
+    }
 }
 
 /* ---- Tablet Portrait: ≤768px ---- */
@@ -1057,11 +1040,33 @@ main { position: relative; z-index: 1; min-height: 0; flex: 1; }
     .card-header { flex-direction: column; align-items: flex-start; gap: 8px; }
     .chart-controls { width: 100%; }
     .chart-wrap { height: 180px; }
-
+    .dashboard-viewers { display: none; }
     .top-bar-wrap { width: 50px; }
     .top-sub { display: none; }
     .node-time { display: none; }
     .server-pill { font-size: 9px; padding: 2px 5px; }
+
+    .feed-panel[data-tab-type="aggregate"] .feed-row {
+        grid-template-columns: 46px 36px 1fr;
+        grid-template-areas:
+            "time time client"
+            "server qtype domain"
+            ". latencytype latencytype";
+        gap: 2px 6px;
+        padding: 4px 10px;
+    }
+    .feed-panel[data-tab-type="single"] .feed-row {
+        grid-template-columns: 46px 1fr 1fr;
+        grid-template-areas:
+            "time time client"
+            "qtype domain domain"
+            ". latencytype latencytype";
+        gap: 2px 6px;
+        padding: 4px 10px;
+    }
+    .feed-client { margin-left: auto; }
+    .feed-latencytype { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
+    .feed-proto { display: none; }
 }
 
 /* ---- Phone Portrait: ≤480px ---- */
@@ -1076,19 +1081,6 @@ main { position: relative; z-index: 1; min-height: 0; flex: 1; }
     .node-ip { display: none; }
     .top-bar-wrap { display: none; }
     .top-lists, .feed-panel { min-height: auto; }
-
-    .feed-panel[data-tab-type="aggregate"] .feed-row {
-        grid-template-columns: 46px 1fr auto;
-        grid-template-areas:
-            "time time client"
-            "server domain domain"
-            "latency latency type";
-        gap: 2px 6px;
-        padding: 4px 10px;
-    }
-    .feed-client, .feed-type { margin-left: auto; }
-    .feed-qtype { display: none; }
-    .feed-proto { display: none; }
 
     .feed-filter-menu {
         position: fixed !important;

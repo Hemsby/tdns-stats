@@ -189,9 +189,9 @@ const App = (() => {
                     state.topServer = isAggregate ? FOLLOW_CHART_KEY : state.activeTab;
                 }
                 state.feedServer = isAggregate ? 'all' : state.activeTab;
-                // Initialize feed panel data-tab-type for responsive CSS
+                // Initialize feed panel data-tab-type based on feed's own dropdown
                 const fp = document.getElementById('feedPanel');
-                if (fp) fp.dataset.tabType = isAggregate ? 'aggregate' : 'single';
+                if (fp) fp.dataset.tabType = state.feedServer === 'all' ? 'aggregate' : 'single';
                 buildServerUI();
                 renderPerfCards(); // show placeholders immediately on first server discovery
 
@@ -454,7 +454,7 @@ const App = (() => {
         // Set data-tab-type on feed panel for responsive feed column visibility
         const feedPanel = document.getElementById('feedPanel');
         if (feedPanel) {
-            feedPanel.dataset.tabType = (key === 'all' || key === CLUSTER_KEY) ? 'aggregate' : 'single';
+            feedPanel.dataset.tabType = state.feedServer === 'all' ? 'aggregate' : 'single';
         }
         updateServerDisplay();
         toggleServerSelects();
@@ -619,6 +619,8 @@ const App = (() => {
         el('feedServerSelect') && (el('feedServerSelect').onchange = e => {
             state.feedServer = e.target.value;
             updateSelDot('feedServerSelect', state.feedServer);
+            const fp = el('feedPanel');
+            if (fp) fp.dataset.tabType = state.feedServer === 'all' ? 'aggregate' : 'single';
             loadAndApplyFeedFilters();
             Feed.render(state.feedServer, state.feedFilters);
         });
@@ -1206,9 +1208,6 @@ const App = (() => {
     function updateServerDisplay() {
         const map = getServerDisplayMap();
         Feed.setServerDisplayMap(map);
-        const abbrev = Object.keys(map).length > 0;
-        const fp = document.getElementById('feedPanel');
-        if (fp) fp.classList.toggle('feed-server-abbrev', abbrev);
     }
 
     // ---- Server indicators --------------------------------------------------
@@ -1219,39 +1218,99 @@ const App = (() => {
     }
 
     let indicatorObs = null;
+    let lastIndicatorFingerprint = null;
+    let indicatorFullWidth = 0;
+    let indicatorMode = 'full';
+
+    function measureNaturalWidth(names, isShort) {
+        try {
+            const temp = document.createElement('div');
+            temp.className = 'topbar-status';
+            temp.style.position = 'absolute';
+            temp.style.visibility = 'hidden';
+            temp.style.left = '-9999px';
+            temp.style.top = '-9999px';
+            temp.style.width = 'auto';
+            temp.style.height = 'auto';
+            temp.style.whiteSpace = 'nowrap';
+            temp.style.display = 'inline-flex';
+            temp.style.flexShrink = '0';
+
+            temp.innerHTML = names.map(name => {
+                const node = state.nodes[name];
+                const ok = node && !node.error;
+                const displayName = isShort ? shortName(name) : name;
+                return '<span class="server-pill ' + (ok ? 'online' : 'offline') + '">' +
+                       '<span class="pill-dot"></span>' + esc(displayName) + '</span>';
+            }).join('');
+
+            document.body.appendChild(temp);
+            const width = temp.getBoundingClientRect().width;
+            document.body.removeChild(temp);
+            return width;
+        } catch (e) {
+            return 0;
+        }
+    }
 
     function renderServerIndicators() {
         const el = document.getElementById('serverIndicators');
         if (!el) return;
+
+        // Only re-render when server list or online/offline states change
+        const fingerprint = state.serverNames.map(name => {
+            const node = state.nodes[name];
+            return name + ':' + (node && !node.error ? '1' : '0');
+        }).join(',');
+        if (fingerprint === lastIndicatorFingerprint) return;
+        lastIndicatorFingerprint = fingerprint;
+
         if (indicatorObs) indicatorObs.disconnect();
-        updateIndicatorDisplayMode();
-        indicatorObs = new ResizeObserver(() => requestAnimationFrame(updateIndicatorDisplayMode));
-        indicatorObs.observe(el);
-    }
 
-    function updateIndicatorDisplayMode() {
-        const container = document.getElementById('serverIndicators');
-        if (!container) return;
-
-        // Render full names directly (no .pill-name wrapper — text overflows pill due to overflow:visible, so scrollWidth detects it)
-        container.innerHTML = state.serverNames.map(name => {
+        // Render both full and short formats inside the DOM once
+        el.innerHTML = state.serverNames.map(name => {
             const node = state.nodes[name];
             const ok = node && !node.error;
             return '<span class="server-pill ' + (ok ? 'online' : 'offline') + '" title="' + esc(name) + '">' +
-                   '<span class="pill-dot"></span>' + esc(name) + '</span>';
+                   '<span class="pill-dot"></span>' +
+                   '<span class="pill-name-full">' + esc(name) + '</span>' +
+                   '<span class="pill-name-short">' + esc(shortName(name)) + '</span>' +
+                   '</span>';
         }).join('');
 
-        const overflows = container.scrollWidth > container.clientWidth;
+        // Measure natural full width using offscreen clone
+        indicatorFullWidth = measureNaturalWidth(state.serverNames, false) || el.scrollWidth;
 
-        if (overflows) {
-            // Full names overflow — switch to abbreviated
-            container.innerHTML = state.serverNames.map(name => {
-                const node = state.nodes[name];
-                const ok = node && !node.error;
-                return '<span class="server-pill ' + (ok ? 'online' : 'offline') + '" title="' + esc(name) + '">' +
-                       '<span class="pill-dot"></span>' + esc(shortName(name)) + '</span>';
-            }).join('');
+        // Initial check: if it overflows, toggle to short mode
+        const clientWidth = el.clientWidth;
+        const shouldBeShort = clientWidth > 0 && indicatorFullWidth > clientWidth;
+        indicatorMode = shouldBeShort ? 'short' : 'full';
+        el.classList.toggle('short-mode', shouldBeShort);
+
+        if (document.fonts && !window._fontListenerAdded) {
+            window._fontListenerAdded = true;
+            document.fonts.ready.then(() => {
+                lastIndicatorFingerprint = null;
+                renderServerIndicators();
+            });
         }
+
+        // Smoothly toggle class on resize threshold to avoid layout thrashing and DOM writes
+        indicatorObs = new ResizeObserver(entries => {
+            for (const entry of entries) {
+                const width = entry.contentRect.width;
+                if (width <= 0) continue;
+
+                if (indicatorMode === 'full' && width < indicatorFullWidth) {
+                    indicatorMode = 'short';
+                    el.classList.add('short-mode');
+                } else if (indicatorMode === 'short' && width >= indicatorFullWidth + 6) {
+                    indicatorMode = 'full';
+                    el.classList.remove('short-mode');
+                }
+            }
+        });
+        indicatorObs.observe(el);
     }
 
     function renderDashboardViewers() {
