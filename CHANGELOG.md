@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [2.2.6] - 2026-06-30
+
+### Fixed
+
+- Update trigger endpoint now returns 403 if the updater is not configured, preventing unauthenticated restarts from the network.
+- Cluster server is now re-elected on the next poll after a failure, rather than serving stale aggregate data indefinitely.
+- Cluster node URLs are validated to `http`/`https` only before being placed in hrefs.
+- Removed `unsafe-inline` from the `scriptSrc` Content Security Policy directive; no inline scripts exist in the project.
+- Removed dead code (`cluster.js`) that was never imported.
+
 ## [2.2.5] - 2026-06-30
 
 ### Added
