@@ -1126,14 +1126,14 @@ const App = (() => {
             const lastSynced = n.configLastSynced && !n.configLastSynced.startsWith('0001-') ? relativeTime(n.configLastSynced) : '';
 
             return '<tr class="node-row">' +
-                '<td><span class="node-dot ' + stateClass + '"></span> <span class="node-name">' + esc(n.name) + '</span></td>' +
-                '<td>' + typeBadge + '</td>' +
+                '<td><span class="node-dot ' + stateClass + '"></span> <span class="node-name" title="' + esc(n.name) + '">' + esc(n.name) + '</span></td>' +
+                '<td class="node-role">' + typeBadge + '</td>' +
                 '<td class="node-url"><a href="' + esc(safeUrl(url)) + '" target="_blank">' + esc(url) + '</a></td>' +
-                '<td class="node-ip">' + esc(ip) + '</td>' +
-                '<td class="node-time">up ' + esc(upSince) + '</td>' +
-                '<td class="node-time">' + esc(lastSeen) + '</td>' +
-                '<td class="node-time">' + (lastSynced ? 'synced ' + esc(lastSynced) : '') + '</td>' +
-                '<td><span class="node-state ' + stateClass + '">' + esc(n.state) + '</span></td>' +
+                '<td class="node-ip"><span class="node-ip-text" title="' + esc(ip) + '">' + esc(ip) + '</span></td>' +
+                '<td class="node-time node-uptime">up ' + esc(upSince) + '</td>' +
+                '<td class="node-time node-lastseen">' + esc(lastSeen) + '</td>' +
+                '<td class="node-time node-lastsynced">' + (lastSynced ? 'synced ' + esc(lastSynced) : '') + '</td>' +
+                '<td class="node-state-cell"><span class="node-state ' + stateClass + '">' + esc(n.state) + '</span></td>' +
                 '</tr>';
         }).join('');
 
@@ -1141,7 +1141,8 @@ const App = (() => {
             '<div class="card-header"><h2 class="card-title">Cluster Nodes' +
             (clusterDomain ? ' <span class="node-domain">' + esc(clusterDomain) + '</span>' : '') + '</h2></div>' +
             '<div class="node-table-scroll"><table class="node-table">' +
-            '<thead><tr><th>Node</th><th>Role</th><th>URL</th><th>IP</th><th>Uptime</th><th>Last Seen</th><th>Last Synced</th><th>State</th></tr></thead>' +
+            '<thead><tr><th>Node</th><th class="node-role">Role</th><th class="node-url">URL</th><th class="node-ip">IP</th>' +
+            '<th class="node-uptime">Uptime</th><th class="node-lastseen">Last Seen</th><th class="node-lastsynced">Last Synced</th><th class="node-state-cell">State</th></tr></thead>' +
             '<tbody>' + rows + '</tbody>' +
             '</table></div>';
         return wrap;
