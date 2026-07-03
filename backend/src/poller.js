@@ -20,7 +20,6 @@ class Poller {
         };
         this.state     = {};
         this.state.perf  = {};
-        this.state.rangeData = {};
         this.feedCursors   = {};
         this._feedPollInProgress = false;
         this.clusterServer = null;
@@ -76,10 +75,6 @@ class Poller {
         this._startTimers();
     }
 
-    stop() {
-        this._clearTimers();
-    }
-
     pause() {
         this._clearTimers();
     }
@@ -121,7 +116,6 @@ class Poller {
         const serverKey = isCluster ? CLUSTER_KEY : server.name;
         try {
             const data = await getDashboard(server, rangeType, node, 0);
-            this.state.rangeData[serverKey + ':' + rangeType] = data;
             this.broadcast({ type: 'range-dashboard', range: rangeType, server: serverKey, data });
         } catch (_) { /* ignore */ }
 
@@ -138,7 +132,6 @@ class Poller {
                 blocked: topBlocked.status === 'fulfilled' ? (topBlocked.value?.topBlockedDomains || []) : [],
                 clients: topClients.status === 'fulfilled' ? (topClients.value?.topClients        || []) : []
             };
-            this.state.rangeData[serverKey + ':' + rangeType + ':top'] = topData;
             this.broadcast({ type: 'range-top', range: rangeType, server: serverKey, data: topData });
         } catch (_) { /* ignore */ }
     }
@@ -220,7 +213,6 @@ class Poller {
         }
 
         this.state.nodes = nodes;
-        this.state.updatedAt = Date.now();
         this.broadcast({ type: 'stats', data: nodes });
     }
 

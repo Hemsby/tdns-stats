@@ -25,11 +25,8 @@ const App = (() => {
         dashboardViewers: 0,
         lastUpdated:   null,
         isCluster:     false,
-        version:       null,
-        updateAvailable: false,
         updateStatus:   null,
         updaterEnabled: false,
-        healthCheckTimer: null,
         domainSearchServer: 'all',
         blockedLookup: false,
         changelogHtml: null,
@@ -252,8 +249,6 @@ const App = (() => {
             if (state.timeRange === msg.range && msg.server === effectiveTop) {
                 refreshTopLists();
             }
-        } else if (msg.type === 'ping') {
-            // No action needed, handleMessage already updated lastMsg
         }
     }
 
@@ -1737,7 +1732,6 @@ const App = (() => {
                 state.updateStatus = null;
                 document.getElementById('updateStatus').hidden = true;
                 document.getElementById('updateBtn').hidden = true;
-                state.updateAvailable = false;
             }, 3000);
         }
     }
@@ -1806,7 +1800,6 @@ const App = (() => {
             const res = await fetch('/api/version');
             const data = await res.json();
             if (data.version) {
-                state.version = data.version;
                 state.updaterEnabled = data.updaterEnabled;
                 document.getElementById('versionPill').textContent = 'v' + data.version;
                 setupUpdaterUI();
@@ -1834,7 +1827,6 @@ const App = (() => {
             }
 
             if (data.updateAvailable) {
-                state.updateAvailable = true;
                 state.updateStatus = 'update-available';
             } else {
                 state.updateStatus = 'checked';

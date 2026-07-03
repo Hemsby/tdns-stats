@@ -19,7 +19,6 @@ class Updater {
         this.capable = type === 'docker'
             ? fs.existsSync('/app/host-project/docker-compose.yml')
             : type === 'systemd';
-        return this.capable;
     }
 
     async detectDeploymentMethod() {

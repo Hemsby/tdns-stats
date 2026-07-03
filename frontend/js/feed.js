@@ -87,11 +87,6 @@ const Feed = (() => {
         if (!paused) render(lastFilter, lastBlocked);
     }
 
-    function setFilters(filters) {
-        lastBlocked = filters;
-        render(lastFilter, filters);
-    }
-
     function scheduleRender(serverFilter, filters) {
         lastFilter  = serverFilter;
         lastBlocked = filters;
@@ -230,5 +225,5 @@ const Feed = (() => {
             .replace(/"/g, '&quot;');
     }
 
-    return { init, add, scheduleRender, render, setColors, setPaused, setFilters, setServerDisplayMap };
+    return { init, add, scheduleRender, render, setColors, setPaused, setServerDisplayMap };
 })();
