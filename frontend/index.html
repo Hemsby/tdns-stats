@@ -32,14 +32,14 @@
                         <rect x="14" y="12" width="7" height="9"/>
                         <rect x="3" y="16" width="7" height="5"/>
                     </svg>
-                    Dashboard
+                    <span class="tab-label">Dashboard</span>
                 </button>
                 <button class="main-tab-btn" data-tab="other-stats">
                     <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
                         <circle cx="11" cy="11" r="8"/>
                         <line x1="21" y1="21" x2="16.65" y2="16.65"/>
                     </svg>
-                    Cache &amp; Blocked
+                    <span class="tab-label">Cache &amp; Blocked</span>
                 </button>
             </nav>
             <div class="topbar-status" id="serverIndicators"></div>
@@ -153,7 +153,7 @@
                     <div id="topContent" class="top-content"></div>
                 </div>
 
-                <div class="feed-panel card">
+                <div id="feedPanel" class="feed-panel card" data-tab-type="aggregate">
                     <div class="card-header">
                         <h2 class="card-title">Live Feed</h2>
                         <div class="chart-controls">

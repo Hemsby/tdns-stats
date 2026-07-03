@@ -10,8 +10,15 @@ const Feed = (() => {
     let lastBlocked  = false;
     let colorMap     = {};
     let paused       = false;
+    let serverDisplayMap = {};
+    const textCtx = document.createElement('canvas').getContext('2d');
+    textCtx.font = '600 11px "Chakra Petch", system-ui, sans-serif';
 
-    function init(maxEntries) { if (maxEntries > 0) MAX_ENTRIES = maxEntries; }
+    function init(maxEntries) {
+        if (maxEntries > 0) MAX_ENTRIES = maxEntries;
+    }
+
+    function setServerDisplayMap(map) { serverDisplayMap = map; }
 
     function setColors(map) {
         colorMap = map;
@@ -43,26 +50,34 @@ const Feed = (() => {
         }
         if (deduped.length === 0) return;
 
-        // Insert by timestamp descending (primary), with rowNumber descending
-        // within the same server as a tiebreaker for equal timestamps.
-        // Timestamp MUST take priority over rowNumber — entries from one server
-        // that arrive with a newer timestamp than another server's existing entries
-        // must go to the front, not to the old position of that server's prior entries.
-        for (const entry of deduped) {
-            const pos = entries.findIndex(e =>
-                e._time < entry._time ||
-                (e._time === entry._time && e._server === serverName && e.rowNumber < entry.rowNumber)
-            );
-            entries.splice(pos === -1 ? entries.length : pos, 0, entry);
-        }
+        // Merge new entries into the sorted array in O(n + m) instead of O(n × m).
+        // Both `entries` and `deduped` are sorted by _time descending. Sort deduped
+        // explicitly since we shouldn't assume API ordering across edge cases.
+        deduped.sort((a, b) => b._time - a._time || b.rowNumber - a.rowNumber);
 
-        // Evict oldest entries beyond MAX_ENTRIES
-        if (entries.length > MAX_ENTRIES) {
-            const evicted = entries.splice(MAX_ENTRIES);
-            for (const ev of evicted) {
-                const id = ev._server + ':' + ev.rowNumber;
-                seen.delete(id);
+        const merged = [];
+        let i = 0, j = 0;
+        while (i < entries.length && j < deduped.length) {
+            const e = entries[i];
+            const d = deduped[j];
+            if (d._time > e._time ||
+                (d._time === e._time && d._server === e._server && d.rowNumber > e.rowNumber)) {
+                merged.push(d);
+                j++;
+            } else {
+                merged.push(e);
+                i++;
             }
+        }
+        while (i < entries.length) merged.push(entries[i++]);
+        while (j < deduped.length) merged.push(deduped[j++]);
+
+        // Replace entries contents and evict beyond MAX_ENTRIES
+        const limit = Math.min(merged.length, MAX_ENTRIES);
+        entries.length = 0;
+        for (let k = 0; k < limit; k++) entries.push(merged[k]);
+        for (let k = limit; k < merged.length; k++) {
+            seen.delete(merged[k]._server + ':' + merged[k].rowNumber);
         }
     }
 
@@ -119,32 +134,29 @@ const Feed = (() => {
 
         const frag = document.createDocumentFragment();
         const max = Math.min(filtered.length, MAX_ENTRIES);
+        let maxSrvW = 0;
         for (let i = 0; i < max; i++) {
             const e = filtered[i];
+            const srvName = serverDisplayMap[e._server] || e._server;
+            const w = Math.ceil(textCtx.measureText(srvName).width + srvName.length * 0.2) + 8;
+            if (w > maxSrvW) maxSrvW = w;
+
+            let badgeText = e.responseType || 'Unknown';
+            const rcode = (e.rcode || '').toLowerCase().replace(/\s+/g, '');
+            if (e.responseType !== 'Blocked') {
+                if (rcode === 'nxdomain')         badgeText = 'NX Domain';
+                else if (rcode === 'serverfailure') badgeText = 'ServFail';
+                else if (rcode === 'refused')       badgeText = 'Refused';
+            }
+
+
             const row = document.createElement('div');
             row.className = 'feed-row ' + rowClass(e);
             row.dataset.id = `${e._server}:${e.rowNumber}`;
 
             const ts    = formatTime(e.timestamp);
             const srvCls  = colorMap[e._server] ? ' ' + colorMap[e._server] : '';
-            
-            // Determine badge text and class: Priority on Results (RCODE) over Resolution Method
-            let badgeText = e.responseType || 'Unknown';
-            let badgeCls  = badgeText.toLowerCase().replace(/\s+/g, '');
-            
-            const rcode = (e.rcode || '').toLowerCase().replace(/\s+/g, '');
-            if (e.responseType !== 'Blocked') {
-                if (rcode === 'nxdomain') {
-                    badgeText = 'NX Domain';
-                    badgeCls  = 'nxdomain';
-                } else if (rcode === 'serverfailure') {
-                    badgeText = 'ServFail';
-                    badgeCls  = 'servfail';
-                } else if (rcode === 'refused') {
-                    badgeText = 'Refused';
-                    badgeCls  = 'refused';
-                }
-            }
+            const badgeCls  = badgeText.toLowerCase().replace(/\s+/g, '');
 
             const rttVal  = e.responseRtt;
             const rtt     = fmtMs(rttVal, e.responseType);
@@ -152,17 +164,19 @@ const Feed = (() => {
 
             row.innerHTML =
                 '<span class="feed-time">'   + esc(ts)                  + '</span>' +
-                '<span class="feed-server' + srvCls + '">' + esc(e._server) + '</span>' +
+                '<span class="feed-server' + srvCls + '" title="' + esc(e._server) + '">' + esc(srvName) + '</span>' +
                 '<span class="feed-client" title="' + esc(e.clientIpAddress) + '">' + esc(e.clientIpAddress) + '</span>' +
                 '<span class="feed-proto">'  + esc(e.protocol || '')     + '</span>' +
                 '<span class="feed-qtype">'  + esc(e.qtype || '')        + '</span>' +
                 '<span class="feed-domain" title="' + esc(e.qname) + '">' + esc(e.qname) + '</span>' +
-                '<span class="feed-latency ' + latCls + '">' + esc(rtt)  + '</span>' +
-                '<span class="feed-type '   + badgeCls + '">'            + esc(badgeText) + '</span>';
+                '<span class="feed-latencytype"><span class="feed-latency ' + latCls + '">' + esc(rtt)  + '</span>' +
+                '<span class="feed-type '   + badgeCls + '">'            + esc(badgeText) + '</span></span>';
 
             frag.appendChild(row);
         }
+        maxSrvW = Math.min(maxSrvW, 60);
 
+        list.style.setProperty('--srv-w', maxSrvW + 'px');
         list.replaceChildren(frag);
     }
 
@@ -216,5 +230,5 @@ const Feed = (() => {
             .replace(/"/g, '&quot;');
     }
 
-    return { init, add, scheduleRender, render, setColors, setPaused, setFilters };
+    return { init, add, scheduleRender, render, setColors, setPaused, setFilters, setServerDisplayMap };
 })();
