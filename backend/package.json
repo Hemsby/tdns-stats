@@ -1,6 +1,6 @@
 {
   "name": "tdns-stats",
-  "version": "2.2.6",
+  "version": "2.2.7",
   "description": "Technitium DNS Server Statistics Dashboard",
   "main": "src/server.js",
   "scripts": {

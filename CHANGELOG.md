@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [2.2.7] - 2026-07-03
+
+### Changed
+
+- Overhauled responsive design across the dashboard for tablet and mobile breakpoints.
+- Navbar tab labels and branding now hide at ≤1199px; server connection indicators auto-truncate to short names when space is tight.
+- Live feed grid rebuilt for consistent column alignment and spacing across all breakpoints; QTYPE column is now visible at all viewport sizes; the server name column is removed from the live feed on individual server tabs.
+- Top stats cards and the live feed now stack at ≤1199px instead of the previous 2-column layout, so feed data isn't truncated.
+- Server names in the live feed are intelligently truncated to their unique part when all servers share a common parent domain.
+- Cluster Nodes table now progressively hides less important columns (URL, then Role/Uptime, then Last Seen/Last Synced) as the viewport narrows, keeping Node/IP/State visible at all sizes instead of losing data or triggering horizontal scroll.
+- Feed entry insertion optimized from O(n×m) to O(n+m) using a two-pointer merge, improving performance with large numbers of feed entries.
+
+### Fixed
+
+- Cluster stat card grid no longer forces a 380px minimum column width on narrow viewports, which previously caused horizontal overflow below that width regardless of card content.
+
 ## [2.2.6] - 2026-06-30
 
 ### Fixed
