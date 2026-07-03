@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [2.2.8] - 2026-07-03
+
+### Fixed
+
+- Removed more dead code paths and leftover unused state objects from earlier versions.
+
 ## [2.2.7] - 2026-07-03
 
 ### Changed
