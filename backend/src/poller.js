@@ -1,6 +1,6 @@
 'use strict';
 
-const { getDashboard, getTopStats, getQueryLogs, getRttSample, getSessionInfo, getClusterState } = require('./technitium');
+const { getDashboard, getTopStats, getQueryLogs, getRttSample, getSessionInfo, getClusterState, getClusterNodeState } = require('./technitium');
 
 const CLUSTER_KEY = '__cluster';
 
@@ -185,18 +185,22 @@ class Poller {
                     getClusterState(this.clusterServer)
                 ]);
 
-                // Query each node individually to get its configLastSynced
+                // Query each node individually to get its configLastSynced. node.url is the
+                // node's own cluster-sync URL, which Technitium requires to be HTTPS regardless
+                // of how the admin API itself is configured - see getClusterNodeState for why
+                // this needs its own verify-then-fallback handling instead of plain getClusterState.
                 const enrichedNodes = await Promise.all(
                     (clusterState?.clusterNodes || []).map(async node => {
                         try {
-                            const nodeState = await getClusterState({ ...this.clusterServer, url: node.url });
+                            const nodeState = await getClusterNodeState({ ...this.clusterServer, url: node.url });
                             // Find this node's entry in the response to get its configLastSynced
                             const selfNode = (nodeState?.clusterNodes || []).find(n => n.id === node.id || n.name === node.name);
                             return {
                                 ...node,
                                 configLastSynced: selfNode?.configLastSynced || null
                             };
-                        } catch (_) {
+                        } catch (err) {
+                            console.warn(`[cluster] ${node.name || node.url}: ${err.message}`);
                             return { ...node, configLastSynced: null };
                         }
                     })

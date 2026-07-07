@@ -8,8 +8,10 @@ const _agentHttp     = new http.Agent({ keepAlive: true });
 const _agentHttps    = new https.Agent({ keepAlive: true });
 const _agentInsecure = new https.Agent({ keepAlive: true, rejectUnauthorized: false });
 
-function makeAgent(server) {
+function makeAgent(server, opts) {
     if (!server.url.startsWith('https')) return _agentHttp;
+    // forceInsecure is used by getClusterNodeState's verify-then-fallback below.
+    if (opts?.forceInsecure) return _agentInsecure;
     return server.ignoreSsl ? _agentInsecure : _agentHttps;
 }
 
@@ -17,13 +19,13 @@ function authHeaders(server) {
     return { 'Authorization': `Bearer ${server.token}` };
 }
 
-async function apiGet(server, path) {
+async function apiGet(server, path, opts) {
     const url = `${server.url.replace(/\/$/, '')}/${path}`;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 8000);
     try {
         const res = await fetch(url, {
-            agent:   makeAgent(server),
+            agent:   makeAgent(server, opts),
             headers: authHeaders(server),
             signal:  controller.signal,
         });
@@ -95,8 +97,41 @@ async function getSettings(server) {
     return apiGet(server, 'api/settings/get');
 }
 
-async function getClusterState(server) {
-    return apiGet(server, 'api/admin/cluster/state');
+async function getClusterState(server, opts) {
+    return apiGet(server, 'api/admin/cluster/state', opts);
+}
+
+// Node/OpenSSL's TLS verification failures surface as one of these specific error codes on
+// the thrown error (verified empirically against node-fetch: a self-signed cert throws
+// FetchError with err.code === 'DEPTH_ZERO_SELF_SIGNED_CERT'). Distinct from other failure
+// codes like ECONNREFUSED/ETIMEDOUT/ENOTFOUND, which should NOT trigger a fallback - those
+// mean the node is actually unreachable, and retrying without verification wouldn't help.
+const CERT_VERIFICATION_ERROR_CODES = new Set([
+    'DEPTH_ZERO_SELF_SIGNED_CERT',
+    'SELF_SIGNED_CERT_IN_CHAIN',
+    'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
+    'UNABLE_TO_GET_ISSUER_CERT',
+    'UNABLE_TO_GET_ISSUER_CERT_LOCALLY',
+    'CERT_HAS_EXPIRED',
+    'CERT_NOT_YET_VALID',
+    'CERT_UNTRUSTED',
+    'CERT_REJECTED',
+    'ERR_TLS_CERT_ALTNAME_INVALID',
+]);
+
+// For a cluster peer's own reported URL: Technitium requires that to be HTTPS unconditionally,
+// regardless of how the admin API itself is configured, and its cert may or may not be one the
+// user has arranged for Node to trust (e.g. via NODE_EXTRA_CA_CERTS covering their whole PKI).
+// Try with full verification first, so a properly-trusted setup stays verified end to end;
+// only fall back to skipping verification if that specifically fails on a certificate error
+// (not any other kind of failure, which a fallback wouldn't fix anyway).
+async function getClusterNodeState(server) {
+    try {
+        return await getClusterState(server);
+    } catch (err) {
+        if (!CERT_VERIFICATION_ERROR_CODES.has(err?.code)) throw err;
+        return await getClusterState(server, { forceInsecure: true });
+    }
 }
 
 async function listQueryLogApps(server) {
@@ -314,4 +349,4 @@ async function resolveBlockedDomain(server, domain) {
     };
 }
 
-module.exports = { getSessionInfo, getDashboard, getSettings, getClusterState, listQueryLogApps, discoverQueryLogsApp, getQueryLogs, getRttSample, getCacheMaxEntries, getTopStats, listCache, resolveBlockedDomain };
+module.exports = { getSessionInfo, getDashboard, getSettings, getClusterState, getClusterNodeState, listQueryLogApps, discoverQueryLogsApp, getQueryLogs, getRttSample, getCacheMaxEntries, getTopStats, listCache, resolveBlockedDomain };
