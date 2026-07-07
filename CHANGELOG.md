@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [2.2.10] - 2026-07-07
+
+### Fixed
+- Cluster node health checks could still flood the DNS server with repeated connection attempts on an untrusted certificate even after the v2.2.9 fix, because the check retried and failed the same certificate verification every poll cycle before falling back, rather than remembering the outcome. It now remembers which nodes need the fallback and stops repeating the failing attempt.
+
 ## [2.2.9] - 2026-07-07
 
 ### Fixed
