@@ -119,17 +119,32 @@ const CERT_VERIFICATION_ERROR_CODES = new Set([
     'ERR_TLS_CERT_ALTNAME_INVALID',
 ]);
 
+// Hosts confirmed (this process's lifetime) to fail certificate verification, so repeat
+// calls skip straight to the insecure agent instead of re-attempting a doomed verified
+// connection every poll cycle. Without this, a permanently-untrusted cert still causes a
+// fresh connection (and fresh DNS lookup) every cycle even though getClusterNodeState as a
+// whole "succeeds" via fallback - the verified attempt alone never gets to reuse a pooled
+// connection, since a TLS-rejected socket is discarded rather than kept alive for reuse.
+const _insecureRequiredHosts = new Set();
+
 // For a cluster peer's own reported URL: Technitium requires that to be HTTPS unconditionally,
 // regardless of how the admin API itself is configured, and its cert may or may not be one the
 // user has arranged for Node to trust (e.g. via NODE_EXTRA_CA_CERTS covering their whole PKI).
 // Try with full verification first, so a properly-trusted setup stays verified end to end;
 // only fall back to skipping verification if that specifically fails on a certificate error
-// (not any other kind of failure, which a fallback wouldn't fix anyway).
+// (not any other kind of failure, which a fallback wouldn't fix anyway) - and remember that
+// outcome per host so it doesn't repeat the failing attempt on every subsequent poll.
 async function getClusterNodeState(server) {
+    const host = new URL(server.url).host;
+
+    if (_insecureRequiredHosts.has(host))
+        return getClusterState(server, { forceInsecure: true });
+
     try {
         return await getClusterState(server);
     } catch (err) {
         if (!CERT_VERIFICATION_ERROR_CODES.has(err?.code)) throw err;
+        _insecureRequiredHosts.add(host);
         return await getClusterState(server, { forceInsecure: true });
     }
 }
