@@ -1,5 +1,8 @@
 # tdns-stats
 
+[![License](https://img.shields.io/github/license/Hemsby/tdns-stats)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/Hemsby/tdns-stats)](https://github.com/Hemsby/tdns-stats/releases/latest)
+
 A self-hosted statistics dashboard for [Technitium DNS Server](https://technitium.com/dns/) v15 and later.
 
 Displays live query feeds, per-server and cluster stats, top domains/clients, performance metrics (RTT, cache hit rate), and a real-time chart — all pushed to the browser via Server-Sent Events with no page refreshes required.
