@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [2.2.9] - 2026-07-07
+
+### Fixed
+- Cluster node health checks (used for each node's last-synced status) no longer flood the DNS server with repeated connection attempts when the cluster's internal HTTPS certificate isn't trusted (e.g. Technitium's default self-signed certificate, when the admin API itself is accessed over plain HTTP). Certificate verification is now tried first and only relaxed if that specific check fails on a certificate error; failures are also now logged instead of failing silently.
+
 ## [2.2.8] - 2026-07-03
 
 ### Fixed
