@@ -6,14 +6,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [2.2.11] - 2026-07-15
+
+### Changed
+
+- Perf card now shows **all** fields dynamically as soon as there is enough data to reasonably compute them. The 'waiting for data' indicator has been removed. All metrics now show `--` when there is not enough data available. Example: Median is calculated as soon as there at at least 3 RTT samples available for a given server/node.
+- Hit and miss rate formatting is now handled by a single helper, ensuring percentages render consistently across cards regardless of where they're shown.
+- Added guidance for feed.pageSize tuning in `config.example.yml` and the README. The shipped default of 20 remains; users with high-traffic servers can increase it via the existing knob (a given Technitium servers per poll cap is the real ceiling).
+
+### Removed
+
+- Removed the unused recursivePct field from the per-server stats payload (was never displayed anywhere in the dashboard).
+
+### Fixed
+
+- Live feed no longer silently drops queries that happen to share a millisecond timestamp with the last seen entry, so bursts of simultaneous queries are no longer missed from the feed.
+- Perf card no longer shows unstable single-sample medians, p99 values, or jitter; those values are now suppressed until enough RTT samples have been collected for them to be meaningful.
+
 ## [2.2.10] - 2026-07-07
 
 ### Fixed
+
 - Cluster node health checks could still flood the DNS server with repeated connection attempts on an untrusted certificate even after the v2.2.9 fix, because the check retried and failed the same certificate verification every poll cycle before falling back, rather than remembering the outcome. It now remembers which nodes need the fallback and stops repeating the failing attempt.
 
 ## [2.2.9] - 2026-07-07
 
 ### Fixed
+
 - Cluster node health checks (used for each node's last-synced status) no longer flood the DNS server with repeated connection attempts when the cluster's internal HTTPS certificate isn't trusted (e.g. Technitium's default self-signed certificate, when the admin API itself is accessed over plain HTTP). Certificate verification is now tried first and only relaxed if that specific check fails on a certificate error; failures are also now logged instead of failing silently.
 
 ## [2.2.8] - 2026-07-03

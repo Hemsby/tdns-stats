@@ -1,6 +1,6 @@
 {
   "name": "tdns-stats",
-  "version": "2.2.10",
+  "version": "2.2.11",
   "description": "Technitium DNS Server Statistics Dashboard",
   "license": "MIT",
   "main": "src/server.js",
