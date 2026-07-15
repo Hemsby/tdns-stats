@@ -1401,7 +1401,6 @@ const App = (() => {
             card.innerHTML =
                 '<div class="srv-card-header">' +
                 '<span class="srv-card-name">' + esc(name) + '</span>' +
-                '<span class="card-badge">waiting for data...</span>' +
                 '</div>' +
                 '<div class="srv-card-role"><span class="perf-section-label">RTT</span></div>' +
                 '<div class="srv-stats-grid">' +
@@ -1412,8 +1411,8 @@ const App = (() => {
                 '</div>' +
                 '<div class="srv-card-role" style="margin-top:6px"><span class="perf-section-label">Cache</span></div>' +
                 '<div class="srv-stats-grid">' +
-                statMini('Hit Rate',     statsHitRate !== null ? statsHitRate + '%' : '--', 'green') +
-                statMini('Miss Rate',    statsHitRate !== null ? (100 - statsHitRate) + '%' : '--', 'red') +
+                statMini('Hit Rate',     fmtPct(statsHitRate), 'green') +
+                statMini('Miss Rate',    fmtPct(statsHitRate !== null ? 100 - statsHitRate : null), 'red') +
                 statMini(cachePopLabel,  cachePopHtml,      'teal') +
                 statMini('Impact',       '--',              'pur') +
                 '</div>';
@@ -1422,7 +1421,7 @@ const App = (() => {
 
         const rtt   = perf.rtt   || {};
         const hitRate = perf.cache?.hitRate || 0;
-        const missRate = parseFloat((100 - hitRate).toFixed(1));
+        const missRate = 100 - hitRate;
 
         card.innerHTML =
             '<div class="srv-card-header">' +
@@ -1437,8 +1436,8 @@ const App = (() => {
             '</div>' +
             '<div class="srv-card-role" style="margin-top:6px"><span class="perf-section-label">Cache</span></div>' +
             '<div class="srv-stats-grid">' +
-            statMini('Hit Rate',    hitRate + '%',     'green') +
-            statMini('Miss Rate',   missRate + '%',     'red') +
+            statMini('Hit Rate',    fmtPct(hitRate), 'green') +
+            statMini('Miss Rate',   fmtPct(missRate), 'red') +
             statMini(cachePopLabel, cachePopHtml,                  'teal') +
             statMini('Impact',      fmtMs(perf.impact),            'pur') +
             '</div>';
@@ -1586,6 +1585,11 @@ const App = (() => {
         if (n >= 1000000) return parseFloat((n / 1000000).toFixed(1)) + 'M';
         if (n >= 1000)    return parseFloat((n / 1000).toFixed(1)) + 'K';
         return String(n);
+    }
+
+    function fmtPct(n) {
+        if (n == null || n <= 0) return '--';
+        return Number.isInteger(n) ? n + '%' : n.toFixed(1) + '%';
     }
 
     function fmtMs(n) {

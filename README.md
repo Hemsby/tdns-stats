@@ -242,6 +242,12 @@ The live feed requires a query log app to be installed on each DNS server. Suppo
 
 If you have more than one query log app installed, specify which one to use with `servers[].queryLogsApp`. Otherwise the first one found is used automatically.
 
+### Tuning the feed polling rate
+
+By default the backend polls every 3 seconds and asks Technitium for the 20 newest query log entries each cycle. Technitium returns only the top-N entries per request, so any queries that land faster than `pageSize / feedInterval` (about 6.7 qps with the defaults) overflow the request and are skipped that cycle.
+
+If your environment produces higher sustained rates or bursty peaks (e.g. an office first thing in the morning), increase `feed.pageSize` so the dashboard can keep up. There is no automatic tuning - raise the value if you notice entries missing from the feed, or if you see frequent `feed cursor reset` lines in the tdns-stats logs. Each Technitium query log app has a per-request cap, so profile before cranking it to the maximum.
+
 ## Themes
 
 The dashboard supports light, dark, and system themes. The preference is stored in the browser and applied on next load with no flash of unstyled content.

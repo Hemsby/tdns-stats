@@ -252,28 +252,45 @@ class Poller {
                 const cursor  = this.feedCursors[server.name];
                 let cursorReset = false;
 
-                let fresh = entries;
-                if (cursor) {
-                    if (entries.length > 0) {
-                        const latestTs = new Date(entries[0].timestamp).getTime();
-                        if (latestTs < cursor) {
-                            // Timestamp went backwards — query log was reset or rotated
-                            console.log(`${server.name}: feed cursor reset (before: ${new Date(cursor).toISOString()} → after: ${entries[0].timestamp})`);
-                            fresh = entries;
-                            cursorReset = true;
-                        } else {
-                            const idx = entries.findIndex(e => new Date(e.timestamp).getTime() <= cursor);
-                            fresh = idx === -1 ? entries : entries.slice(0, idx);
-                        }
-                    }
-                }
+            if (entries.length === 0) continue;
 
-                if (fresh.length > 0) {
-                    this.feedCursors[server.name] = new Date(entries[0]?.timestamp).getTime();
-                    this.broadcast({ type: 'feed', server: server.name, data: fresh, cursorReset });
-                } else if (!cursor && entries.length > 0) {
-                    this.feedCursors[server.name] = new Date(entries[0]?.timestamp).getTime();
-                }
+            const toMs = (e) => new Date(e.timestamp).getTime();
+            entries.sort((a, b) => {
+                const dt = toMs(b) - toMs(a);
+                return dt !== 0 ? dt : (b.rowNumber ?? 0) - (a.rowNumber ?? 0);
+            });
+            const newestTs        = toMs(entries[0]);
+            const newestRowNumber = entries[0].rowNumber;
+
+            if (!cursor) {
+                this.feedCursors[server.name] = { ts: newestTs, rowNumber: newestRowNumber };
+                this.broadcast({ type: 'feed', server: server.name, data: entries, cursorReset });
+                continue;
+            }
+
+            const isReset = newestTs < cursor.ts;
+
+            let fresh;
+            if (isReset) {
+                console.log(
+                    `${server.name}: feed cursor reset ` +
+                    `(before: ts=${new Date(cursor.ts).toISOString()} row=${cursor.rowNumber} ` +
+                    `→ after: ts=${entries[0].timestamp} row=${newestRowNumber})`
+                );
+                fresh = entries;
+                cursorReset = true;
+            } else {
+                fresh = entries.filter(e => {
+                    if (e.rowNumber == null) return true;
+                    const t = toMs(e);
+                    return t > cursor.ts || (t === cursor.ts && e.rowNumber > cursor.rowNumber);
+                });
+            }
+
+            if (fresh.length === 0) continue;
+
+            this.feedCursors[server.name] = { ts: newestTs, rowNumber: newestRowNumber };
+            this.broadcast({ type: 'feed', server: server.name, data: fresh, cursorReset });
             } catch (err) { console.warn(`[feed] ${server.name}: ${err.message}`); }
         }
     }
@@ -341,21 +358,25 @@ class Poller {
                     continue;
                 }
 
-                // 1. Calculate Jitter (RFC 3550 EWMA)
+                // Calculate Jitter (EWMA of RTT variation)
+                // Measures how much response times vary between consecutive queries
                 // Computed fresh each cycle from the current batch's temporal order (newest to oldest)
-                let j = 0;
-                for (let i = 1; i < rtts.length; i++) {
-                    j += (Math.abs(rtts[i] - rtts[i - 1]) - j) / 16;
+                let jitter = null;
+                if (rtts.length >= 2) {
+                    let j = 0;
+                    for (let i = 1; i < rtts.length; i++) {
+                        j += (Math.abs(rtts[i] - rtts[i - 1]) - j) / 16;
+                    }
+                    jitter = j;
                 }
-                const jitter = j;
 
-                // 2. Statistical Metrics (requires sorted array)
+                // Statistical Metrics (requires sorted array)
                 rtts.sort((a, b) => a - b);
                 const mean   = rtts.reduce((s, v) => s + v, 0) / rtts.length;
-                const median = rtts[Math.floor(rtts.length / 2)];
-                const p99    = rtts[Math.min(Math.floor(rtts.length * 0.99), rtts.length - 1)];
+                const mid    = Math.floor(rtts.length / 2);
+                const median = rtts.length >= 3 ? (rtts.length % 2 === 0 ? (rtts[mid - 1] + rtts[mid]) / 2 : rtts[mid]) : null;
+                const p99    = rtts.length >= 3 ? rtts[Math.min(Math.floor(rtts.length * 0.99), rtts.length - 1)] : null;
 
-                const totalQueries  = st.totalQueries   || 0;
                 const totalCached   = st.totalCached     || 0;
                 const cachedEntries = st.cachedEntries   || 0;
                 const cacheMax      = server.cacheMaxEntries || 0;
@@ -366,10 +387,10 @@ class Poller {
 
                 const perfData = {
                     rtt: {
-                        median:  +median.toFixed(2),
+                        median:  median != null ? +median.toFixed(2) : null,
                         mean:    +mean.toFixed(2),
-                        p99:     +p99.toFixed(2),
-                        jitter:  +jitter.toFixed(2),
+                        p99:     p99 != null ? +p99.toFixed(2) : null,
+                        jitter:  jitter != null ? +jitter.toFixed(2) : null,
                     },
                     cache: {
                         hitRate:    +hitRate.toFixed(1),
@@ -377,7 +398,6 @@ class Poller {
                         maxEntries: cacheMax
                     },
                     impact:       +impact.toFixed(2),
-                    recursivePct: totalQueries > 0 ? Math.round(totalRecursive / totalQueries * 100) : 0,
                 };
 
                 this.state.perf[server.name] = perfData;

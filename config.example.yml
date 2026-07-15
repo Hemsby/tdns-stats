@@ -42,6 +42,13 @@ poll:
 
 feed:
   pageSize: 20         # log entries fetched per poll cycle
+  # Technitium only returns the top-N newest entries per request. The default
+  # 20 combined with the default 3s poll interval supports up to ~6.7 queries
+  # per second sustained without missing entries. If your environment sees
+  # higher sustained rates or frequent bursts, increase pageSize to keep the
+  # live feed complete. Each Technitium query log app has a per-request cap,
+  # so profile before maxing out. Setting too high will increase load on
+  # Technitium's query log DB.
   maxEntries: 200      # maximum entries kept in the browser feed
 
 top:
