@@ -5,12 +5,12 @@
 port: 3000
 
 servers:
-  - name: ns1                              # Display name shown in the dashboard
-    url: http://ns1.example.com:5380       # Technitium API base URL
-    token: your-api-token-here             # API token (Administration > Sessions in Technitium)
-    ignoreSsl: false                       # Set true to skip TLS verification (not recommended)
-    queryLogsApp: "Query Logs (MySQL)"     # Optional: query log app name (see supported apps below)
-    color: blue                            # Optional: colour for this server (see colours below)
+  - name: ns1 # Display name shown in the dashboard
+    url: http://ns1.example.com:5380 # Technitium API base URL
+    token: your-api-token-here # API token (Administration > Sessions in Technitium)
+    ignoreSsl: false # Set true to skip TLS verification (not recommended)
+    queryLogsApp: "Query Logs (MySQL)" # Optional: query log app name (see supported apps below)
+    color: blue # Optional: colour for this server (see colours below)
 
   - name: ns2
     url: http://ns2.example.com:5380
@@ -35,24 +35,26 @@ servers:
 # The colour is used to identify each server in the live feed when All Servers is selected.
 
 poll:
-  statsInterval: 10    # seconds between stats refreshes
-  feedInterval: 3      # seconds between live feed polls
-  topInterval: 30      # seconds between top-list refreshes
-  perfInterval: 30     # seconds between RTT/cache performance samples
+  statsInterval: 10 # seconds between stats refreshes
+  feedInterval: 3 # seconds between live feed polls
+  topInterval: 30 # seconds between top-list refreshes
+  perfInterval: 30 # seconds between RTT/cache performance samples
 
 feed:
-  pageSize: 20         # log entries fetched per poll cycle
+  pageSize: 20 # log entries fetched per poll cycle (Limit: 500)
   # Technitium only returns the top-N newest entries per request. The default
   # 20 combined with the default 3s poll interval supports up to ~6.7 queries
   # per second sustained without missing entries. If your environment sees
   # higher sustained rates or frequent bursts, increase pageSize to keep the
   # live feed complete. Each Technitium query log app has a per-request cap,
-  # so profile before maxing out. Setting too high will increase load on
-  # Technitium's query log DB.
-  maxEntries: 200      # maximum entries kept in the browser feed
+  # so profile before maxing out. Setting too high will unnecessarily increase
+  # the load on the Technitium servers query log DB.
+
+  maxEntries: 200 # maximum entries kept in the browser feed
 
 top:
-  limit: 20            # number of items in top domains/clients lists
+  limit: 20 # number of items in top domains/clients lists
+
 
 # Optional: override the default auto-assigned colour order
 # serverColors:

@@ -201,7 +201,6 @@ All configuration lives in `config.yml` (see `config.example.yml` for a fully an
 | `feed.maxEntries`        | `200`         | Maximum entries kept in the browser feed                     |
 | `top.limit`              | `20`          | Number of items in top domains/clients lists                 |
 
-
 ### Server colours
 
 Available values for `servers[].color`: `blue`, `green`, `ora`, `teal`, `pur`, `yel`, `red`.
@@ -246,7 +245,7 @@ If you have more than one query log app installed, specify which one to use with
 
 By default the backend polls every 3 seconds and asks Technitium for the 20 newest query log entries each cycle. Technitium returns only the top-N entries per request, so any queries that land faster than `pageSize / feedInterval` (about 6.7 qps with the defaults) overflow the request and are skipped that cycle.
 
-If your environment produces higher sustained rates or bursty peaks (e.g. an office first thing in the morning), increase `feed.pageSize` so the dashboard can keep up. There is no automatic tuning - raise the value if you notice entries missing from the feed, or if you see frequent `feed cursor reset` lines in the tdns-stats logs. Each Technitium query log app has a per-request cap, so profile before cranking it to the maximum.
+If your environment produces higher sustained rates or bursty peaks (e.g. an office first thing in the morning), increase `feed.pageSize` so the dashboard can keep up. There is no automatic tuning - raise the value if you notice entries missing from the feed, or if you see frequent `feed cursor reset` lines in the tdns-stats logs. Each Technitium query log app has a per-request cap, so profile before setting it to the maximum.
 
 ## Themes
 
