@@ -6,13 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [2.2.12] - 2026-07-15
+
+### Fixed
+
+- Live feed no longer pauses when one server is slow to respond - previously a single slow server could stall the entire polling cycle and freeze every server's feed on stale data; now each server polls independently and the others keep refreshing normally.
+- Perf card no longer shows stale latency and cache numbers after a connection or timeout error from a server: the affected server's metrics are cleared to `--` until the next successful poll, so the user can tell at a glance that the data is currently unavailable rather than outdated.
+
 ## [2.2.11] - 2026-07-15
 
 ### Changed
 
 - Perf card now shows **all** fields dynamically as soon as there is enough data to reasonably compute them. The 'waiting for data' indicator has been removed. All metrics now show `--` when there is not enough data available. Example: Median is calculated as soon as there are at least 3 RTT samples available for a given server/node.
 - Hit and miss rate formatting is now handled by a single helper, ensuring percentages render consistently across cards regardless of where they're shown.
-- Added guidance for feed.pageSize tuning in `config.example.yml` and the README. The shipped default of 20 remains; users with high-traffic servers can increase it via the existing knob (a given Technitium servers per poll cap is the real ceiling).
+- Added guidance for feed.pageSize tuning in `config.example.yml` and the README. The shipped default of 20 remains; users with high-traffic servers can increase it (Technitium per poll cap is the real ceiling).
 
 ### Removed
 
