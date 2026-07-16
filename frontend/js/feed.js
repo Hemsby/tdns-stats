@@ -3,7 +3,7 @@
 const Feed = (() => {
     let MAX_ENTRIES = 200;
     const entries = [];
-    const seen   = new Set();
+    const seenByServer = {};
 
     let renderTimer  = null;
     let lastFilter   = 'all';
@@ -29,17 +29,16 @@ const Feed = (() => {
 
     function add(serverName, newEntries, cursorReset) {
         if (cursorReset) {
-            // Log rotated — clear all seen IDs and entries for this server
+            // Log rotated — wipe this server's seen IDs and drop its entries wholesale.
+            seenByServer[serverName] = new Set();
             let writeIdx = 0;
             for (let i = 0; i < entries.length; i++) {
-                if (entries[i]._server === serverName) {
-                    seen.delete(entries[i]._server + ':' + entries[i].rowNumber);
-                } else {
-                    entries[writeIdx++] = entries[i];
-                }
+                if (entries[i]._server !== serverName) entries[writeIdx++] = entries[i];
             }
             entries.length = writeIdx;
         }
+
+        const seen = seenByServer[serverName] || (seenByServer[serverName] = new Set());
 
         const deduped = [];
         for (const e of newEntries) {
@@ -77,7 +76,9 @@ const Feed = (() => {
         entries.length = 0;
         for (let k = 0; k < limit; k++) entries.push(merged[k]);
         for (let k = limit; k < merged.length; k++) {
-            seen.delete(merged[k]._server + ':' + merged[k].rowNumber);
+            const s = merged[k]._server;
+            const sSet = seenByServer[s];
+            if (sSet) sSet.delete(s + ':' + merged[k].rowNumber);
         }
     }
 

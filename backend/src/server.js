@@ -138,7 +138,7 @@ function getBlockedLookupTarget(serverName, state) {
 
 function broadcast(msg) {
     const data = `data: ${JSON.stringify(msg)}\n\n`;
-    for (const res of clients) {
+    for (const res of Array.from(clients)) {
         try { res.write(data); } catch (_) { clients.delete(res); }
     }
 }

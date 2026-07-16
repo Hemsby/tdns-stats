@@ -21,7 +21,7 @@ class Poller {
         this.state     = {};
         this.state.perf  = {};
         this.feedCursors   = {};
-        this._feedPollInProgress = false;
+        this._feedPollBusy = new Set();
         this.clusterServer = null;
         this._watchedServer = null;
         this._statsTimer = null;
@@ -61,11 +61,11 @@ class Poller {
         this._running    = true;
     }
 
-    _pollAll() {
+    async _pollAll() {
         this._pollStats();
-        this._pollFeed();
+        await this._pollFeed();
         this._pollTop();
-        this._pollPerformance();
+        await this._pollPerformance();
         // Range data is fetched on-demand via refreshRangeData() when an SSE
         // client connects — avoids double-fetching on first client after idle.
     }
@@ -238,61 +238,75 @@ class Poller {
     }
 
     async _pollFeed() {
-        if (this._feedPollInProgress) return;
-        this._feedPollInProgress = true;
-        try { await this._doFeedPoll(); } finally { this._feedPollInProgress = false; }
+        const tasks = [];
+        for (const server of this.servers) {
+            if (this._feedPollBusy.has(server.name)) continue;
+            this._feedPollBusy.add(server.name);
+            tasks.push(
+                this._pollOneFeed(server)
+                    .catch(err => console.warn(`[feed] ${server.name}: ${err.message}`))
+                    .finally(() => this._feedPollBusy.delete(server.name))
+            );
+        }
+        if (tasks.length === 0) return;
+        await Promise.allSettled(tasks);
     }
 
-    async _doFeedPoll() {
-        for (const server of this.servers) {
-            try {
-                const logs = await getQueryLogs(server, this.cfg.feedPageSize);
-                if (!logs) continue;
-                const entries = logs.entries || [];
-                const cursor  = this.feedCursors[server.name];
-                let cursorReset = false;
+    async _pollOneFeed(server) {
+        const logs = await getQueryLogs(server, this.cfg.feedPageSize);
+        if (!logs) return;
+        const entries = logs.entries || [];
+        if (entries.length === 0) return;
 
-            if (entries.length === 0) continue;
+        const cursor = this.feedCursors[server.name];
+        let cursorReset = false;
 
-            const toMs = (e) => new Date(e.timestamp).getTime();
-            entries.sort((a, b) => {
-                const dt = toMs(b) - toMs(a);
-                return dt !== 0 ? dt : (b.rowNumber ?? 0) - (a.rowNumber ?? 0);
-            });
-            const newestTs        = toMs(entries[0]);
-            const newestRowNumber = entries[0].rowNumber;
-
-            if (!cursor) {
-                this.feedCursors[server.name] = { ts: newestTs, rowNumber: newestRowNumber };
-                this.broadcast({ type: 'feed', server: server.name, data: entries, cursorReset });
-                continue;
+        const toMs = (e) => new Date(e.timestamp).getTime();
+        const validMs = (e) => {
+            const t = toMs(e);
+            if (!Number.isFinite(t)) {
+                console.warn(`[feed] ${server.name}: row ${e.rowNumber} has invalid timestamp: ${e.timestamp}`);
+                return false;
             }
+            return true;
+        };
+        entries.sort((a, b) => {
+            const dt = toMs(b) - toMs(a);
+            return dt !== 0 ? dt : (b.rowNumber ?? 0) - (a.rowNumber ?? 0);
+        });
+        validMs(entries[0]);
+        const newestTs        = toMs(entries[0]);
+        const newestRowNumber = entries[0].rowNumber;
 
-            const isReset = newestTs < cursor.ts;
-
-            let fresh;
-            if (isReset) {
-                console.log(
-                    `${server.name}: feed cursor reset ` +
-                    `(before: ts=${new Date(cursor.ts).toISOString()} row=${cursor.rowNumber} ` +
-                    `→ after: ts=${entries[0].timestamp} row=${newestRowNumber})`
-                );
-                fresh = entries;
-                cursorReset = true;
-            } else {
-                fresh = entries.filter(e => {
-                    if (e.rowNumber == null) return true;
-                    const t = toMs(e);
-                    return t > cursor.ts || (t === cursor.ts && e.rowNumber > cursor.rowNumber);
-                });
-            }
-
-            if (fresh.length === 0) continue;
-
+        if (!cursor) {
             this.feedCursors[server.name] = { ts: newestTs, rowNumber: newestRowNumber };
-            this.broadcast({ type: 'feed', server: server.name, data: fresh, cursorReset });
-            } catch (err) { console.warn(`[feed] ${server.name}: ${err.message}`); }
+            this.broadcast({ type: 'feed', server: server.name, data: entries, cursorReset });
+            return;
         }
+
+        const isReset = newestTs < cursor.ts;
+        let fresh;
+        if (isReset) {
+            console.log(
+                `${server.name}: feed cursor reset ` +
+                `(before: ts=${new Date(cursor.ts).toISOString()} row=${cursor.rowNumber} ` +
+                `→ after: ts=${entries[0].timestamp} row=${newestRowNumber})`
+            );
+            fresh = entries;
+            cursorReset = true;
+        } else {
+            fresh = entries.filter(e => {
+                if (e.rowNumber == null) return true;
+                const t = toMs(e);
+                if (!Number.isFinite(t)) return false;
+                return t > cursor.ts || (t === cursor.ts && e.rowNumber > cursor.rowNumber);
+            });
+        }
+
+        if (fresh.length === 0) return;
+
+        this.feedCursors[server.name] = { ts: newestTs, rowNumber: newestRowNumber };
+        this.broadcast({ type: 'feed', server: server.name, data: fresh, cursorReset });
     }
 
     async _pollTop() {
@@ -338,76 +352,84 @@ class Poller {
     }
 
     async _pollPerformance() {
-        for (const server of this.servers) {
-            try {
-                const st = this.state.nodes?.[server.name]?.stats?.stats || {};
-                const totalRecursive = st.totalRecursive || 0;
+        await Promise.allSettled(
+            this.servers.map(server => this._pollOnePerf(server))
+        );
+    }
 
-                // No stats yet or zero recursive in the last hour — nothing to compute
-                if (!totalRecursive) {
-                    delete this.state.perf[server.name];
-                    this.broadcast({ type: 'perf', server: server.name, data: null });
-                    continue;
+    async _pollOnePerf(server) {
+        try {
+            const st = this.state.nodes?.[server.name]?.stats?.stats || {};
+            const totalRecursive = st.totalRecursive || 0;
+
+            // No stats yet or zero recursive in the last hour — nothing to compute
+            if (!totalRecursive) {
+                delete this.state.perf[server.name];
+                this.broadcast({ type: 'perf', server: server.name, data: null });
+                return;
+            }
+
+            const sampleSize = Math.min(totalRecursive, 500);
+            const rtts = await getRttSample(server, sampleSize);
+            if (rtts.length === 0) {
+                delete this.state.perf[server.name];
+                this.broadcast({ type: 'perf', server: server.name, data: null });
+                return;
+            }
+
+            // Calculate Jitter (EWMA of RTT variation)
+            // Measures how much response times vary between consecutive queries
+            // Computed fresh each cycle from the current batch's temporal order (newest to oldest)
+            let jitter = null;
+            if (rtts.length >= 2) {
+                let j = 0;
+                for (let i = 1; i < rtts.length; i++) {
+                    j += (Math.abs(rtts[i] - rtts[i - 1]) - j) / 16;
                 }
+                jitter = j;
+            }
 
-                const sampleSize = Math.min(totalRecursive, 500);
-                const rtts = await getRttSample(server, sampleSize);
-                if (rtts.length === 0) {
-                    delete this.state.perf[server.name];
-                    this.broadcast({ type: 'perf', server: server.name, data: null });
-                    continue;
-                }
+            // Statistical Metrics (requires sorted array)
+            rtts.sort((a, b) => a - b);
+            const mean   = rtts.reduce((s, v) => s + v, 0) / rtts.length;
+            const mid    = Math.floor(rtts.length / 2);
+            const median = rtts.length >= 3 ? (rtts.length % 2 === 0 ? (rtts[mid - 1] + rtts[mid]) / 2 : rtts[mid]) : null;
+            const p99    = rtts.length >= 3 ? rtts[Math.min(Math.floor(rtts.length * 0.99), rtts.length - 1)] : null;
 
-                // Calculate Jitter (EWMA of RTT variation)
-                // Measures how much response times vary between consecutive queries
-                // Computed fresh each cycle from the current batch's temporal order (newest to oldest)
-                let jitter = null;
-                if (rtts.length >= 2) {
-                    let j = 0;
-                    for (let i = 1; i < rtts.length; i++) {
-                        j += (Math.abs(rtts[i] - rtts[i - 1]) - j) / 16;
-                    }
-                    jitter = j;
-                }
+            const totalCached   = st.totalCached     || 0;
+            const cachedEntries = st.cachedEntries   || 0;
+            const cacheMax      = server.cacheMaxEntries || 0;
 
-                // Statistical Metrics (requires sorted array)
-                rtts.sort((a, b) => a - b);
-                const mean   = rtts.reduce((s, v) => s + v, 0) / rtts.length;
-                const mid    = Math.floor(rtts.length / 2);
-                const median = rtts.length >= 3 ? (rtts.length % 2 === 0 ? (rtts[mid - 1] + rtts[mid]) / 2 : rtts[mid]) : null;
-                const p99    = rtts.length >= 3 ? rtts[Math.min(Math.floor(rtts.length * 0.99), rtts.length - 1)] : null;
+            const denominator = totalRecursive + totalCached;
+            const hitRate     = denominator > 0 ? (totalCached / denominator) * 100 : 0;
+            const impact      = denominator > 0 ? mean * (rtts.length / denominator) : 0;
 
-                const totalCached   = st.totalCached     || 0;
-                const cachedEntries = st.cachedEntries   || 0;
-                const cacheMax      = server.cacheMaxEntries || 0;
+            const perfData = {
+                rtt: {
+                    median:  median != null ? +median.toFixed(2) : null,
+                    mean:    +mean.toFixed(2),
+                    p99:     p99 != null ? +p99.toFixed(2) : null,
+                    jitter:  jitter != null ? +jitter.toFixed(2) : null,
+                },
+                cache: {
+                    hitRate:    +hitRate.toFixed(1),
+                    entries:    cachedEntries,
+                    maxEntries: cacheMax
+                },
+                impact:       +impact.toFixed(2),
+            };
 
-                const denominator = totalRecursive + totalCached;
-                const hitRate     = denominator > 0 ? (totalCached / denominator) * 100 : 0;
-                const impact      = denominator > 0 ? mean * (rtts.length / denominator) : 0;
+            this.state.perf[server.name] = perfData;
 
-                const perfData = {
-                    rtt: {
-                        median:  median != null ? +median.toFixed(2) : null,
-                        mean:    +mean.toFixed(2),
-                        p99:     p99 != null ? +p99.toFixed(2) : null,
-                        jitter:  jitter != null ? +jitter.toFixed(2) : null,
-                    },
-                    cache: {
-                        hitRate:    +hitRate.toFixed(1),
-                        entries:    cachedEntries,
-                        maxEntries: cacheMax
-                    },
-                    impact:       +impact.toFixed(2),
-                };
-
-                this.state.perf[server.name] = perfData;
-
-                this.broadcast({
-                    type:   'perf',
-                    server: server.name,
-                    data:   perfData
-                });
-            } catch (_) { /* unreachable */ }
+            this.broadcast({
+                type:   'perf',
+                server: server.name,
+                data:   perfData
+            });
+        } catch (err) {
+            console.warn(`[perf] ${server.name}: ${err.message}`);
+            delete this.state.perf[server.name];
+            this.broadcast({ type: 'perf', server: server.name, data: null });
         }
     }
 }
