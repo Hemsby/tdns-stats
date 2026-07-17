@@ -255,12 +255,6 @@ class Poller {
     async _pollOneFeed(server) {
         const logs = await getQueryLogs(server, this.cfg.feedPageSize);
         if (!logs) return;
-        const entries = logs.entries || [];
-        if (entries.length === 0) return;
-
-        const cursor = this.feedCursors[server.name];
-        let cursorReset = false;
-
         const toMs = (e) => new Date(e.timestamp).getTime();
         const validMs = (e) => {
             const t = toMs(e);
@@ -270,11 +264,18 @@ class Poller {
             }
             return true;
         };
+
+        const entries = (logs.entries || []).filter(validMs);
+        if (entries.length === 0) return;
+
         entries.sort((a, b) => {
             const dt = toMs(b) - toMs(a);
             return dt !== 0 ? dt : (b.rowNumber ?? 0) - (a.rowNumber ?? 0);
         });
-        validMs(entries[0]);
+
+        const cursor = this.feedCursors[server.name];
+        let cursorReset = false;
+
         const newestTs        = toMs(entries[0]);
         const newestRowNumber = entries[0].rowNumber;
 
