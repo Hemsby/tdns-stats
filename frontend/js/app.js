@@ -1572,9 +1572,9 @@ const App = (() => {
         if (!el) return;
         el.hidden = !stalled;
         if (stalled && state.lastFeedEvent) {
-            console.warn('[feed] Feed stall: last event', Date.now() - state.lastFeedEvent, 'ms ago');
             const secs = Math.round((Date.now() - state.lastFeedEvent) / 1000);
             const age  = secs >= 60 ? Math.floor(secs / 60) + 'm' : secs + 's';
+            console.warn('[feed] Feed stall: last event', age, 'ago');
             el.textContent = 'Feed paused: no data received for ' + age + '. Check tdns-stats console for errors.';
         }
     }
