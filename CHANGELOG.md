@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## 2.2.13 - 2026-07-21
+
+### Added
+
+- Session-based authentication for the live event stream and any dashboard action that can read or change state. The dashboard now obtains a short-lived session cookie when it connects, so only an active browser session can view live DNS query logs, search cache/blocked records, or trigger an update. No user configuration changes are required.
+
+### Changed
+
+- Log messages have been normalized for consistency, making it easier to correlate events when troubleshooting.
+
+### Fixed
+
+- Live feed no longer stalls when a server returns query log entries with unparseable or missing timestamps. Previously a single bad timestamp could stop the feed from advancing until the page was reloaded.
+
 ## [2.2.12] - 2026-07-16
 
 ### Fixed
