@@ -1563,6 +1563,7 @@ const App = (() => {
         if (!el) return;
         el.hidden = !stalled;
         if (stalled && state.lastFeedEvent) {
+            console.warn('[feed] Feed stall: last event', Date.now() - state.lastFeedEvent, 'ms ago');
             const secs = Math.round((Date.now() - state.lastFeedEvent) / 1000);
             const age  = secs >= 60 ? Math.floor(secs / 60) + 'm' : secs + 's';
             el.textContent = 'Feed paused: no data received for ' + age + '. Check tdns-stats console for errors.';
@@ -1810,7 +1811,7 @@ const App = (() => {
                 setupChangelog();
             }
         } catch (e) {
-            console.error('Failed to fetch version:', e);
+            console.error('[updates] Failed to fetch version:', e);
         }
     }
 
@@ -1841,7 +1842,7 @@ const App = (() => {
             }
             updateStatusDisplay();
         } catch (e) {
-            console.error('Failed to check updates:', e);
+            console.error('[updates] Failed to check updates:', e);
             state.updateStatus = null;
             updateStatusDisplay();
         }
@@ -1867,7 +1868,7 @@ const App = (() => {
             // Poll for service recovery
             await pollHealth();
         } catch (e) {
-            console.error('Failed to trigger update:', e);
+            console.error('[updates] Failed to trigger update:', e);
             state.updateStatus = null;
             updateStatusDisplay();
         }
@@ -1945,7 +1946,7 @@ const App = (() => {
                     state.changelogHtml = marked.parse(cleaned);
                 }
             } catch (e) {
-                console.error('Failed to fetch changelog:', e);
+                console.error('[changelog] Failed to fetch changelog:', e);
                 return;
             }
         }

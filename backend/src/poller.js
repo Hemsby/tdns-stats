@@ -289,7 +289,7 @@ class Poller {
         let fresh;
         if (isReset) {
             console.log(
-                `${server.name}: feed cursor reset ` +
+                `[feed] ${server.name}: feed cursor reset ` +
                 `(before: ts=${new Date(cursor.ts).toISOString()} row=${cursor.rowNumber} ` +
                 `→ after: ts=${entries[0].timestamp} row=${newestRowNumber})`
             );
