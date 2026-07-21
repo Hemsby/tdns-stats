@@ -6,6 +6,7 @@ const http      = require('http');
 const https     = require('https');
 const path      = require('path');
 const fs        = require('fs');
+const crypto    = require('crypto');
 const yaml      = require('js-yaml');
 const fetch     = require('node-fetch');
 const Poller    = require('./poller');
@@ -59,6 +60,41 @@ if (servers.length === 0) throw new Error('No servers defined in config.yml');
 const PORT = config.port || 3000;
 
 const clients = new Set();
+const sessions = new Set();
+const SESSION_COOKIE = 'tdns-stats_session';
+const SESSION_SECRET = crypto.randomBytes(32).toString('hex');
+
+function parseCookies(req) {
+    const raw = req.headers.cookie;
+    if (!raw) return {};
+    const cookies = {};
+    for (const part of raw.split(';')) {
+        const idx = part.indexOf('=');
+        if (idx === -1) continue;
+        cookies[part.slice(0, idx).trim()] = part.slice(idx + 1).trim();
+    }
+    return cookies;
+}
+
+function signSession(token) {
+    const hmac = crypto.createHmac('sha256', SESSION_SECRET).update(token).digest('hex');
+    return `${token}.${hmac}`;
+}
+
+function verifySession(value) {
+    if (!value) return null;
+    const idx = value.lastIndexOf('.');
+    if (idx === -1) return null;
+    const token = value.slice(0, idx);
+    const hmac = value.slice(idx + 1);
+    const expected = crypto.createHmac('sha256', SESSION_SECRET).update(token).digest('hex');
+    try {
+        if (!crypto.timingSafeEqual(Buffer.from(hmac), Buffer.from(expected))) return null;
+    } catch (_) {
+        return null;
+    }
+    return token;
+}
 
 function normalizeDomain(value) {
     return String(value || '')
@@ -197,7 +233,32 @@ async function start() {
 
     app.use(express.static(path.join(__dirname, '../../frontend')));
 
+    function requireToken(req, res, next) {
+        const signed = parseCookies(req)[SESSION_COOKIE];
+        const token = verifySession(signed);
+        if (!token || !sessions.has(token)) {
+            console.warn('[auth] token rejected:', req.path, 'token=' + (token || 'none'));
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
+        console.log('[auth] token accepted:', req.path, token);
+        next();
+    }
+
+    app.get('/api/session', (req, res) => {
+        const token = crypto.randomBytes(16).toString('hex');
+        sessions.add(token);
+        res.setHeader('Set-Cookie', `${SESSION_COOKIE}=${signSession(token)}; HttpOnly; SameSite=Lax; Path=/`);
+        console.log('[auth] session token created:', token);
+        res.json({ ok: true });
+    });
+
     app.get('/api/stream', (req, res) => {
+        const signed = parseCookies(req)[SESSION_COOKIE];
+        const sessionToken = verifySession(signed);
+        if (!sessionToken || !sessions.has(sessionToken)) {
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
+
         req.setTimeout(0);
         res.setHeader('Content-Type',  'text/event-stream');
         res.setHeader('Cache-Control', 'no-cache');
@@ -208,6 +269,8 @@ async function start() {
         // Tell browser to wait 5s before retrying if connection is lost
         res.write('retry: 5000\n\n');
 
+        res.sessionToken = sessionToken;
+
         let ping = null;
         const cleanup = () => {
             const removed = clients.delete(res);
@@ -215,7 +278,12 @@ async function start() {
                 if (clients.size === 0) poller.pause();
                 broadcastViewerCount();
             }
-            if (ping) clearInterval(ping);
+            if (res.sessionToken) {
+                sessions.delete(res.sessionToken);
+                console.log('[auth] session token removed:', res.sessionToken);
+                res.sessionToken = null;
+            }
+            clearInterval(ping);
             ping = null;
         };
 
@@ -274,7 +342,7 @@ async function start() {
         });
     });
 
-    app.get('/api/watch-server', (req, res) => {
+    app.get('/api/watch-server', requireToken, (req, res) => {
         const name = req.query.server;
         if (name && (name === CLUSTER_KEY || servers.some(s => s.name === name))) {
             poller.setWatchedServer(name);
@@ -282,7 +350,7 @@ async function start() {
         res.json({ ok: true });
     });
 
-    app.get('/api/cache/search', async (req, res) => {
+    app.get('/api/cache/search', requireToken, async (req, res) => {
         const rawDomain = String(req.query.domain || '').trim();
         const domain = normalizeDomain(req.query.domain);
         const serverName = String(req.query.server || 'all');
@@ -394,7 +462,7 @@ async function start() {
         res.json({ status: 'ok', version: VERSION, started_at: STARTED_AT });
     });
 
-    app.get('/api/updates/check', async (req, res) => {
+    app.get('/api/updates/check', requireToken, async (req, res) => {
         try {
             const response = await fetch('https://api.github.com/repos/Hemsby/tdns-stats/releases/latest', {
                 timeout: 5000,
@@ -442,7 +510,7 @@ async function start() {
         }
     });
 
-    app.post('/api/updates/trigger', async (req, res) => {
+    app.post('/api/updates/trigger', requireToken, async (req, res) => {
         if (!updater.capable) return res.status(403).json({ error: 'Updater not available' });
         try {
             broadcast({

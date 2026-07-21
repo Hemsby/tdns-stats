@@ -93,7 +93,7 @@ const App = (() => {
         reconnectTimer = setInterval(updateCountdown, 1000);
     }
 
-    function connect() {
+    async function connect() {
         // Cooldown: prevent rapid cycling (at most once every 2 seconds)
         const now = Date.now();
         if (now - lastConnectAttempt < 2000) {
@@ -108,6 +108,15 @@ const App = (() => {
 
         state.connected = false;
         lastMessageAt = Date.now();
+
+        try {
+            await fetch('/api/session');
+        } catch (e) {
+            console.warn('[sse] Session handshake failed:', e);
+            reconnectWithCountdown(3000);
+            return;
+        }
+
         es = new EventSource('/api/stream');
 
         // Timeout: if we don't get connected within 5 seconds, retry
