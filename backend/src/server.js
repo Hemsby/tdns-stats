@@ -304,6 +304,11 @@ async function start() {
                     res.write(`data: ${JSON.stringify({ type: 'perf', server, data })}\n\n`);
                 }
             }
+            if (state.rttSeries && Object.keys(state.rttSeries).length > 0) {
+                for (const [server, data] of Object.entries(state.rttSeries)) {
+                    res.write(`data: ${JSON.stringify({ type: 'perf-series', server, data })}\n\n`);
+                }
+            }
             // Fetch all range data fresh on every SSE connect so the client
             // never sees stale chart or top list data after reconnect.
             poller.refreshRangeData();

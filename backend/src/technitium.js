@@ -206,7 +206,7 @@ async function getRttSample(server, limit) {
     const res = await apiGet(server, 'api/logs/query?name=' + name + '&classPath=' + classPath + '&responseType=Recursive&entriesPerPage=' + limit + '&descendingOrder=true');
     return (res?.entries || [])
         .filter(e => typeof e.responseRtt === 'number')
-        .map(e => e.responseRtt);
+        .map(e => ({ t: e.timestamp, rtt: e.responseRtt }));
 }
 
 async function getCacheMaxEntries(server) {

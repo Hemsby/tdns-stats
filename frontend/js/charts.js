@@ -6,6 +6,13 @@ const Charts = (() => {
     const hiddenByView = { overview: new Set(), all: new Set() };
     let persistCallback = null;
 
+    // Mean recursive RTT overlay: plotted on its own right-hand axis, so it never
+    // participates in the per-view legend hide/show persistence. Its legend toggle
+    // state lives in this single flag instead (dataset index is not stable across
+    // the overview/all dataset-count change).
+    const RTT_LABEL = 'Recursive RTT';
+    let rttHidden = false;
+
     // Map dataset labels to CSS variable names so chart colors follow the UI theme
     const DATASET_COLORS = {
         'Total':          { borderVar: '--accent-blue',  bgVar: '--accent-blue-bg' },
@@ -96,6 +103,15 @@ const Charts = (() => {
 
                             meta.hidden = !meta.hidden;
 
+                            // RTT overlay is gated by its own checkbox and stays out
+                            // of the per-view hide/show persistence; its toggle state
+                            // is tracked separately.
+                            if (dataset.label === RTT_LABEL) {
+                                rttHidden = meta.hidden;
+                                chart.update('none');
+                                return;
+                            }
+
                             if (meta.hidden) {
                                 hiddenByView[lastView || 'overview'].add(dataset.label);
                             } else {
@@ -116,7 +132,13 @@ const Charts = (() => {
                         titleColor: '#e2e8f0',
                         bodyColor: '#94a3b8',
                         callbacks: {
-                            label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y}`
+                            label: ctx => {
+                                const v = ctx.parsed.y;
+                                if (ctx.dataset.label === RTT_LABEL) {
+                                    return ` ${ctx.dataset.label}: ${v == null ? 'n/a' : v + ' ms'}`;
+                                }
+                                return ` ${ctx.dataset.label}: ${v}`;
+                            }
                         }
                     }
                 },
@@ -129,19 +151,26 @@ const Charts = (() => {
                         ticks: { color: '#475569', font: { size: 10 } },
                         grid: { color: 'rgba(34,211,238,.06)' },
                         beginAtZero: true
+                    },
+                    y1: {
+                        position: 'right',
+                        display: false,
+                        beginAtZero: true,
+                        ticks: { color: '#475569', font: { size: 10 }, callback: v => v + ' ms' },
+                        grid: { drawOnChartArea: false }
                     }
                 }
             }
         });
     }
 
-    function update(nodeData, serverName, datasetMode) {
+    function update(nodeData, serverName, datasetMode, opts) {
         if (!chart) init();
         if (!chart) return;
         const node = nodeData[serverName];
         const chartData = node?.stats?.mainChartData;
         if (!chartData) return;
-        updateFromData(chartData, datasetMode);
+        updateFromData(chartData, datasetMode, opts);
     }
 
     function formatLabels(labels, fmt, tzOffset) {
@@ -162,14 +191,15 @@ const Charts = (() => {
         });
     }
 
-    function updateFromData(responseOrChartData, datasetMode) {
+    function updateFromData(responseOrChartData, datasetMode, opts) {
         if (!chart) init();
         if (!chart) return;
         // Accept either the raw API response object or just mainChartData directly
         const chartData = responseOrChartData?.mainChartData || responseOrChartData;
         if (!chartData?.labels) return;
 
-        // Preserve hidden label state across polling updates
+        // Preserve hidden label state across polling updates. The RTT overlay lives
+        // on its own axis and is gated by a checkbox, so it never enters this set.
         if (lastView && chart.data.datasets.length > 0) {
             const currentSet = hiddenByView[lastView];
 
@@ -177,8 +207,9 @@ const Charts = (() => {
                 currentSet.clear();
 
                 for (let i = 0; i < chart.data.datasets.length; i++) {
-                    if (!chart.isDatasetVisible(i)) {
-                        currentSet.add(chart.data.datasets[i].label);
+                    const label = chart.data.datasets[i].label;
+                    if (label !== RTT_LABEL && !chart.isDatasetVisible(i)) {
+                        currentSet.add(label);
                     }
                 }
             }
@@ -215,14 +246,46 @@ const Charts = (() => {
                 };
             });
 
+        // Mean recursive RTT overlay, aligned to the raw (pre-format) ISO labels.
+        const rttSeries = opts?.rttSeries;
+        let hasRtt = false;
+        if (Array.isArray(rttSeries) && rttSeries.length) {
+            const byMinute = new Map(rttSeries.map(p => [p.t, p.mean]));
+            const rttData = chartData.labels.map(l => (byMinute.has(l) ? byMinute.get(l) : null));
+            hasRtt = rttData.some(v => v != null);
+            if (hasRtt) {
+                const c = resolveColor({ borderVar: '--accent-pink' });
+                datasets.push({
+                    label:            RTT_LABEL,
+                    hidden:           rttHidden,
+                    data:             rttData,
+                    yAxisID:          'y1',
+                    borderColor:      c.border,
+                    backgroundColor:  c.bg,
+                    borderWidth:      1.75,
+                    borderDash:       [5, 3],
+                    pointRadius:      0,
+                    pointHoverRadius: 4,
+                    fill:             false,
+                    tension:          0.3,
+                    spanGaps:         true,
+                });
+            }
+        }
+        chart.options.scales.y1.display = hasRtt;
+
         chart.data.labels   = formatLabels(chartData.labels, chartData.labelFormat, chartData.tzOffset);
         chart.data.datasets = datasets;
 
-        // Restore hidden label state after update
+        // Restore hidden label state after update. The RTT overlay is never in the
+        // per-view set; its own flag drives it.
         const hidden = hiddenByView[datasetMode];
-        if (hidden) {
-            for (let i = 0; i < chart.data.datasets.length; i++) {
-                chart.getDatasetMeta(i).hidden = hidden.has(chart.data.datasets[i].label);
+        for (let i = 0; i < chart.data.datasets.length; i++) {
+            const label = chart.data.datasets[i].label;
+            if (label === RTT_LABEL) {
+                chart.getDatasetMeta(i).hidden = rttHidden;
+            } else if (hidden) {
+                chart.getDatasetMeta(i).hidden = hidden.has(label);
             }
         }
 

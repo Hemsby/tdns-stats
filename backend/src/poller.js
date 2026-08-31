@@ -4,6 +4,32 @@ const { getDashboard, getTopStats, getQueryLogs, getRttSample, getSessionInfo, g
 
 const CLUSTER_KEY = '__cluster';
 
+// How many minutes of mean recursive RTT to keep for the real-time chart overlay.
+const RTT_HISTORY_MINUTES = 60;
+
+// Floor an ISO timestamp to its UTC minute, matching the label format that
+// normalizeLabels() produces for the LastHour chart so the frontend can align
+// the RTT series directly against the chart's x-axis labels.
+function minuteKey(ts) {
+    const d = new Date(ts);
+    if (!Number.isFinite(d.getTime())) return null;
+    d.setUTCSeconds(0, 0);
+    return d.toISOString();
+}
+
+function pruneRttHistory(map) {
+    const cutoff = Date.now() - (RTT_HISTORY_MINUTES + 5) * 60000;
+    for (const key of map.keys()) {
+        if (new Date(key).getTime() < cutoff) map.delete(key);
+    }
+}
+
+function rttHistoryToSeries(map) {
+    return [...map.entries()]
+        .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+        .map(([t, v]) => ({ t, mean: +v.mean.toFixed(2) }));
+}
+
 class Poller {
     constructor(servers, broadcast, cfg) {
         this.servers   = servers;
@@ -20,6 +46,8 @@ class Poller {
         };
         this.state     = {};
         this.state.perf  = {};
+        this.state.rttSeries = {}; // serialized mean-recursive-RTT history per server + __cluster
+        this.rttHistory = {};      // source of truth: key -> Map(minuteISO -> { mean, n })
         this.feedCursors   = {};
         this._feedPollBusy = new Set();
         this.clusterServer = null;
@@ -353,9 +381,10 @@ class Poller {
     }
 
     async _pollPerformance() {
-        await Promise.allSettled(
+        const results = await Promise.allSettled(
             this.servers.map(server => this._pollOnePerf(server))
         );
+        this._updateClusterRtt(results);
     }
 
     async _pollOnePerf(server) {
@@ -367,35 +396,60 @@ class Poller {
             if (!totalRecursive) {
                 delete this.state.perf[server.name];
                 this.broadcast({ type: 'perf', server: server.name, data: null });
-                return;
+                return null;
             }
 
             const sampleSize = Math.min(totalRecursive, 500);
-            const rtts = await getRttSample(server, sampleSize);
-            if (rtts.length === 0) {
+            const sample = await getRttSample(server, sampleSize);
+            if (sample.length === 0) {
                 delete this.state.perf[server.name];
                 this.broadcast({ type: 'perf', server: server.name, data: null });
-                return;
+                return null;
             }
+
+            // RTT values in the query log's own order (newest to oldest). Keep this
+            // array untouched for the jitter calc; sort a copy for the percentiles.
+            const vals = sample.map(s => s.rtt);
 
             // Calculate Jitter (EWMA of RTT variation)
             // Measures how much response times vary between consecutive queries
-            // Computed fresh each cycle from the current batch's temporal order (newest to oldest)
             let jitter = null;
-            if (rtts.length >= 2) {
+            if (vals.length >= 2) {
                 let j = 0;
-                for (let i = 1; i < rtts.length; i++) {
-                    j += (Math.abs(rtts[i] - rtts[i - 1]) - j) / 16;
+                for (let i = 1; i < vals.length; i++) {
+                    j += (Math.abs(vals[i] - vals[i - 1]) - j) / 16;
                 }
                 jitter = j;
             }
 
-            // Statistical Metrics (requires sorted array)
-            rtts.sort((a, b) => a - b);
-            const mean   = rtts.reduce((s, v) => s + v, 0) / rtts.length;
-            const mid    = Math.floor(rtts.length / 2);
-            const median = rtts.length >= 3 ? (rtts.length % 2 === 0 ? (rtts[mid - 1] + rtts[mid]) / 2 : rtts[mid]) : null;
-            const p99    = rtts.length >= 3 ? rtts[Math.min(Math.floor(rtts.length * 0.99), rtts.length - 1)] : null;
+            // Per-minute mean RTT buckets for the real-time chart overlay, keyed by
+            // each entry's own timestamp rather than poll wall-clock. On a busy server
+            // the whole sample lands in one minute; on a quiet one the first poll
+            // backfills up to an hour of real history.
+            const buckets = new Map();
+            for (const { t, rtt } of sample) {
+                const key = minuteKey(t);
+                if (!key) continue;
+                const b = buckets.get(key) || { sum: 0, n: 0 };
+                b.sum += rtt;
+                b.n += 1;
+                buckets.set(key, b);
+            }
+            const history = this.rttHistory[server.name] || (this.rttHistory[server.name] = new Map());
+            for (const [key, b] of buckets) history.set(key, { mean: b.sum / b.n, n: b.n });
+            pruneRttHistory(history);
+            this.state.rttSeries[server.name] = rttHistoryToSeries(history);
+            this.broadcast({ type: 'perf-series', server: server.name, data: this.state.rttSeries[server.name] });
+
+            // Statistical Metrics (sorted copy; never sort `sample`/`vals`)
+            const sorted = [...vals].sort((a, b) => a - b);
+            const n      = sorted.length;
+            const mean   = sorted.reduce((s, v) => s + v, 0) / n;
+            const mid    = Math.floor(n / 2);
+            const median = n >= 3 ? (n % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid]) : null;
+            const pctl   = p => (n >= 3 ? sorted[Math.min(Math.floor(n * p), n - 1)] : null);
+            const p95    = pctl(0.95);
+            const p99    = pctl(0.99);
 
             const totalCached   = st.totalCached     || 0;
             const cachedEntries = st.cachedEntries   || 0;
@@ -403,12 +457,13 @@ class Poller {
 
             const denominator = totalRecursive + totalCached;
             const hitRate     = denominator > 0 ? (totalCached / denominator) * 100 : 0;
-            const impact      = denominator > 0 ? mean * (rtts.length / denominator) : 0;
+            const impact      = denominator > 0 ? mean * (n / denominator) : 0;
 
             const perfData = {
                 rtt: {
                     median:  median != null ? +median.toFixed(2) : null,
                     mean:    +mean.toFixed(2),
+                    p95:     p95 != null ? +p95.toFixed(2) : null,
                     p99:     p99 != null ? +p99.toFixed(2) : null,
                     jitter:  jitter != null ? +jitter.toFixed(2) : null,
                 },
@@ -427,11 +482,38 @@ class Poller {
                 server: server.name,
                 data:   perfData
             });
+
+            return { name: server.name, buckets };
         } catch (err) {
             console.warn(`[perf] ${server.name}: ${err.message}`);
             delete this.state.perf[server.name];
             this.broadcast({ type: 'perf', server: server.name, data: null });
+            return null;
         }
+    }
+
+    // Cluster mean recursive RTT: pool every node's per-minute sample sums so the
+    // combined mean is entry-count weighted, then merge into the __cluster history.
+    _updateClusterRtt(results) {
+        if (!this.clusterServer) return;
+
+        const pooled = new Map();
+        for (const r of results) {
+            if (r.status !== 'fulfilled' || !r.value?.buckets) continue;
+            for (const [key, b] of r.value.buckets) {
+                const c = pooled.get(key) || { sum: 0, n: 0 };
+                c.sum += b.sum;
+                c.n += b.n;
+                pooled.set(key, c);
+            }
+        }
+        if (pooled.size === 0) return;
+
+        const history = this.rttHistory[CLUSTER_KEY] || (this.rttHistory[CLUSTER_KEY] = new Map());
+        for (const [key, c] of pooled) history.set(key, { mean: c.sum / c.n, n: c.n });
+        pruneRttHistory(history);
+        this.state.rttSeries[CLUSTER_KEY] = rttHistoryToSeries(history);
+        this.broadcast({ type: 'perf-series', server: CLUSTER_KEY, data: this.state.rttSeries[CLUSTER_KEY] });
     }
 }
 

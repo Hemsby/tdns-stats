@@ -8,6 +8,8 @@ const App = (() => {
         nodes:         {},
         top:           {},
         perf:          {},
+        rttSeries:     {}, // mean recursive RTT history per server + __cluster, for the chart overlay
+        rttOverlay:    false,
         rangeCache:    {}, // keyed by "server:type" for non-LiveHour fetches
         serverNames:   [],
         serverColorMap: {},
@@ -212,7 +214,7 @@ const App = (() => {
             updateLastUpdated();
             // Only push live chart updates when on LastHour (SSE data is always LastHour)
             if (state.timeRange === 'LastHour') {
-                Charts.update(state.nodes, state.chartServer, getDatasetMode());
+                Charts.update(state.nodes, state.chartServer, getDatasetMode(), buildChartOpts());
             }
 
         } else if (msg.type === 'feed') {
@@ -232,6 +234,11 @@ const App = (() => {
                 renderClusterCards();
             } else {
                 renderPerfCards();
+            }
+        } else if (msg.type === 'perf-series') {
+            state.rttSeries[msg.server] = Array.isArray(msg.data) ? msg.data : [];
+            if (state.rttOverlay && state.timeRange === 'LastHour' && msg.server === state.chartServer) {
+                Charts.update(state.nodes, state.chartServer, getDatasetMode(), buildChartOpts());
             }
         } else if (msg.type === 'update-status') {
             handleUpdateStatus(msg.data);
@@ -618,6 +625,16 @@ const App = (() => {
         el('chartDatasetSelect') && (el('chartDatasetSelect').onchange = () => {
             refreshChart();
         });
+        const rttToggle = el('chartRttToggle');
+        if (rttToggle) {
+            state.rttOverlay = localStorage.getItem('tdns-chart-rtt') === '1';
+            rttToggle.checked = state.rttOverlay;
+            rttToggle.onchange = () => {
+                state.rttOverlay = rttToggle.checked;
+                localStorage.setItem('tdns-chart-rtt', state.rttOverlay ? '1' : '0');
+                refreshChart();
+            };
+        }
 
         el('topServerSelect') && (el('topServerSelect').onchange = e => {
             state.topServer = e.target.value;
@@ -1411,10 +1428,11 @@ const App = (() => {
                 '<div class="srv-card-header">' +
                 '<span class="srv-card-name">' + esc(name) + '</span>' +
                 '</div>' +
-                '<div class="srv-card-role"><span class="perf-section-label">RTT</span></div>' +
-                '<div class="srv-stats-grid">' +
+                '<div class="srv-card-role"><span class="perf-section-label" title="Upstream recursive resolution times only. Cache hits, blocked, and authoritative responses are excluded.">Recursive RTT</span></div>' +
+                '<div class="srv-stats-grid srv-stats-grid--rtt">' +
                 statMini('Median', '--', 'teal') +
                 statMini('Mean',   '--', 'blue') +
+                statMini('P95',    '--', 'yel') +
                 statMini('P99',    '--', 'yel') +
                 statMini('Jitter', '--', 'ora') +
                 '</div>' +
@@ -1436,10 +1454,11 @@ const App = (() => {
             '<div class="srv-card-header">' +
             '<span class="srv-card-name">' + esc(name) + '</span>' +
             '</div>' +
-            '<div class="srv-card-role"><span class="perf-section-label">RTT</span></div>' +
-            '<div class="srv-stats-grid">' +
+            '<div class="srv-card-role"><span class="perf-section-label" title="Upstream recursive resolution times only. Cache hits, blocked, and authoritative responses are excluded.">Recursive RTT</span></div>' +
+            '<div class="srv-stats-grid srv-stats-grid--rtt">' +
             statMini('Median',  fmtMs(rtt.median), 'teal') +
             statMini('Mean',    fmtMs(rtt.mean),   'blue') +
+            statMini('P95',     fmtMs(rtt.p95),    'yel') +
             statMini('P99',     fmtMs(rtt.p99),    'yel') +
             statMini('Jitter',  fmtMs(rtt.jitter), 'ora') +
             '</div>' +
@@ -1522,10 +1541,32 @@ const App = (() => {
         if (el) el.hidden = true;
     }
 
+    function buildChartOpts() {
+        if (state.rttOverlay && state.timeRange === 'LastHour') {
+            return { rttSeries: state.rttSeries[state.chartServer] || [] };
+        }
+        return null;
+    }
+
+    // The RTT overlay only exists for the live LastHour chart; disable the toggle
+    // (rather than silently doing nothing) for the historical ranges.
+    function syncRttToggle() {
+        const wrap = document.getElementById('chartRttToggleWrap');
+        const cb = document.getElementById('chartRttToggle');
+        if (!wrap || !cb) return;
+        const enabled = state.timeRange === 'LastHour';
+        cb.disabled = !enabled;
+        wrap.style.opacity = enabled ? '' : '0.4';
+        wrap.title = enabled
+            ? 'Overlay mean recursive RTT'
+            : 'Recursive RTT overlay is available on the Last Hour range only';
+    }
+
     function refreshChart() {
+        syncRttToggle();
         if (state.timeRange === 'LastHour') {
             hideRangeLoading();
-            Charts.update(state.nodes, state.chartServer, getDatasetMode());
+            Charts.update(state.nodes, state.chartServer, getDatasetMode(), buildChartOpts());
             return;
         }
         const cacheKey = state.chartServer + ':' + state.timeRange;

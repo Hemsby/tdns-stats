@@ -35,7 +35,9 @@
     --accent-ora:   #ff9f43;
     --accent-ora-bg: rgba(255, 159, 67, .15);
     --accent-ora-row: rgba(255, 159, 67, .05);
-    
+    --accent-pink:  #f472b6;
+    --accent-pink-bg: rgba(244, 114, 182, .12);
+
     --accent-slate: #646873;
     --accent-slate-bg: rgba(100,104,115,.08);
     --scrollbar:    #1a2d44;
@@ -68,6 +70,8 @@
     --accent-ora:   #c2410c;
     --accent-ora-bg: rgba(194,65,12,.1);
     --accent-ora-row: rgba(194,65,12,.04);
+    --accent-pink:  #db2777;
+    --accent-pink-bg: rgba(219, 39, 119, .1);
 
     --accent-slate: #475569;
     --accent-slate-bg: rgba(71,85,105,.08);
@@ -80,6 +84,7 @@
         --text-muted:#456070; --text-dim:#59798d; --accent-blue:#2563eb;
         --accent-green:#15803d; --accent-red:#b91c1c; --accent-yel:#a16207;
         --accent-pur:#7c3aed; --accent-teal:#0891b2; --accent-ora:#c2410c;
+        --accent-pink:#db2777;
         --scrollbar:#bfcfdf;
     }
 }
@@ -456,6 +461,7 @@ main { position: relative; z-index: 1; min-height: 0; flex: 1; }
 }
 .srv-stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; padding: 0 4px; }
 .srv-stats-grid--wide { grid-template-columns: repeat(8, 1fr); }
+.srv-stats-grid--rtt { grid-template-columns: repeat(5, 1fr); }
 
 .cluster-agg-card { grid-column: 1 / -1; }
 
@@ -1032,6 +1038,7 @@ main { position: relative; z-index: 1; min-height: 0; flex: 1; }
     .domain-search-form { grid-template-columns: 1fr; }
     .search-btn { width: 100%; }
     .srv-stats-grid { grid-template-columns: repeat(2, 1fr); gap: 6px; }
+    .srv-stats-grid--rtt { grid-template-columns: repeat(3, 1fr); }
     .stat-mini { gap: 2px; }
     .stat-mini-value { font-size: 12px; }
     .server-pill { font-size: 10px; gap: 4px; padding: 2px 6px; }
