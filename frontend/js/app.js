@@ -1426,9 +1426,9 @@ const App = (() => {
         if (!perf) {
             card.innerHTML =
                 '<div class="srv-card-header">' +
-                '<span class="srv-card-name">' + esc(name) + '</span>' +
+                '<span class="srv-card-name">' + esc(node?.dnsServerDomain || name) + '</span>' +
                 '</div>' +
-                '<div class="srv-card-role"><span class="perf-section-label" title="Upstream recursive resolution times only. Cache hits, blocked, and authoritative responses are excluded.">Recursive RTT</span></div>' +
+                '<div class="srv-card-role"><span class="perf-section-label" title="Upstream recursive resolution times only. Cache hits, blocked, and authoritative responses are excluded.">Recursive RTT <span class="perf-section-unit">(ms)</span></span></div>' +
                 '<div class="srv-stats-grid srv-stats-grid--rtt">' +
                 statMini('Median', '--', 'teal') +
                 statMini('Mean',   '--', 'blue') +
@@ -1452,15 +1452,15 @@ const App = (() => {
 
         card.innerHTML =
             '<div class="srv-card-header">' +
-            '<span class="srv-card-name">' + esc(name) + '</span>' +
+            '<span class="srv-card-name">' + esc(node?.dnsServerDomain || name) + '</span>' +
             '</div>' +
-            '<div class="srv-card-role"><span class="perf-section-label" title="Upstream recursive resolution times only. Cache hits, blocked, and authoritative responses are excluded.">Recursive RTT</span></div>' +
+            '<div class="srv-card-role"><span class="perf-section-label" title="Upstream recursive resolution times only. Cache hits, blocked, and authoritative responses are excluded.">Recursive RTT <span class="perf-section-unit">(ms)</span></span></div>' +
             '<div class="srv-stats-grid srv-stats-grid--rtt">' +
-            statMini('Median',  fmtMs(rtt.median), 'teal') +
-            statMini('Mean',    fmtMs(rtt.mean),   'blue') +
-            statMini('P95',     fmtMs(rtt.p95),    'yel') +
-            statMini('P99',     fmtMs(rtt.p99),    'yel') +
-            statMini('Jitter',  fmtMs(rtt.jitter), 'ora') +
+            statMini('Median',  fmtMsBare(rtt.median), 'teal') +
+            statMini('Mean',    fmtMsBare(rtt.mean),   'blue') +
+            statMini('P95',     fmtMsBare(rtt.p95),    'yel') +
+            statMini('P99',     fmtMsBare(rtt.p99),    'yel') +
+            statMini('Jitter',  fmtMsBare(rtt.jitter), 'ora') +
             '</div>' +
             '<div class="srv-card-role" style="margin-top:6px"><span class="perf-section-label">Cache</span></div>' +
             '<div class="srv-stats-grid">' +
@@ -1647,6 +1647,12 @@ const App = (() => {
         if (n == null) return '--';
         if (n >= 1000) return parseFloat((n / 1000).toFixed(2)) + 's';
         return parseFloat(n.toFixed(1)) + 'ms';
+    }
+
+    // Bare millisecond value (no unit) for grids that carry the unit in their header.
+    function fmtMsBare(n) {
+        if (n == null) return '--';
+        return String(parseFloat(n.toFixed(n < 100 ? 1 : 0)));
     }
 
     function esc(str) {

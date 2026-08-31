@@ -540,6 +540,7 @@ main { position: relative; z-index: 1; min-height: 0; flex: 1; }
     font-size: 9px; font-weight: 700; text-transform: uppercase;
     letter-spacing: .8px; color: var(--text-dim); font-family: 'Chakra Petch', sans-serif;
 }
+.perf-section-unit { font-weight: 400; opacity: .7; letter-spacing: .4px; }
 .srv-card-footer { display: flex; gap: 8px; align-items: center; margin-top: 2px; }
 .srv-card-loading { font-size: 11px; color: var(--text-muted); padding: 12px 0 4px; }
 .blocked-pct { font-size: 10px; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; min-width: 50px; }
