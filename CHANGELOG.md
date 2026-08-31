@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [2.2.14] - 2026-08-31
+
+### Added
+
+- Optional **Recursive RTT** overlay on the Last Hour chart. A new "RTT" toggle in the chart controls plots the mean recursive resolution time on a second (right-hand) axis, so upstream latency can be lined up against query volume and spikes. The dashboard keeps its own rolling per-minute history covering roughly the last hour, bucketed by each query's own timestamp, so the line is populated as soon as the page loads rather than filling in gradually. Available on the Last Hour range only (the toggle is disabled on the historical ranges), works for both individual servers and the cluster overview, and the choice is remembered between visits.
+- **P95** recursive RTT on the perf card, shown next to the existing P99. Percentiles are still computed over the last few hundred recursive queries per poll, so they reflect recent behaviour rather than a lifetime distribution.
+
+### Changed
+
+- The perf card's RTT section is now labelled **Recursive RTT (ms)**. The figures were already computed only from recursive (upstream) queries, with cache hits, blocked, and authoritative responses excluded, but the old "RTT" label did not make that clear. The per-value "ms" suffix moved into the section heading so the extra P95 column does not widen the card.
+- The perf card now shows each server's full domain name, matching the stats cards, instead of the short name from the configuration file.
+
 ## [2.2.13] - 2026-07-21
 
 ### Added
