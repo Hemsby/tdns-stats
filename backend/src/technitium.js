@@ -31,7 +31,7 @@ async function apiGet(server, path, opts) {
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        if (data.status !== 'ok') throw new Error(data.errorMessage || 'API error');
+        if (data.status !== 'ok') throw new Error(data.errorMessage || `API status: ${data.status}`);
         return data.response;
     } finally {
         clearTimeout(timer);
@@ -155,29 +155,29 @@ async function listQueryLogApps(server) {
         const found = [];
         for (const app of res.apps || []) {
             for (const da of app.dnsApps || []) {
-                if (da.isQueryLogs) found.push(app.name);
+                if (da.isQueryLogger || da.isQueryLogs) found.push(app.name);
             }
         }
         return found;
     } catch (_) { return []; }
 }
 
+// Throws on failure (network/auth/etc) instead of swallowing it, so the caller
+// can distinguish "server unreachable" from "no matching app installed" rather
+// than reporting both as a generic "not found".
 async function discoverQueryLogsApp(server, preferredName) {
-    try {
-        const res = await apiGet(server, 'api/apps/list');
-        const preferred = normalizeAppName(preferredName);
-        let fallback = null;
-        for (const app of res.apps || []) {
-            for (const da of app.dnsApps || []) {
-                if (!da.isQueryLogs) continue;
-                const found = { name: app.name, classPath: da.classPath };
-                if (!fallback) fallback = found;
-                if (!preferred || normalizeAppName(app.name) === preferred || queryLogAppTypeMatches(app.name, preferred)) return found;
-            }
+    const res = await apiGet(server, 'api/apps/list');
+    const preferred = normalizeAppName(preferredName);
+    let fallback = null;
+    for (const app of res.apps || []) {
+        for (const da of app.dnsApps || []) {
+            if (!da.isQueryLogger && !da.isQueryLogs) continue;
+            const found = { name: app.name, classPath: da.classPath };
+            if (!fallback) fallback = found;
+            if (!preferred || normalizeAppName(app.name) === preferred || queryLogAppTypeMatches(app.name, preferred)) return found;
         }
-        return preferred ? null : fallback;
-    } catch (_) { /* no app or unreachable */ }
-    return null;
+    }
+    return preferred ? null : fallback;
 }
 
 function normalizeAppName(name) {

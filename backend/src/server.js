@@ -183,29 +183,69 @@ function broadcastViewerCount() {
     broadcast({ type: 'viewer-count', data: { count: clients.size } });
 }
 
+// How often to retry app discovery for servers that don't have a queryLogsApp
+// yet. Technitium (or its query log app) can still be starting up when
+// tdns-stats does, and that one-shot lookup at boot never got a second try.
+// A server that wasn't ready in time stayed without live feed/RTT for the
+// life of the process until someone noticed and restarted tdns-stats.
+const APP_DISCOVERY_RETRY_MS = 60000;
+let appDiscoveryTimer = null;
+
+async function discoverServerApps(s) {
+    const [app, cacheMax] = await Promise.allSettled([
+        discoverQueryLogsApp(s, s.queryLogsAppName),
+        getCacheMaxEntries(s)
+    ]);
+    s.cacheMaxEntries = cacheMax.status === 'fulfilled' ? cacheMax.value : 0;
+
+    if (app.status === 'fulfilled' && app.value) {
+        s.queryLogsApp = app.value;
+        const src = s.queryLogsAppName ? 'configured' : 'auto-discovered';
+        console.log(`${s.name}: query logs via "${s.queryLogsApp.name}" (${src}), cacheMax=${s.cacheMaxEntries || 'unlimited'}`);
+        return;
+    }
+
+    s.queryLogsApp = null;
+
+    if (!s.queryLogsAppName) {
+        console.log(`${s.name}: no query logs app, cacheMax=${s.cacheMaxEntries || 'unlimited'}`);
+        return;
+    }
+
+    if (app.status === 'rejected') {
+        console.warn(`${s.name}: queryLogsApp "${s.queryLogsAppName}" lookup failed: ${app.reason?.message || app.reason}. Will retry.`);
+        return;
+    }
+
+    // The apps/list call itself succeeded but no app matched. Safe to ask
+    // again for the list of what IS installed, since that endpoint just worked.
+    const available = await listQueryLogApps(s).catch(() => []);
+    const hint = available.length
+        ? `Available apps: ${available.map(n => `"${n}"`).join(', ')}`
+        : 'No query log apps found on this server';
+    console.warn(`${s.name}: queryLogsApp "${s.queryLogsAppName}" not found. ${hint}`);
+}
+
+function scheduleAppDiscoveryRetry() {
+    if (appDiscoveryTimer) return;
+    appDiscoveryTimer = setInterval(async () => {
+        const pending = servers.filter(s => s.queryLogsAppName && !s.queryLogsApp);
+        if (pending.length === 0) {
+            clearInterval(appDiscoveryTimer);
+            appDiscoveryTimer = null;
+            return;
+        }
+        await Promise.allSettled(pending.map(s => discoverServerApps(s)));
+    }, APP_DISCOVERY_RETRY_MS);
+}
+
 async function start() {
     // Discover query logs app for each server in parallel
-    await Promise.allSettled(servers.map(async s => {
-        const [app, cacheMax] = await Promise.allSettled([
-            discoverQueryLogsApp(s, s.queryLogsAppName),
-            getCacheMaxEntries(s)
-        ]);
-        s.queryLogsApp    = app.status    === 'fulfilled' ? app.value    : null;
-        s.cacheMaxEntries = cacheMax.status === 'fulfilled' ? cacheMax.value : 0;
+    await Promise.allSettled(servers.map(s => discoverServerApps(s)));
 
-        if (s.queryLogsApp) {
-            const src = s.queryLogsAppName ? 'configured' : 'auto-discovered';
-            console.log(`${s.name}: query logs via "${s.queryLogsApp.name}" (${src}), cacheMax=${s.cacheMaxEntries || 'unlimited'}`);
-        } else if (s.queryLogsAppName) {
-            const available = await listQueryLogApps(s).catch(() => []);
-            const hint = available.length
-                ? `Available apps: ${available.map(n => `"${n}"`).join(', ')}`
-                : 'No query log apps found on this server';
-            console.warn(`${s.name}: queryLogsApp "${s.queryLogsAppName}" not found. ${hint}`);
-        } else {
-            console.log(`${s.name}: no query logs app, cacheMax=${s.cacheMaxEntries || 'unlimited'}`);
-        }
-    }));
+    if (servers.some(s => s.queryLogsAppName && !s.queryLogsApp)) {
+        scheduleAppDiscoveryRetry();
+    }
 
     const poller = new Poller(servers, broadcast, config);
     poller.start();
