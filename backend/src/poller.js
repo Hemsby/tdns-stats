@@ -1,6 +1,6 @@
 'use strict';
 
-const { getDashboard, getTopStats, getQueryLogs, getRttSample, getSessionInfo, getClusterState, getClusterNodeState } = require('./technitium');
+const { getDashboard, getTopStats, getQueryLogs, getRttSample, getSessionInfo, getClusterState, getClusterNodeState, certVerificationHint } = require('./technitium');
 
 const CLUSTER_KEY = '__cluster';
 
@@ -196,7 +196,12 @@ class Poller {
         const nodes = {};
         results.forEach((r, i) => {
             const key = this.servers[i].name;
-            nodes[key] = r.status === 'fulfilled' ? r.value : { error: r.reason?.message };
+            if (r.status === 'fulfilled') {
+                nodes[key] = r.value;
+                return;
+            }
+            console.warn(`[stats] ${key}: ${r.reason?.message}${certVerificationHint(r.reason)}`);
+            nodes[key] = { error: r.reason?.message };
         });
 
         // Detect cluster server (first healthy node with clusterInitialized)

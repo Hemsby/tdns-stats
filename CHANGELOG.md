@@ -10,6 +10,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - The dashboard header logo now links to the project's GitHub repo.
 
+### Fixed
+
+- tdns-stats no longer requests gzip/deflate compression from Technitium. Technitium's response compression wraps its exception handler too, and a compressed error body (e.g. for an invalid or expired token) could come back truncated, which surfaced in the logs as a generic "Premature close" instead of the real error. A defensive one-time retry on a fresh connection was also added for a body that still fails to read after a good response, so a genuine transient network hiccup doesn't fail the whole call.
+- A server's stats polling failing (e.g. a TLS certificate verification error) is now logged, instead of only being reflected as an error state in the UI with nothing in the server's own log. A certificate verification failure specifically now also gets a hint pointing at `NODE_EXTRA_CA_CERTS` or the `ignoreSsl` config option, instead of just the raw OpenSSL error text. The same certificate error class silently falling back to an insecure connection for a cluster peer is now logged too, the first time it happens for that peer.
+
 ## [2.2.16] - 2026-09-28
 
 ### Added

@@ -19,48 +19,80 @@ function authHeaders(server) {
     return { 'Authorization': `Bearer ${server.token}` };
 }
 
-async function apiGet(server, path, opts) {
-    const url = `${server.url.replace(/\/$/, '')}/${path}`;
+function makeNoKeepAliveAgent(server, opts) {
+    if (!server.url.startsWith('https')) return new http.Agent({ keepAlive: false });
+    return new https.Agent({ keepAlive: false, rejectUnauthorized: !(opts?.forceInsecure || server.ignoreSsl) });
+}
+
+// Defensive retry for a body that fails to read after the response headers
+// already came back ok (e.g. a genuine transient connection drop on a pooled
+// socket). Retries once on a fresh, non-pooled connection rather than failing
+// the whole call on what's usually a one-off network hiccup.
+async function readJsonBody(server, url, res, opts) {
+    try {
+        return await res.json();
+    } catch (err) {
+        if (err.type !== 'system') throw err;
+
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 8000);
+        try {
+            const retryRes = await fetch(url, {
+                agent:    makeNoKeepAliveAgent(server, opts),
+                headers:  authHeaders(server),
+                compress: false,
+                signal:   controller.signal,
+            });
+            if (!retryRes.ok) throw new Error(`HTTP ${retryRes.status}`);
+            return await retryRes.json();
+        } finally {
+            clearTimeout(timer);
+        }
+    }
+}
+
+async function fetchJson(server, url, opts) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 8000);
     try {
         const res = await fetch(url, {
-            agent:   makeAgent(server, opts),
-            headers: authHeaders(server),
-            signal:  controller.signal,
+            agent:    makeAgent(server, opts),
+            headers:  authHeaders(server),
+            // Technitium's response-compression middleware wraps its exception
+            // handler too, and compressing that handler's chunked, no-Content-
+            // Length error body (e.g. an invalid/expired token) truncates the
+            // stream, which surfaces here as a generic "Premature close"
+            // instead of the actual error Technitium sent. node-fetch requests
+            // gzip/deflate by default; disabling that here avoids the broken
+            // path entirely instead of working around its symptom.
+            compress: false,
+            signal:   controller.signal,
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        if (data.status !== 'ok') throw new Error(data.errorMessage || `API status: ${data.status}`);
-        return data.response;
+        return await readJsonBody(server, url, res, opts);
     } finally {
         clearTimeout(timer);
     }
 }
 
+async function apiGet(server, path, opts) {
+    const url = `${server.url.replace(/\/$/, '')}/${path}`;
+    const data = await fetchJson(server, url, opts);
+    if (data.status !== 'ok') throw new Error(data.errorMessage || `API status: ${data.status}`);
+    return data.response;
+}
+
 async function getSessionInfo(server) {
     const url = `${server.url.replace(/\/$/, '')}/api/user/session/get`;
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 8000);
-    try {
-        const res = await fetch(url, {
-            agent:   makeAgent(server),
-            headers: authHeaders(server),
-            signal:  controller.signal,
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        if (data.status !== 'ok') throw new Error(data.errorMessage || 'API error');
-        return {
-            version:            data.info?.version,
-            dnsServerDomain:    data.info?.dnsServerDomain,
-            clusterInitialized: data.info?.clusterInitialized || false,
-            clusterDomain:      data.info?.clusterDomain || null,
-            clusterNodes:       data.info?.clusterNodes  || null,
-        };
-    } finally {
-        clearTimeout(timer);
-    }
+    const data = await fetchJson(server, url);
+    if (data.status !== 'ok') throw new Error(data.errorMessage || 'API error');
+    return {
+        version:            data.info?.version,
+        dnsServerDomain:    data.info?.dnsServerDomain,
+        clusterInitialized: data.info?.clusterInitialized || false,
+        clusterDomain:      data.info?.clusterDomain || null,
+        clusterNodes:       data.info?.clusterNodes  || null,
+    };
 }
 
 function normalizeLabels(mainChartData, type) {
@@ -119,6 +151,19 @@ const CERT_VERIFICATION_ERROR_CODES = new Set([
     'ERR_TLS_CERT_ALTNAME_INVALID',
 ]);
 
+function isCertVerificationError(err) {
+    return CERT_VERIFICATION_ERROR_CODES.has(err?.code);
+}
+
+// Exposed so callers (e.g. the poller) can turn a bare TLS error code into an
+// actionable log line instead of just the raw OpenSSL message, which doesn't
+// mention that trusting the CA (e.g. via NODE_EXTRA_CA_CERTS) or setting
+// "ignoreSsl: true" are the two ways out of it.
+function certVerificationHint(err) {
+    if (!isCertVerificationError(err)) return '';
+    return ` - TLS certificate verification failed (${err.code}). Trust its CA (e.g. via NODE_EXTRA_CA_CERTS) or set "ignoreSsl: true" for this server in config.yml if skipping verification is acceptable.`;
+}
+
 // Hosts confirmed (this process's lifetime) to fail certificate verification, so repeat
 // calls skip straight to the insecure agent instead of re-attempting a doomed verified
 // connection every poll cycle. Without this, a permanently-untrusted cert still causes a
@@ -143,7 +188,10 @@ async function getClusterNodeState(server) {
     try {
         return await getClusterState(server);
     } catch (err) {
-        if (!CERT_VERIFICATION_ERROR_CODES.has(err?.code)) throw err;
+        if (!isCertVerificationError(err)) throw err;
+        // This is the only place this fallback is decided, and it's remembered
+        // per host from here on, so log it once now or it never surfaces at all.
+        console.warn(`${host}: TLS certificate verification failed (${err.code}), falling back to insecure for this cluster peer from now on. Trust its CA (e.g. via NODE_EXTRA_CA_CERTS) to verify it properly instead.`);
         _insecureRequiredHosts.add(host);
         return await getClusterState(server, { forceInsecure: true });
     }
@@ -364,4 +412,4 @@ async function resolveBlockedDomain(server, domain) {
     };
 }
 
-module.exports = { getSessionInfo, getDashboard, getSettings, getClusterState, getClusterNodeState, listQueryLogApps, discoverQueryLogsApp, getQueryLogs, getRttSample, getCacheMaxEntries, getTopStats, listCache, resolveBlockedDomain };
+module.exports = { getSessionInfo, getDashboard, getSettings, getClusterState, getClusterNodeState, listQueryLogApps, discoverQueryLogsApp, getQueryLogs, getRttSample, getCacheMaxEntries, getTopStats, listCache, resolveBlockedDomain, certVerificationHint };
