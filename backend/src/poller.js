@@ -261,7 +261,9 @@ class Poller {
             clusterInitialized: info?.clusterInitialized || false,
             clusterDomain:      info?.clusterDomain      || null,
             clusterNodes:       info?.clusterNodes       || null,
-            stats:              dash
+            stats:              dash,
+            queryLogsApp:       server.queryLogsApp?.name || null,
+            queryLogsAppName:   server.queryLogsAppName    || null,
         };
     }
 

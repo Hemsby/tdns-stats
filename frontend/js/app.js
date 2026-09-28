@@ -182,6 +182,14 @@ const App = (() => {
             state.lastUpdated = new Date();
 
             const names = Object.keys(state.nodes).filter(k => k !== CLUSTER_KEY);
+            const queryLogStatus = {};
+            names.forEach(name => {
+                queryLogStatus[name] = {
+                    queryLogsApp:     state.nodes[name].queryLogsApp     || null,
+                    queryLogsAppName: state.nodes[name].queryLogsAppName || null,
+                };
+            });
+            Feed.setServerStatus(queryLogStatus);
             const wasCluster = state.isCluster;
             state.isCluster = !!state.nodes[CLUSTER_KEY];
 

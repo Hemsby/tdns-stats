@@ -604,6 +604,7 @@ main { position: relative; z-index: 1; min-height: 0; flex: 1; }
 .top-bar-fill.pur  { background: var(--accent-pur); }
 .top-hits { font-size: 11px; color: var(--text-muted); width: 40px; text-align: right; flex-shrink: 0; font-family: 'JetBrains Mono', monospace; }
 .no-data { padding: 32px 16px; text-align: center; color: var(--text-dim); font-size: 10px; letter-spacing: .8px; text-transform: uppercase; font-family: 'Chakra Petch', sans-serif; }
+.no-data.warn { color: var(--accent-red); }
 
 /* ---- Stats & Search ---- */
 .search-panel { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 12px; }

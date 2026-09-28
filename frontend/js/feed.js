@@ -11,6 +11,7 @@ const Feed = (() => {
     let colorMap     = {};
     let paused       = false;
     let serverDisplayMap = {};
+    let serverStatus = {}; // serverName -> { queryLogsApp: string|null, queryLogsAppName: string|null }
     const textCtx = document.createElement('canvas').getContext('2d');
     textCtx.font = '600 11px "Chakra Petch", system-ui, sans-serif';
 
@@ -19,6 +20,23 @@ const Feed = (() => {
     }
 
     function setServerDisplayMap(map) { serverDisplayMap = map; }
+
+    // Lets the "no data" message distinguish a genuinely quiet feed from a
+    // configured query log app that the backend couldn't find on the server.
+    function setServerStatus(status) {
+        serverStatus = status || {};
+        render(lastFilter, lastBlocked);
+    }
+
+    function noDataMessage(serverFilter) {
+        const relevant = serverFilter === 'all' ? Object.values(serverStatus) : [serverStatus[serverFilter]];
+        const missing = relevant.find(st => st && st.queryLogsAppName && !st.queryLogsApp);
+        if (missing) {
+            const scope = serverFilter === 'all' ? ' on one or more servers' : '';
+            return '<div class="no-data warn">Query log app "' + esc(missing.queryLogsAppName) + '" not found' + scope + '</div>';
+        }
+        return '<div class="no-data">Waiting for query data...</div>';
+    }
 
     function setColors(map) {
         colorMap = map;
@@ -125,7 +143,7 @@ const Feed = (() => {
         });
 
         if (filtered.length === 0) {
-            list.innerHTML = '<div class="no-data">Waiting for query data...</div>';
+            list.innerHTML = noDataMessage(serverFilter);
             return;
         }
 
@@ -227,5 +245,5 @@ const Feed = (() => {
             .replace(/"/g, '&quot;');
     }
 
-    return { init, add, scheduleRender, render, setColors, setPaused, setServerDisplayMap };
+    return { init, add, scheduleRender, render, setColors, setPaused, setServerDisplayMap, setServerStatus };
 })();
