@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [2.2.16] - 2026-09-28
+
+### Added
+
+- The live feed panel now shows a specific warning when a configured query log app can't be found on the server, instead of leaving it on the generic "Waiting for query data..." message that made a missing app indistinguishable from a quiet one.
+
 ## [2.2.15] - 2026-09-28
 
 ### Fixed
