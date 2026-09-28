@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [2.2.15] - 2026-09-28
+
 ### Fixed
 
 - Query log app discovery no longer masks the real cause of a failed lookup (auth failure, network error, timeout) behind a generic "not found" warning. The actual error is now logged. Discovery also retries every 60 seconds for any server that hasn't found its configured app yet, instead of only trying once at startup, so a server whose query log app (or Technitium itself) wasn't ready yet at boot recovers on its own without needing a manual restart.
