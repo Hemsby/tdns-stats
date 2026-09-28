@@ -58,13 +58,13 @@ async function fetchJson(server, url, opts) {
         const res = await fetch(url, {
             agent:    makeAgent(server, opts),
             headers:  authHeaders(server),
-            // Technitium's response-compression middleware wraps its exception
-            // handler too, and compressing that handler's chunked, no-Content-
-            // Length error body (e.g. an invalid/expired token) truncates the
-            // stream, which surfaces here as a generic "Premature close"
-            // instead of the actual error Technitium sent. node-fetch requests
-            // gzip/deflate by default; disabling that here avoids the broken
-            // path entirely instead of working around its symptom.
+            // Technitium negotiates response compression (switching to chunked
+            // transfer encoding) whenever Accept-Encoding is present, for both
+            // success and error responses. node-fetch sends "gzip,deflate" by
+            // default, and reading the body of a resulting chunked response
+            // from Technitium has been observed to fail here with a generic
+            // "Premature close" instead of the JSON Technitium actually sent.
+            // Not requesting compression at all avoids that path entirely.
             compress: false,
             signal:   controller.signal,
         });
