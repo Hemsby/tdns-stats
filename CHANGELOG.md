@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+
+- The dashboard header logo now links to the project's GitHub repo.
+
 ## [2.2.16] - 2026-09-28
 
 ### Added
