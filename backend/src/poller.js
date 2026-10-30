@@ -1,6 +1,7 @@
 'use strict';
 
 const { getDashboard, getTopStats, getQueryLogs, getRttSample, getSessionInfo, getClusterState, getClusterNodeState, certVerificationHint } = require('./technitium');
+const log = require('./log');
 
 const CLUSTER_KEY = '__cluster';
 
@@ -294,7 +295,7 @@ class Poller {
         const validMs = (e) => {
             const t = toMs(e);
             if (!Number.isFinite(t)) {
-                console.warn(`[feed] ${server.name}: row ${e.rowNumber} has invalid timestamp: ${e.timestamp}`);
+                log.debug(`[feed] ${server.name}: row ${e.rowNumber} has invalid timestamp: ${e.timestamp}`);
                 return false;
             }
             return true;
@@ -323,7 +324,7 @@ class Poller {
         const isReset = newestTs < cursor.ts;
         let fresh;
         if (isReset) {
-            console.log(
+            log.debug(
                 `[feed] ${server.name}: feed cursor reset ` +
                 `(before: ts=${new Date(cursor.ts).toISOString()} row=${cursor.rowNumber} ` +
                 `→ after: ts=${entries[0].timestamp} row=${newestRowNumber})`

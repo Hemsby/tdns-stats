@@ -11,6 +11,7 @@ const yaml      = require('js-yaml');
 const fetch     = require('node-fetch');
 const Poller    = require('./poller');
 const Updater   = require('./updater');
+const log       = require('./log');
 const { listQueryLogApps, discoverQueryLogsApp, getCacheMaxEntries, listCache, resolveBlockedDomain } = require('./technitium');
 
 const PACKAGE = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf8'));
@@ -45,6 +46,7 @@ function loadConfig() {
 }
 
 const config  = loadConfig();
+log.configure(config.debug);
 const servers = (config.servers || []).map(s => ({
     name:              s.name,
     url:               s.url.replace(/\/$/, ''),
@@ -201,19 +203,19 @@ async function discoverServerApps(s) {
     if (app.status === 'fulfilled' && app.value) {
         s.queryLogsApp = app.value;
         const src = s.queryLogsAppName ? 'configured' : 'auto-discovered';
-        console.log(`${s.name}: query logs via "${s.queryLogsApp.name}" (${src}), cacheMax=${s.cacheMaxEntries || 'unlimited'}`);
+        log.debug(`[discovery] ${s.name}: query logs via "${s.queryLogsApp.name}" (${src}), cacheMax=${s.cacheMaxEntries || 'unlimited'}`);
         return;
     }
 
     s.queryLogsApp = null;
 
     if (!s.queryLogsAppName) {
-        console.log(`${s.name}: no query logs app, cacheMax=${s.cacheMaxEntries || 'unlimited'}`);
+        log.debug(`[discovery] ${s.name}: no query logs app, cacheMax=${s.cacheMaxEntries || 'unlimited'}`);
         return;
     }
 
     if (app.status === 'rejected') {
-        console.warn(`${s.name}: queryLogsApp "${s.queryLogsAppName}" lookup failed: ${app.reason?.message || app.reason}. Will retry.`);
+        console.warn(`[discovery] ${s.name}: queryLogsApp "${s.queryLogsAppName}" lookup failed: ${app.reason?.message || app.reason}. Will retry.`);
         return;
     }
 
@@ -223,7 +225,7 @@ async function discoverServerApps(s) {
     const hint = available.length
         ? `Available apps: ${available.map(n => `"${n}"`).join(', ')}`
         : 'No query log apps found on this server';
-    console.warn(`${s.name}: queryLogsApp "${s.queryLogsAppName}" not found. ${hint}`);
+    console.warn(`[discovery] ${s.name}: queryLogsApp "${s.queryLogsAppName}" not found. ${hint}`);
 }
 
 function scheduleAppDiscoveryRetry() {
@@ -277,10 +279,10 @@ async function start() {
         const signed = parseCookies(req)[SESSION_COOKIE];
         const token = verifySession(signed);
         if (!token || !sessions.has(token)) {
-            console.warn('[auth] token rejected:', req.path, 'token=' + (token || 'none'));
+            console.warn(`[auth] token rejected: endpoint=${req.path} token=${token || 'none'}`);
             return res.status(401).json({ error: 'Unauthorized' });
         }
-        console.log('[auth] token accepted:', req.path, token);
+        log.debug(`[auth] token accepted: endpoint=${req.path} token=${token}`);
         next();
     }
 
@@ -288,7 +290,7 @@ async function start() {
         const token = crypto.randomBytes(16).toString('hex');
         sessions.add(token);
         res.setHeader('Set-Cookie', `${SESSION_COOKIE}=${signSession(token)}; HttpOnly; SameSite=Lax; Path=/`);
-        console.log('[auth] session token created:', token);
+        log.debug('[auth] session token created:', token);
         res.json({ ok: true });
     });
 
@@ -320,7 +322,7 @@ async function start() {
             }
             if (res.sessionToken) {
                 sessions.delete(res.sessionToken);
-                console.log('[auth] session token removed:', res.sessionToken);
+                log.debug('[auth] session token removed:', res.sessionToken);
                 res.sessionToken = null;
             }
             clearInterval(ping);
@@ -328,7 +330,7 @@ async function start() {
         };
 
         res.on('error', (err) => {
-            console.warn('[stream] Response error:', err.message);
+            console.warn('[stream] response error:', err.message);
             cleanup();
         });
 
@@ -353,7 +355,7 @@ async function start() {
             // never sees stale chart or top list data after reconnect.
             poller.refreshRangeData();
         } catch (err) {
-            console.error('[stream] Initial write failed:', err.message);
+            console.error('[stream] initial write failed:', err.message);
             cleanup();
         }
 
@@ -498,7 +500,7 @@ async function start() {
             const changelog = fs.readFileSync(changelogPath, 'utf8');
             res.json({ changelog });
         } catch (e) {
-            console.error('[changelog] Failed to read:', e.message);
+            console.error('[changelog] failed to read:', e.message);
             res.status(500).json({ error: 'Failed to read changelog' });
         }
     });
@@ -550,7 +552,7 @@ async function start() {
                 }
             });
         } catch (e) {
-            console.error('[updates] Error checking for updates:', e.message);
+            console.error('[update] error checking for updates:', e.message);
             res.status(502).json({ error: 'Failed to check updates' });
         }
     });
@@ -569,7 +571,7 @@ async function start() {
                 try {
                     await updater.executeUpdate();
                 } catch (e) {
-                    console.error('[updates] Update failed:', e.message);
+                    console.error('[update] update failed:', e.message);
                     broadcast({
                         type: 'update-status',
                         data: { status: null, error: e.message }
@@ -577,7 +579,7 @@ async function start() {
                 }
             }, 100);
         } catch (e) {
-            console.error('[updates] Failed to trigger update:', e.message);
+            console.error('[update] failed to trigger update:', e.message);
             res.status(500).json({ error: 'Failed to trigger update' });
         }
     });
@@ -599,15 +601,40 @@ async function start() {
             throw new Error(`Failed to load TLS certificate: ${e.message}`);
         }
         https.createServer(tlsOpts, app).listen(PORT, '0.0.0.0', () => {
-            console.log(`tdns-stats listening on https port ${PORT}`);
-            console.log(`Monitoring ${servers.length} server(s): ${servers.map(s => s.name).join(', ')}`);
+            console.log(`[startup] tdns-stats listening on https port ${PORT}`);
+            console.log(`[startup] monitoring ${servers.length} server(s): ${servers.map(s => s.name).join(', ')}`);
         });
     } else {
         http.createServer(app).listen(PORT, '0.0.0.0', () => {
-            console.log(`tdns-stats listening on http port ${PORT}`);
-            console.log(`Monitoring ${servers.length} server(s): ${servers.map(s => s.name).join(', ')}`);
+            console.log(`[startup] tdns-stats listening on http port ${PORT}`);
+            console.log(`[startup] monitoring ${servers.length} server(s): ${servers.map(s => s.name).join(', ')}`);
         });
     }
+
+    // Memory telemetry: log hourly so leaks can be distinguished from normal heap growth.
+    setInterval(() => {
+        const mem = process.memoryUsage();
+        const handles = process._getActiveHandles ? process._getActiveHandles() : [];
+        const requests = process._getActiveRequests ? process._getActiveRequests() : [];
+        const handleCounts = handles.reduce((acc, h) => {
+            const name = h?.constructor?.name || 'Unknown';
+            acc[name] = (acc[name] || 0) + 1;
+            return acc;
+        }, {});
+        log.debug('[memory] rss=%s heapUsed=%s external=%s arrayBuffers=%s handles=%j requests=%s',
+            formatBytes(mem.rss),
+            formatBytes(mem.heapUsed),
+            formatBytes(mem.external),
+            formatBytes(mem.arrayBuffers || 0),
+            handleCounts,
+            requests.length);
+    }, 60 * 60 * 1000).unref();
 }
 
-start().catch(err => { console.error('Startup error:', err); process.exit(1); });
+function formatBytes(b) {
+    if (b >= 1024 * 1024) return (b / (1024 * 1024)).toFixed(1) + ' MB';
+    if (b >= 1024) return (b / 1024).toFixed(1) + ' KB';
+    return b + ' B';
+}
+
+start().catch(err => { console.error('[startup] startup error:', err); process.exit(1); });

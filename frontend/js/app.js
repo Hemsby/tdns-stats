@@ -99,7 +99,7 @@ const App = (() => {
         // Cooldown: prevent rapid cycling (at most once every 2 seconds)
         const now = Date.now();
         if (now - lastConnectAttempt < 2000) {
-            console.warn('[sse] Connect attempt blocked by cooldown');
+            Log.debug('[stream] connect attempt blocked by cooldown');
             return;
         }
         lastConnectAttempt = now;
@@ -114,7 +114,7 @@ const App = (() => {
         try {
             await fetch('/api/session');
         } catch (e) {
-            console.warn('[sse] Session handshake failed:', e);
+            Log.debug('[stream] session handshake failed:', e);
             reconnectWithCountdown(3000);
             return;
         }
@@ -124,7 +124,7 @@ const App = (() => {
         // Timeout: if we don't get connected within 5 seconds, retry
         connectTimeout = setTimeout(() => {
             if (!state.connected && es) {
-                console.warn('[sse] Connection timeout, retrying...');
+                Log.debug('[stream] connection timeout, retrying...');
                 closeEventSource();
                 clearConnectionTimers();
                 reconnectWithCountdown(currentReconnectDelay);
@@ -135,7 +135,7 @@ const App = (() => {
             if (updateInProgress()) return;
             
             if (Date.now() - lastMessageAt > 60000) {
-                console.warn('[sse] Connection stale (60s), restarting...');
+                Log.debug('[stream] connection stale (60s), restarting...');
                 setConnDot('error');
                 state.connected = false;
                 closeEventSource();
@@ -156,7 +156,7 @@ const App = (() => {
         };
 
         es.onerror = (err) => {
-            console.error('[sse] Stream error:', err);
+            console.error('[stream] stream error:', err);
             clearConnectionTimers();
             state.connected = false;
             setConnDot('error');
@@ -1623,7 +1623,7 @@ const App = (() => {
         if (stalled && state.lastFeedEvent) {
             const secs = Math.round((Date.now() - state.lastFeedEvent) / 1000);
             const age  = secs >= 60 ? Math.floor(secs / 60) + 'm' : secs + 's';
-            console.warn('[feed] Feed stall: last event ' + age + ' ago');
+            console.warn('[feed] feed stall: last event ' + age + ' ago');
             el.textContent = 'Feed paused: no data received for ' + age + '. Check tdns-stats console for errors.';
         }
     }
@@ -1875,7 +1875,7 @@ const App = (() => {
                 setupChangelog();
             }
         } catch (e) {
-            console.error('[updates] Failed to fetch version:', e);
+            console.error('[update] failed to fetch version:', e);
         }
     }
 
@@ -1906,7 +1906,7 @@ const App = (() => {
             }
             updateStatusDisplay();
         } catch (e) {
-            console.error('[updates] Failed to check updates:', e);
+            console.error('[update] failed to check updates:', e);
             state.updateStatus = null;
             updateStatusDisplay();
         }
@@ -1932,7 +1932,7 @@ const App = (() => {
             // Poll for service recovery
             await pollHealth();
         } catch (e) {
-            console.error('[updates] Failed to trigger update:', e);
+            console.error('[update] failed to trigger update:', e);
             state.updateStatus = null;
             updateStatusDisplay();
         }
@@ -2010,7 +2010,7 @@ const App = (() => {
                     state.changelogHtml = marked.parse(cleaned);
                 }
             } catch (e) {
-                console.error('[changelog] Failed to fetch changelog:', e);
+                console.error('[changelog] failed to fetch changelog:', e);
                 return;
             }
         }

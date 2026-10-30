@@ -56,6 +56,12 @@ top:
   limit: 20 # number of items in top domains/clients lists
 
 
+# Optional: enable verbose debug logging (default: false)
+# Debug lines are silent unless this is enabled. They carry a category tag such
+# as [discovery], [feed], [stream] or [update] so they are easy to filter.
+# debug: false
+
+
 # Optional: override the default auto-assigned colour order
 # serverColors:
 #   - blue

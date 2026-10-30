@@ -187,6 +187,7 @@ All configuration lives in `config.yml` (see `config.example.yml` for a fully an
 | Key                      | Default       | Description                                                  |
 | ------------------------ | ------------- | ------------------------------------------------------------ |
 | `port`                   | `3000`        | Port the web interface listens on                            |
+| `debug`                  | `false`       | Enable verbose debug logging (see [Debug logging](#debug-logging)) |
 | `servers[].name`         | required      | Display name for the server                                  |
 | `servers[].url`          | required      | Technitium API base URL (e.g. `http://ns1.example.com:5380`) |
 | `servers[].token`        | required      | API token                                                    |
@@ -229,6 +230,18 @@ https:
 ### Cluster support
 
 If your Technitium servers are configured as a cluster, the dashboard automatically detects this and adds a **Cluster** tab showing aggregate stats across all nodes alongside the per-node view.
+
+### Debug logging
+
+Verbose logging is off by default. Enable it with `debug: true` in `config.yml`:
+
+```yaml
+debug: true
+```
+
+Debug lines are categorised (`[discovery]`, `[feed]`, `[stream]`, `[update]`, ...) so you can filter them with `grep`.
+
+The browser console has its own toggle, independent of the backend setting. Run `Log.enable()` in the devtools console to turn on frontend debug output and `Log.disable()` to turn it off. The choice is stored in `localStorage` and survives reloads.
 
 ## Live feed
 

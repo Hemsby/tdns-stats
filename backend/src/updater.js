@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { exec } = require('child_process');
 const { promisify } = require('util');
+const log = require('./log');
 
 const execAsync = promisify(exec);
 
@@ -142,42 +143,42 @@ class Updater {
         const cwd = hostProject;
 
         const composeCmd = await this.getDockerComposeCommand();
-        console.log(`[update] Using compose command: ${composeCmd}`);
-        console.log(`[update] Using host project path: ${hostProject}`);
-        console.log(`[update] Using compose file: ${composeFile}`);
+        log.debug(`[update] using compose command: ${composeCmd}`);
+        log.debug(`[update] using host project path: ${hostProject}`);
+        log.debug(`[update] using compose file: ${composeFile}`);
 
         if (await this.isGitRepo(cwd)) {
-            console.log('[update] Updating host project repository from git');
+            log.debug('[update] updating host project repository from git');
 
             let composeContent = null;
             try {
                 composeContent = fs.readFileSync(composeFile, 'utf-8');
             } catch (e) {
-                console.warn('[update] Could not read docker-compose.yml for backup, continuing');
+                console.warn('[update] could not read docker-compose.yml for backup, continuing');
             }
 
             try {
                 const { stdout: fetchStdout, stderr: fetchStderr } = await execAsync(
                     'git fetch origin', { cwd, shell: '/bin/sh' }
                 );
-                if (fetchStderr) console.log('[update] git fetch stderr:', fetchStderr);
-                console.log('[update] Fetched updates:', fetchStdout);
+                if (fetchStderr) log.debug('[update] git fetch stderr:', fetchStderr);
+                log.debug('[update] fetched updates:', fetchStdout);
 
                 const { stdout: resetStdout, stderr: resetStderr } = await execAsync(
                     'git reset --hard origin/master', { cwd, shell: '/bin/sh' }
                 );
-                if (resetStderr) console.log('[update] git reset stderr:', resetStderr);
-                console.log('[update] Reset host project to origin/master:', resetStdout);
+                if (resetStderr) log.debug('[update] git reset stderr:', resetStderr);
+                log.debug('[update] reset host project to origin/master:', resetStdout);
             } catch (e) {
-                console.warn('[update] Failed to update host git repository, continuing with compose rebuild:', e.message);
+                console.warn('[update] failed to update host git repository, continuing with compose rebuild:', e.message);
             }
 
             if (composeContent) {
                 try {
                     fs.writeFileSync(composeFile, composeContent, 'utf-8');
-                    console.log('[update] Restored local docker-compose.yml');
+                    log.debug('[update] restored local docker-compose.yml');
                 } catch (e) {
-                    console.warn('[update] Could not restore docker-compose.yml:', e.message);
+                    console.warn('[update] could not restore docker-compose.yml:', e.message);
                 }
             }
         }
@@ -186,14 +187,14 @@ class Updater {
             const { stdout: pullStdout, stderr: pullStderr } = await execAsync(
                 `${composeCmd} -p tdns-stats -f ${composeFile} pull`, { cwd, shell: '/bin/sh' }
             );
-            if (pullStderr) console.log('[update] docker compose pull stderr:', pullStderr);
-            console.log('[update] Pull complete:', pullStdout);
+            if (pullStderr) log.debug('[update] docker compose pull stderr:', pullStderr);
+            log.debug('[update] pull complete:', pullStdout);
         } catch (e) {
             console.error('[update] docker compose pull failed:', e.message);
             throw e;
         }
 
-        console.log('[update] Scheduling compose restart from helper container');
+        log.debug('[update] scheduling compose restart from helper container');
         let helperImage = null;
         let helperHostSource = null;
         try {
@@ -225,10 +226,10 @@ class Updater {
             const { stdout: helperStdout, stderr: helperStderr } = await execAsync(
                 helperCmd, { cwd, shell: '/bin/sh' }
             );
-            if (helperStderr) console.log('[update] helper command stderr:', helperStderr);
-            console.log('[update] Update triggered:', helperStdout.trim() || 'helper started');
+            if (helperStderr) log.debug('[update] helper command stderr:', helperStderr);
+            log.debug('[update] update triggered:', helperStdout.trim() || 'helper started');
         } catch (e) {
-            console.error('[update] Failed to trigger helper restart:', e.message);
+            console.error('[update] failed to trigger helper restart:', e.message);
             throw e;
         }
     }
@@ -236,25 +237,25 @@ class Updater {
     async updateSystemd() {
         const cwd = this.projectRoot;
 
-        console.log('[update] Executing git pull');
+        log.debug('[update] executing git pull');
         try {
             const { stdout: pullStdout, stderr: pullStderr } = await execAsync(
                 'git pull origin master', { cwd, shell: '/bin/sh' }
             );
-            if (pullStderr) console.log('[update] git pull stderr:', pullStderr);
-            console.log('[update] Git pull complete:', pullStdout);
+            if (pullStderr) log.debug('[update] git pull stderr:', pullStderr);
+            log.debug('[update] git pull complete:', pullStdout);
         } catch (e) {
             console.error('[update] git pull failed:', e.message);
             throw e;
         }
 
-        console.log('[update] Restarting systemd service');
+        log.debug('[update] restarting systemd service');
         try {
             const { stdout: restartStdout, stderr: restartStderr } = await execAsync(
                 'systemctl restart tdns-stats', { shell: '/bin/sh' }
             );
-            if (restartStderr) console.log('[update] systemctl stderr:', restartStderr);
-            console.log('[update] Service restart triggered:', restartStdout);
+            if (restartStderr) log.debug('[update] systemctl stderr:', restartStderr);
+            log.debug('[update] service restart triggered:', restartStdout);
         } catch (e) {
             console.error('[update] systemctl restart failed:', e.message);
             throw e;

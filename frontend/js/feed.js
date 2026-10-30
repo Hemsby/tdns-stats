@@ -47,7 +47,7 @@ const Feed = (() => {
 
     function add(serverName, newEntries, cursorReset) {
         if (cursorReset) {
-            console.warn(`[feed] ${serverName}: Feed cursor reset`);
+            Log.debug(`[feed] ${serverName}: feed cursor reset`);
             // Log rotated — wipe this server's seen IDs and drop its entries wholesale.
             seenByServer[serverName] = new Set();
             let writeIdx = 0;

@@ -4,9 +4,10 @@ const fetch = require('node-fetch');
 const http  = require('http');
 const https = require('https');
 
-const _agentHttp     = new http.Agent({ keepAlive: true });
-const _agentHttps    = new https.Agent({ keepAlive: true });
-const _agentInsecure = new https.Agent({ keepAlive: true, rejectUnauthorized: false });
+const AGENT_OPTS = { keepAlive: true, maxSockets: 10, maxFreeSockets: 5 };
+const _agentHttp     = new http.Agent(AGENT_OPTS);
+const _agentHttps    = new https.Agent(AGENT_OPTS);
+const _agentInsecure = new https.Agent({ ...AGENT_OPTS, rejectUnauthorized: false });
 
 function makeAgent(server, opts) {
     if (!server.url.startsWith('https')) return _agentHttp;
@@ -191,7 +192,7 @@ async function getClusterNodeState(server) {
         if (!isCertVerificationError(err)) throw err;
         // This is the only place this fallback is decided, and it's remembered
         // per host from here on, so log it once now or it never surfaces at all.
-        console.warn(`${host}: TLS certificate verification failed (${err.code}), falling back to insecure for this cluster peer from now on. Trust its CA (e.g. via NODE_EXTRA_CA_CERTS) to verify it properly instead.`);
+        console.warn(`[tls] ${host}: TLS certificate verification failed (${err.code}), falling back to insecure for this cluster peer from now on. Trust its CA (e.g. via NODE_EXTRA_CA_CERTS) to verify it properly instead.`);
         _insecureRequiredHosts.add(host);
         return await getClusterState(server, { forceInsecure: true });
     }

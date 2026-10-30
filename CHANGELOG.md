@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Opt-in debug logging. Debug lines are silent by default and can be enabled with `debug: true` in `config.yml`. The browser console has a matching `Log.enable()` / `Log.disable()` toggle.
+
+### Changed
+
+- Log lines now all carry a category prefix (`[discovery]`, `[tls]`, `[startup]`, `[stream]`, `[update]`, ...), and `[sse]` was renamed to `[stream]` to match the backend. The per-request auth lines now report `endpoint=` and `token=` fields.
+
 ## [2.2.17] - 2026-09-28
 
 ### Added
