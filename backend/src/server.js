@@ -615,19 +615,17 @@ async function start() {
     setInterval(() => {
         const mem = process.memoryUsage();
         const handles = process._getActiveHandles ? process._getActiveHandles() : [];
-        const requests = process._getActiveRequests ? process._getActiveRequests() : [];
         const handleCounts = handles.reduce((acc, h) => {
             const name = h?.constructor?.name || 'Unknown';
             acc[name] = (acc[name] || 0) + 1;
             return acc;
         }, {});
-        log.debug('[memory] rss=%s heapUsed=%s external=%s arrayBuffers=%s handles=%j requests=%s',
+        log.debug('[memory] rss=%s heapUsed=%s external=%s arrayBuffers=%s handles=%j',
             formatBytes(mem.rss),
             formatBytes(mem.heapUsed),
             formatBytes(mem.external),
             formatBytes(mem.arrayBuffers || 0),
-            handleCounts,
-            requests.length);
+            handleCounts);
     }, 60 * 60 * 1000).unref();
 }
 
