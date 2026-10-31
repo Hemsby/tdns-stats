@@ -250,7 +250,7 @@ const Selection = (() => {
 
         bar.innerHTML = '<span class="feed-selection-label">Filtering</span>' +
             chips.join('') +
-            '<button type="button" class="feed-selection-clear">Clear all</button>';
+            '<button type="button" class="feed-selection-clear">Clear All</button>';
     }
 
     function chipHtml(tab, name) {

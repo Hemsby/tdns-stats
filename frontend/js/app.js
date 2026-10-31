@@ -1499,6 +1499,16 @@ const App = (() => {
         const container = document.getElementById('topContent');
         if (!container) return;
 
+        // Stats updates replace the whole list, which would drop keyboard focus
+        // mid-navigation. Remember the focused row and restore it afterwards.
+        const rowsBefore = Array.from(container.querySelectorAll('.top-row'));
+        const activeRow = container.contains(document.activeElement)
+            ? document.activeElement.closest('.top-row')
+            : null;
+        const activeIndex = activeRow ? rowsBefore.indexOf(activeRow) : -1;
+        const activeName = activeRow ? activeRow.dataset.name : null;
+        const scrollTop = container.scrollTop;
+
         if (!items.length) {
             container.innerHTML = '<div class="no-data">No data yet</div>';
             return;
@@ -1518,6 +1528,14 @@ const App = (() => {
         }).join('');
 
         Selection.applyToRows();
+
+        container.scrollTop = scrollTop;
+        if (activeRow) {
+            const rowsAfter = Array.from(container.querySelectorAll('.top-row'));
+            const next = rowsAfter.find(row => row.dataset.name === activeName) ||
+                rowsAfter[activeIndex];
+            if (next) next.focus({ preventScroll: true });
+        }
     }
 
     function renderTopListsFromData(data, statsType) {
