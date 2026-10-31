@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Added
 
 - Opt-in debug logging. Debug lines are silent by default and can be enabled with `debug: true` in `config.yml`. The browser console has a matching `Log.enable()` / `Log.disable()` toggle.
+- Top Stats rows are now clickable filters for the Live Feed. Click a domain, blocked domain, or client to show only that traffic; Ctrl/Cmd+click adds or removes individual rows, Shift+click selects a range, and clicking a selected row again clears it. Domains and clients can be combined (for example, one domain on one client), and the active filters appear as removable chips above the feed with a Clear All button. A count next to the Top Stats title shows how many rows are selected, and the same selection can be made from the keyboard.
 
 ### Changed
 
