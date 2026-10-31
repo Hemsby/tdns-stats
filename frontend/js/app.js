@@ -711,6 +711,7 @@ const App = (() => {
         document.querySelectorAll('.tab-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 state.topTab = btn.dataset.tab;
+                Selection.setTab(state.topTab);
                 document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b === btn));
                 refreshTopLists();
             });
@@ -1507,7 +1508,7 @@ const App = (() => {
         container.innerHTML = items.map((item, i) => {
             const pct = Math.round((item.hits / max) * 100);
             const sub = item.domain ? '<span class="top-sub" title="' + esc(item.domain) + '">' + esc(item.domain) + '</span>' : '';
-            return '<div class="top-row">' +
+            return '<div class="top-row" role="option" tabindex="0" data-name="' + esc(item.name) + '">' +
                 '<span class="top-rank">' + (i + 1) + '</span>' +
                 '<span class="top-name" title="' + esc(item.name) + '">' + esc(item.name) + '</span>' +
                 sub +
@@ -1515,6 +1516,8 @@ const App = (() => {
                 '<span class="top-hits">' + fmtNum(item.hits) + '</span>' +
                 '</div>';
         }).join('');
+
+        Selection.applyToRows();
     }
 
     function renderTopListsFromData(data, statsType) {
@@ -2057,6 +2060,13 @@ const App = (() => {
         Charts.init();
         Charts.setPersistCallback(saveHiddenChartState);
         Charts.setLoadCallback(loadHiddenChartState);
+        Selection.init({
+            onChange: () => {
+                Feed.setSelectionFilters(Selection.getFilters());
+                Feed.render(state.feedServer, state.feedFilters);
+            },
+        });
+        Selection.setTab(state.topTab);
         fetch('/api/config')
             .then(r => r.json())
             .then(cfg => {
