@@ -249,7 +249,7 @@ const Selection = (() => {
         }
 
         bar.innerHTML = '<span class="feed-selection-label">Filtering</span>' +
-            chips.join('') +
+            '<div class="feed-selection-chips">' + chips.join('') + '</div>' +
             '<button type="button" class="feed-selection-clear">Clear All</button>';
     }
 

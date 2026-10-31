@@ -866,13 +866,18 @@ main { position: relative; z-index: 1; min-height: 0; flex: 1; }
     background: var(--bg-hover); border-color: var(--border);
 }
 .feed-selection-bar {
-    display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
+    display: flex; align-items: flex-start; gap: 6px;
     padding: 8px 14px; border-bottom: 1px solid var(--border-dim);
     background: var(--bg); flex-shrink: 0;
 }
 .feed-selection-bar[hidden] { display: none; }
+.feed-selection-chips {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
+    flex: 1; min-width: 0;
+}
 .feed-selection-label {
-    font-size: 9px; font-weight: 700; letter-spacing: .6px;
+    font-size: 9px; font-weight: 700; letter-spacing: .6px; line-height: 21px;
+    flex-shrink: 0;
     text-transform: uppercase; color: var(--text-muted); margin-right: 2px;
 }
 .filter-chip {
@@ -894,7 +899,7 @@ main { position: relative; z-index: 1; min-height: 0; flex: 1; }
     border: 1px solid var(--border); border-radius: 4px;
     color: var(--text-muted); font-family: 'Chakra Petch', sans-serif;
     font-size: 9px; font-weight: 700; letter-spacing: .5px;
-    cursor: pointer;
+    cursor: pointer; flex-shrink: 0;
 }
 .feed-selection-clear:hover {
     color: var(--text); background: var(--bg-hover);
