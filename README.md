@@ -239,7 +239,7 @@ Verbose logging is off by default. Enable it with `debug: true` in `config.yml`:
 debug: true
 ```
 
-Debug lines are categorised (`[discovery]`, `[feed]`, `[stream]`, `[update]`, ...) so you can filter them with `grep`.
+Debug lines are categorised (`[discovery]`, `[feed]`, `[stream]`, `[update]`, ...) so you can filter them easily.
 
 The browser console has its own toggle, independent of the backend setting. Run `Log.enable()` in the devtools console to turn on frontend debug output and `Log.disable()` to turn it off. The choice is stored in `localStorage` and survives reloads.
 
@@ -253,6 +253,10 @@ The live feed requires a query log app to be installed on each DNS server. Suppo
 - Query Logs (SQL Server)
 
 If you have more than one query log app installed, specify which one to use with `servers[].queryLogsApp`. Otherwise the first one found is used automatically.
+
+### Filtering the feed
+
+Click a row in the **Top Stats** card to filter the feed to that domain, blocked domain, or client. Ctrl/Cmd+click toggles individual rows and Shift+click selects a range; active filters appear as chips above the feed and can be removed individually or with **Clear All**.
 
 ### Tuning the feed polling rate
 
