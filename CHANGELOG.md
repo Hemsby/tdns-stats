@@ -15,6 +15,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - Log lines now all carry a category prefix (`[discovery]`, `[tls]`, `[startup]`, `[stream]`, `[update]`, ...), and `[sse]` was renamed to `[stream]` to match the backend. The per-request auth lines now report `endpoint=` and `token=` fields.
 
+### Fixed
+
+- The live feed now says the query log app is unreachable and retrying, instead of "not found", when the lookup fails at startup.
+
 ## [2.2.17] - 2026-09-28
 
 ### Added

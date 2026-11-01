@@ -187,6 +187,7 @@ const App = (() => {
                 queryLogStatus[name] = {
                     queryLogsApp:     state.nodes[name].queryLogsApp     || null,
                     queryLogsAppName: state.nodes[name].queryLogsAppName || null,
+                    queryLogsLookupFailed: !!state.nodes[name].queryLogsLookupFailed,
                 };
             });
             Feed.setServerStatus(queryLogStatus);

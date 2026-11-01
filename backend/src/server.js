@@ -54,7 +54,8 @@ const servers = (config.servers || []).map(s => ({
     ignoreSsl:         !!s.ignoreSsl,
     queryLogsAppName:  s.queryLogsApp || null,
     queryLogsApp:      null,
-    color:             s.color || null,
+    queryLogsLookupFailed: false,
+    color:            s.color || null,
 }));
 
 if (servers.length === 0) throw new Error('No servers defined in config.yml');
@@ -202,12 +203,16 @@ async function discoverServerApps(s) {
 
     if (app.status === 'fulfilled' && app.value) {
         s.queryLogsApp = app.value;
+        s.queryLogsLookupFailed = false;
         const src = s.queryLogsAppName ? 'configured' : 'auto-discovered';
         log.debug(`[discovery] ${s.name}: query logs via "${s.queryLogsApp.name}" (${src}), cacheMax=${s.cacheMaxEntries || 'unlimited'}`);
         return;
     }
 
     s.queryLogsApp = null;
+    // A thrown lookup (DNS or network down at boot) is not the same as the app
+    // being absent. Track it so the dashboard can say "retrying" instead of "not found".
+    s.queryLogsLookupFailed = app.status === 'rejected';
 
     if (!s.queryLogsAppName) {
         log.debug(`[discovery] ${s.name}: no query logs app, cacheMax=${s.cacheMaxEntries || 'unlimited'}`);

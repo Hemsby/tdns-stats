@@ -35,10 +35,17 @@ const Feed = (() => {
 
     function noDataMessage(serverFilter, hasSelection) {
         const relevant = serverFilter === 'all' ? Object.values(serverStatus) : [serverStatus[serverFilter]];
-        const missing = relevant.find(st => st && st.queryLogsAppName && !st.queryLogsApp);
+        const unresolved = relevant.filter(st => st && st.queryLogsAppName && !st.queryLogsApp);
+        // A genuinely missing app is the actionable problem, so it wins over a
+        // lookup that simply hasn't succeeded yet (e.g. DNS not up after a boot).
+        const missing = unresolved.find(st => !st.queryLogsLookupFailed);
         if (missing) {
             const scope = serverFilter === 'all' ? ' on one or more servers' : '';
             return '<div class="no-data warn">Query log app "' + esc(missing.queryLogsAppName) + '" not found' + scope + '</div>';
+        }
+        if (unresolved.length) {
+            const scope = serverFilter === 'all' ? ' on one or more servers' : '';
+            return '<div class="no-data">Could not reach the query log app' + scope + ', retrying...</div>';
         }
         if (hasSelection) return '<div class="no-data selection-empty">No live entries match the selected filters</div>';
         return '<div class="no-data">Waiting for query data...</div>';

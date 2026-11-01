@@ -270,6 +270,7 @@ class Poller {
             stats:              dash,
             queryLogsApp:       server.queryLogsApp?.name || null,
             queryLogsAppName:   server.queryLogsAppName    || null,
+            queryLogsLookupFailed: !!server.queryLogsLookupFailed,
         };
     }
 
