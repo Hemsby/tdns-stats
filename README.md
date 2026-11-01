@@ -258,6 +258,8 @@ If you have more than one query log app installed, specify which one to use with
 
 Click a row in the **Top Stats** card to filter the feed to that domain, blocked domain, or client. Ctrl/Cmd+click toggles individual rows and Shift+click selects a range; active filters appear as chips above the feed and can be removed individually or with **Clear All**.
 
+Filters only apply to entries already in the live feed, not to the whole Top Stats window, so a selected domain can show "No live entries match" until a matching query arrives.
+
 ### Tuning the feed polling rate
 
 By default the backend polls every 3 seconds and asks Technitium for the 20 newest query log entries each cycle. Technitium returns only the top-N entries per request, so any queries that land faster than `pageSize / feedInterval` (about 6.7 qps with the defaults) overflow the request and are skipped that cycle.
