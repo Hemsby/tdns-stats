@@ -711,6 +711,7 @@ const App = (() => {
         document.querySelectorAll('.tab-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 state.topTab = btn.dataset.tab;
+                Selection.setTab(state.topTab);
                 document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b === btn));
                 refreshTopLists();
             });
@@ -1498,6 +1499,16 @@ const App = (() => {
         const container = document.getElementById('topContent');
         if (!container) return;
 
+        // Stats updates replace the whole list, which would drop keyboard focus
+        // mid-navigation. Remember the focused row and restore it afterwards.
+        const rowsBefore = Array.from(container.querySelectorAll('.top-row'));
+        const activeRow = container.contains(document.activeElement)
+            ? document.activeElement.closest('.top-row')
+            : null;
+        const activeIndex = activeRow ? rowsBefore.indexOf(activeRow) : -1;
+        const activeName = activeRow ? activeRow.dataset.name : null;
+        const scrollTop = container.scrollTop;
+
         if (!items.length) {
             container.innerHTML = '<div class="no-data">No data yet</div>';
             return;
@@ -1507,7 +1518,7 @@ const App = (() => {
         container.innerHTML = items.map((item, i) => {
             const pct = Math.round((item.hits / max) * 100);
             const sub = item.domain ? '<span class="top-sub" title="' + esc(item.domain) + '">' + esc(item.domain) + '</span>' : '';
-            return '<div class="top-row">' +
+            return '<div class="top-row" role="option" tabindex="0" data-name="' + esc(item.name) + '">' +
                 '<span class="top-rank">' + (i + 1) + '</span>' +
                 '<span class="top-name" title="' + esc(item.name) + '">' + esc(item.name) + '</span>' +
                 sub +
@@ -1515,6 +1526,16 @@ const App = (() => {
                 '<span class="top-hits">' + fmtNum(item.hits) + '</span>' +
                 '</div>';
         }).join('');
+
+        Selection.applyToRows();
+
+        container.scrollTop = scrollTop;
+        if (activeRow) {
+            const rowsAfter = Array.from(container.querySelectorAll('.top-row'));
+            const next = rowsAfter.find(row => row.dataset.name === activeName) ||
+                rowsAfter[activeIndex];
+            if (next) next.focus({ preventScroll: true });
+        }
     }
 
     function renderTopListsFromData(data, statsType) {
@@ -2057,6 +2078,13 @@ const App = (() => {
         Charts.init();
         Charts.setPersistCallback(saveHiddenChartState);
         Charts.setLoadCallback(loadHiddenChartState);
+        Selection.init({
+            onChange: () => {
+                Feed.setSelectionFilters(Selection.getFilters());
+                Feed.render(state.feedServer, state.feedFilters);
+            },
+        });
+        Selection.setTab(state.topTab);
         fetch('/api/config')
             .then(r => r.json())
             .then(cfg => {

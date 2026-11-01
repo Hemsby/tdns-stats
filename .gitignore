@@ -3,3 +3,6 @@ package-lock.json
 config.yml
 *.log
 .env
+
+# Planned / In Progress Feature Docs
+docs/*.md

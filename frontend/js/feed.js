@@ -12,6 +12,7 @@ const Feed = (() => {
     let paused       = false;
     let serverDisplayMap = {};
     let serverStatus = {}; // serverName -> { queryLogsApp: string|null, queryLogsAppName: string|null }
+    let selectionFilters = { domains: new Set(), blocked: new Set(), clients: new Set() };
     const textCtx = document.createElement('canvas').getContext('2d');
     textCtx.font = '600 11px "Chakra Petch", system-ui, sans-serif';
 
@@ -21,6 +22,10 @@ const Feed = (() => {
 
     function setServerDisplayMap(map) { serverDisplayMap = map; }
 
+    function setSelectionFilters(filters) {
+        selectionFilters = filters || { domains: new Set(), blocked: new Set(), clients: new Set() };
+    }
+
     // Lets the "no data" message distinguish a genuinely quiet feed from a
     // configured query log app that the backend couldn't find on the server.
     function setServerStatus(status) {
@@ -28,13 +33,14 @@ const Feed = (() => {
         render(lastFilter, lastBlocked);
     }
 
-    function noDataMessage(serverFilter) {
+    function noDataMessage(serverFilter, hasSelection) {
         const relevant = serverFilter === 'all' ? Object.values(serverStatus) : [serverStatus[serverFilter]];
         const missing = relevant.find(st => st && st.queryLogsAppName && !st.queryLogsApp);
         if (missing) {
             const scope = serverFilter === 'all' ? ' on one or more servers' : '';
             return '<div class="no-data warn">Query log app "' + esc(missing.queryLogsAppName) + '" not found' + scope + '</div>';
         }
+        if (hasSelection) return '<div class="no-data selection-empty">No live entries match the selected filters</div>';
         return '<div class="no-data">Waiting for query data...</div>';
     }
 
@@ -107,6 +113,23 @@ const Feed = (() => {
         if (!paused) render(lastFilter, lastBlocked);
     }
 
+    function hasSelection() {
+        return selectionFilters.domains.size > 0 ||
+            selectionFilters.blocked.size > 0 ||
+            selectionFilters.clients.size > 0;
+    }
+
+    function matchesSelection(e) {
+        if (!hasSelection()) return true;
+
+        const qname = normDomain(e.qname);
+        const domainSelected = selectionFilters.domains.has(qname) || selectionFilters.blocked.has(qname);
+        if ((selectionFilters.domains.size || selectionFilters.blocked.size) && !domainSelected) return false;
+
+        if (selectionFilters.clients.size && !selectionFilters.clients.has(normClient(e.clientIpAddress))) return false;
+        return true;
+    }
+
     function scheduleRender(serverFilter, filters) {
         lastFilter  = serverFilter;
         lastBlocked = filters;
@@ -139,11 +162,12 @@ const Feed = (() => {
                 
                 if (!filters.has(entryType)) return false;
             }
+            if (!matchesSelection(e)) return false;
             return true;
         });
 
         if (filtered.length === 0) {
-            list.innerHTML = noDataMessage(serverFilter);
+            list.innerHTML = noDataMessage(serverFilter, hasSelection());
             return;
         }
 
@@ -193,6 +217,14 @@ const Feed = (() => {
 
         list.style.setProperty('--srv-w', maxSrvW + 'px');
         list.replaceChildren(frag);
+    }
+
+    function normDomain(value) {
+        return String(value == null ? '' : value).trim().toLowerCase().replace(/\.$/, '');
+    }
+
+    function normClient(value) {
+        return String(value == null ? '' : value).trim().toLowerCase();
     }
 
     function getLatClass(n) {
@@ -245,5 +277,5 @@ const Feed = (() => {
             .replace(/"/g, '&quot;');
     }
 
-    return { init, add, scheduleRender, render, setColors, setPaused, setServerDisplayMap, setServerStatus };
+    return { init, add, scheduleRender, render, setColors, setPaused, setServerDisplayMap, setServerStatus, setSelectionFilters };
 })();
