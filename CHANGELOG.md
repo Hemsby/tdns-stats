@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-11-01
+
 ### Added
 
 - Top Stats rows are now clickable filters for the Live Feed, with Ctrl/Cmd+click and Shift+click for multiple rows and removable chips above the feed.
