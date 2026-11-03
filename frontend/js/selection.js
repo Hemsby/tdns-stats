@@ -326,7 +326,11 @@ const Selection = (() => {
             row.classList.toggle('sel-first', isSelected && !flags[i - 1]);
             row.classList.toggle('sel-last', isSelected && !flags[i + 1]);
             row.setAttribute('aria-selected', isSelected ? 'true' : 'false');
-            row.title = isSelected ? 'Click to remove filter' : 'Click to filter';
+            const sub = row.querySelector('.top-sub');
+            const value = sub
+                ? row.dataset.name + ' (' + sub.textContent.trim() + ')'
+                : row.dataset.name;
+            row.title = value + ' - ' + (isSelected ? 'Click to remove filter' : 'Click to filter');
         });
     }
 

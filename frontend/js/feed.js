@@ -218,10 +218,10 @@ const Feed = (() => {
             row.innerHTML =
                 '<span class="feed-time">'   + esc(ts)                  + '</span>' +
                 '<span class="feed-server' + srvCls + '" title="' + esc(e._server) + '">' + esc(srvName) + '</span>' +
-                '<span class="feed-client" data-filter-kind="clients" data-filter-value="' + esc(clientValue) + '" title="' + (clientSelected ? 'Click to remove filter' : 'Click to filter') + '">' + esc(e.clientIpAddress) + '</span>' +
+                '<span class="feed-client" data-filter-kind="clients" data-filter-value="' + esc(clientValue) + '" title="' + esc(e.clientIpAddress + ' - ' + (clientSelected ? 'Click to remove filter' : 'Click to filter')) + '">' + esc(e.clientIpAddress) + '</span>' +
                 '<span class="feed-proto">'  + esc(e.protocol || '')     + '</span>' +
                 '<span class="feed-qtype">'  + esc(e.qtype || '')        + '</span>' +
-                '<span class="feed-domain" data-filter-kind="' + domainKind + '" data-filter-value="' + esc(domainValue) + '" title="' + (domainSelected ? 'Click to remove filter' : 'Click to filter') + '">' + esc(e.qname) + '</span>' +
+                '<span class="feed-domain" data-filter-kind="' + domainKind + '" data-filter-value="' + esc(domainValue) + '" title="' + esc(e.qname + ' - ' + (domainSelected ? 'Click to remove filter' : 'Click to filter')) + '">' + esc(e.qname) + '</span>' +
                 '<span class="feed-latencytype"><span class="feed-latency ' + latCls + '">' + esc(rtt)  + '</span>' +
                 '<span class="feed-type '   + badgeCls + '">'            + esc(badgeText) + '</span></span>';
 
