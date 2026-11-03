@@ -184,23 +184,23 @@ The dashboard includes a built-in update checker that works with GitHub releases
 
 All configuration lives in `config.yml` (see `config.example.yml` for a fully annotated example).
 
-| Key                      | Default       | Description                                                  |
-| ------------------------ | ------------- | ------------------------------------------------------------ |
-| `port`                   | `3000`        | Port the web interface listens on                            |
+| Key                      | Default       | Description                                                        |
+| ------------------------ | ------------- | ------------------------------------------------------------------ |
+| `port`                   | `3000`        | Port the web interface listens on                                  |
 | `debug`                  | `false`       | Enable verbose debug logging (see [Debug logging](#debug-logging)) |
-| `servers[].name`         | required      | Display name for the server                                  |
-| `servers[].url`          | required      | Technitium API base URL (e.g. `http://ns1.example.com:5380`) |
-| `servers[].token`        | required      | API token                                                    |
-| `servers[].ignoreSsl`    | `false`       | Skip TLS certificate verification                            |
-| `servers[].queryLogsApp` | auto-detect   | Name of the query log app on this server                     |
-| `servers[].color`        | auto-assigned | Colour for this server in the UI                             |
-| `poll.statsInterval`     | `10`          | Seconds between stats refreshes                              |
-| `poll.feedInterval`      | `3`           | Seconds between live feed polls                              |
-| `poll.topInterval`       | `30`          | Seconds between top-list refreshes                           |
-| `poll.perfInterval`      | `30`          | Seconds between RTT/cache samples                            |
-| `feed.pageSize`          | `20`          | Log entries fetched per poll cycle                           |
-| `feed.maxEntries`        | `200`         | Maximum entries kept in the browser feed                     |
-| `top.limit`              | `20`          | Number of items in top domains/clients lists                 |
+| `servers[].name`         | required      | Display name for the server                                        |
+| `servers[].url`          | required      | Technitium API base URL (e.g. `http://ns1.example.com:5380`)       |
+| `servers[].token`        | required      | API token                                                          |
+| `servers[].ignoreSsl`    | `false`       | Skip TLS certificate verification                                  |
+| `servers[].queryLogsApp` | auto-detect   | Name of the query log app on this server                           |
+| `servers[].color`        | auto-assigned | Colour for this server in the UI                                   |
+| `poll.statsInterval`     | `10`          | Seconds between stats refreshes                                    |
+| `poll.feedInterval`      | `3`           | Seconds between live feed polls                                    |
+| `poll.topInterval`       | `30`          | Seconds between top-list refreshes                                 |
+| `poll.perfInterval`      | `30`          | Seconds between RTT/cache samples                                  |
+| `feed.pageSize`          | `20`          | Log entries fetched per poll cycle                                 |
+| `feed.maxEntries`        | `200`         | Maximum entries kept in the browser feed                           |
+| `top.limit`              | `20`          | Number of items in top domains/clients lists                       |
 
 ### Server colours
 
@@ -256,9 +256,11 @@ If you have more than one query log app installed, specify which one to use with
 
 ### Filtering the feed
 
-Click a row in the **Top Stats** card to filter the feed to that domain, blocked domain, or client. Ctrl/Cmd+click toggles individual rows and Shift+click selects a range; active filters appear as chips above the feed and can be removed individually or with **Clear All**.
+Click a row in **Top Stats**, or a domain or client in the **Live Feed**, to filter the feed. Selections from different Top Stats tabs can be combined (e.g. a specific domain from a specific client). Ctrl/Cmd+click (long-press on mobile) toggles individual Top Stats rows and Shift+click selects a range; active filters appear as chips above the feed and can be removed individually or with **Clear All**.
 
-Filters only apply to entries already in the live feed, not to the whole Top Stats window, so a selected domain can show "No live entries match" until a matching query arrives.
+A domain / client value in the feed can be filtered even if it's not in Top Stats; the Top Stats selected count only includes filters which are present there.
+
+Filters only apply to entries already in the live feed, not the entire count shown by the Top Stats window, so a selected domain can show "No feed entries match the selected filters" until a matching query arrives.
 
 ### Tuning the feed polling rate
 

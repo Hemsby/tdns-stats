@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Domain and client values in the Live Feed are now clickable filters as well, even when they're not present in Top Stats. On mobile devices, long-press now toggles a value in a multi-selection for Top Stats.
+
 ## [2.3.0] - 2026-11-01
 
 ### Added
