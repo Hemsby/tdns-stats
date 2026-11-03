@@ -23,6 +23,14 @@ const Selection = (() => {
 
     let onChange = null;
     let bound = false;
+    let topPresence = null;
+
+    const LONG_PRESS_MS = 500;
+    const MOVE_TOLERANCE = 10;
+    let pressTimer = null;
+    let pressStart = null;
+    let pressAction = null;
+    let suppressClickUntil = 0;
 
     function init(opts) {
         onChange = opts && typeof opts.onChange === 'function' ? opts.onChange : null;
@@ -44,6 +52,23 @@ const Selection = (() => {
         commit();
     }
 
+    function setTopPresence(values) {
+        if (!values) {
+            topPresence = null;
+            renderCount();
+            return;
+        }
+
+        topPresence = {};
+        for (const tab of Object.keys(state.selected)) {
+            const names = values[tab];
+            topPresence[tab] = names
+                ? new Set(Array.from(names, name => normalize(tab, name)).filter(Boolean))
+                : null;
+        }
+        renderCount();
+    }
+
     function bind() {
         if (bound) return;
         bound = true;
@@ -52,6 +77,13 @@ const Selection = (() => {
         if (content) {
             content.addEventListener('click', handleRowClick);
             content.addEventListener('keydown', handleRowKeydown);
+            bindLongPress(content);
+        }
+
+        const feed = document.getElementById('feedList');
+        if (feed) {
+            feed.addEventListener('click', handleFeedClick);
+            bindLongPress(feed);
         }
 
         const bar = document.getElementById('feedSelectionBar');
@@ -60,13 +92,89 @@ const Selection = (() => {
         document.addEventListener('keydown', handleDocumentKeydown, true);
     }
 
+    function isClickSuppressed() {
+        return Date.now() < suppressClickUntil;
+    }
+
     function handleRowClick(e) {
+        if (isClickSuppressed()) return;
         const row = e.target.closest('.top-row');
         if (!row) return;
         applyRow(row, {
             toggle: e.ctrlKey || e.metaKey,
             range: e.shiftKey,
         });
+    }
+
+    function handleFeedClick(e) {
+        if (isClickSuppressed()) return;
+        const cell = e.target.closest('.feed-domain, .feed-client');
+        if (!cell || !cell.dataset.filterKind) return;
+
+        // A drag that ends on a cell should select text, not change filters.
+        const selection = window.getSelection();
+        if (selection && !selection.isCollapsed &&
+            (cell.contains(selection.anchorNode) || cell.contains(selection.focusNode))) return;
+
+        applyValue(cell.dataset.filterKind, cell.dataset.filterValue, {
+            toggle: e.ctrlKey || e.metaKey,
+        });
+    }
+
+    function bindLongPress(container) {
+        container.addEventListener('pointerdown', e => {
+            if (e.pointerType !== 'touch') return;
+            const action = longPressAction(e.target);
+            if (!action) return;
+
+            cancelLongPress();
+            pressStart = { x: e.clientX, y: e.clientY };
+            pressAction = action;
+            pressTimer = setTimeout(() => {
+                pressTimer = null;
+                const action = pressAction;
+                pressAction = null;
+                if (!action) return;
+                suppressClickUntil = Date.now() + 700;
+                applyValue(action.tab, action.value, { toggle: true });
+            }, LONG_PRESS_MS);
+        });
+
+        container.addEventListener('pointermove', e => {
+            if (!pressStart) return;
+            if (Math.abs(e.clientX - pressStart.x) > MOVE_TOLERANCE ||
+                Math.abs(e.clientY - pressStart.y) > MOVE_TOLERANCE) {
+                cancelLongPress();
+            }
+        });
+
+        container.addEventListener('pointerup', cancelLongPress);
+        container.addEventListener('pointercancel', cancelLongPress);
+        container.addEventListener('pointerleave', cancelLongPress);
+        container.addEventListener('contextmenu', e => {
+            if (pressAction || isClickSuppressed()) e.preventDefault();
+        });
+    }
+
+    function longPressAction(target) {
+        const row = target.closest('.top-row');
+        if (row) {
+            const name = normalize(state.tab, row.dataset.name);
+            return name ? { tab: state.tab, value: name } : null;
+        }
+
+        const cell = target.closest('.feed-domain, .feed-client');
+        if (cell && cell.dataset.filterKind) {
+            return { tab: cell.dataset.filterKind, value: cell.dataset.filterValue };
+        }
+        return null;
+    }
+
+    function cancelLongPress() {
+        clearTimeout(pressTimer);
+        pressTimer = null;
+        pressStart = null;
+        pressAction = null;
     }
 
     function handleRowKeydown(e) {
@@ -125,14 +233,13 @@ const Selection = (() => {
 
     function applyRow(row, action) {
         const tab = state.tab;
-        const selected = state.selected[tab];
         const name = normalize(tab, row.dataset.name);
         if (!name) return;
 
-        const rows = Array.from(row.parentElement.querySelectorAll('.top-row'));
-        const index = rows.indexOf(row);
-
         if (action.range) {
+            const selected = state.selected[tab];
+            const rows = Array.from(row.parentElement.querySelectorAll('.top-row'));
+            const index = rows.indexOf(row);
             const anchorIndex = state.anchor[tab]
                 ? rows.findIndex(r => normalize(tab, r.dataset.name) === state.anchor[tab])
                 : -1;
@@ -149,6 +256,15 @@ const Selection = (() => {
                 return;
             }
         }
+
+        applyValue(tab, name, action);
+    }
+
+    function applyValue(tab, value, action) {
+        const selected = state.selected[tab];
+        if (!selected) return;
+        const name = normalize(tab, value);
+        if (!name) return;
 
         if (action.toggle) {
             if (selected.has(name)) selected.delete(name);
@@ -210,7 +326,7 @@ const Selection = (() => {
             row.classList.toggle('sel-first', isSelected && !flags[i - 1]);
             row.classList.toggle('sel-last', isSelected && !flags[i + 1]);
             row.setAttribute('aria-selected', isSelected ? 'true' : 'false');
-            row.title = isSelected ? 'Click to remove this filter' : 'Click to filter the live feed';
+            row.title = isSelected ? 'Click to remove filter' : 'Click to filter';
         });
     }
 
@@ -219,14 +335,29 @@ const Selection = (() => {
         renderBar();
     }
 
+    function selectedCount() {
+        if (!topPresence) {
+            return state.selected.domains.size +
+                state.selected.blocked.size +
+                state.selected.clients.size;
+        }
+
+        let count = 0;
+        for (const tab of Object.keys(state.selected)) {
+            const present = topPresence[tab];
+            if (!present) continue;
+            for (const name of state.selected[tab]) {
+                if (present.has(name)) count++;
+            }
+        }
+        return count;
+    }
+
     function renderCount() {
         const el = document.getElementById('topSelectionCount');
         if (!el) return;
 
-        const count = state.selected.domains.size +
-            state.selected.blocked.size +
-            state.selected.clients.size;
-
+        const count = selectedCount();
         el.hidden = count === 0;
         el.textContent = count === 1 ? '1 selected' : count + ' selected';
     }
@@ -277,5 +408,5 @@ const Selection = (() => {
             .replace(/"/g, '&quot;');
     }
 
-    return { init, setTab, applyToRows, getFilters, clearAll };
+    return { init, setTab, setTopPresence, applyToRows, getFilters, clearAll };
 })();
