@@ -1484,7 +1484,38 @@ const App = (() => {
     }
 
     // ---- Top lists ----------------------------------------------------------
+    function topPresence() {
+        const effective = state.topServer === FOLLOW_CHART_KEY ? state.chartServer : state.topServer;
+        const names = items => (items || [])
+            .map(item => item && item.name)
+            .filter(name => name != null);
+        const empty = { domains: [], blocked: [], clients: [] };
+
+        if (state.timeRange === 'LastHour') {
+            const top = state.top[effective];
+            if (!top) return empty;
+            return {
+                domains: names(top.domains),
+                blocked: names(top.blocked),
+                clients: names(top.clients),
+            };
+        }
+
+        const prefix = effective + ':' + state.timeRange + ':';
+        const domains = state.rangeCache[prefix + 'TopDomains'];
+        const blocked = state.rangeCache[prefix + 'TopBlockedDomains'];
+        const clients = state.rangeCache[prefix + 'TopClients'];
+        if (!domains || !blocked || !clients) return empty;
+
+        return {
+            domains: names(domains.topDomains),
+            blocked: names(blocked.topBlockedDomains),
+            clients: names(clients.topClients),
+        };
+    }
+
     function renderTopLists() {
+        Selection.setTopPresence(topPresence());
         const effectiveServer = state.topServer === FOLLOW_CHART_KEY ? state.chartServer : state.topServer;
         const top = state.top[effectiveServer];
         let items = [], colorClass = 'blue';
@@ -1518,10 +1549,10 @@ const App = (() => {
         const max = items[0]?.hits || 1;
         container.innerHTML = items.map((item, i) => {
             const pct = Math.round((item.hits / max) * 100);
-            const sub = item.domain ? '<span class="top-sub" title="' + esc(item.domain) + '">' + esc(item.domain) + '</span>' : '';
+            const sub = item.domain ? '<span class="top-sub">' + esc(item.domain) + '</span>' : '';
             return '<div class="top-row" role="option" tabindex="0" data-name="' + esc(item.name) + '">' +
                 '<span class="top-rank">' + (i + 1) + '</span>' +
-                '<span class="top-name" title="' + esc(item.name) + '">' + esc(item.name) + '</span>' +
+                '<span class="top-name">' + esc(item.name) + '</span>' +
                 sub +
                 '<div class="top-bar-wrap"><div class="top-bar"><div class="top-bar-fill ' + colorClass + '" style="width:' + pct + '%"></div></div></div>' +
                 '<span class="top-hits">' + fmtNum(item.hits) + '</span>' +
@@ -1611,6 +1642,7 @@ const App = (() => {
     }
 
     function refreshTopLists(init) {
+        Selection.setTopPresence(topPresence());
         const effectiveServer = state.topServer === FOLLOW_CHART_KEY ? state.chartServer : state.topServer;
         if (state.timeRange === 'LastHour' && !init) {
             renderTopLists();

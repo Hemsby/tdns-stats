@@ -47,7 +47,7 @@ const Feed = (() => {
             const scope = serverFilter === 'all' ? ' on one or more servers' : '';
             return '<div class="no-data">Could not reach the query log app' + scope + ', retrying...</div>';
         }
-        if (hasSelection) return '<div class="no-data selection-empty">No live entries match the selected filters</div>';
+        if (hasSelection) return '<div class="no-data selection-empty">No feed entries match the selected filters</div>';
         return '<div class="no-data">Waiting for query data...</div>';
     }
 
@@ -208,13 +208,20 @@ const Feed = (() => {
             const rtt     = fmtMs(rttVal, e.responseType);
             const latCls  = getLatClass(rttVal);
 
+            const clientValue = normClient(e.clientIpAddress);
+            const domainValue = normDomain(e.qname);
+            const domainKind = e.responseType === 'Blocked' ? 'blocked' : 'domains';
+            const domainSelected = selectionFilters.domains.has(domainValue) ||
+                selectionFilters.blocked.has(domainValue);
+            const clientSelected = selectionFilters.clients.has(clientValue);
+
             row.innerHTML =
                 '<span class="feed-time">'   + esc(ts)                  + '</span>' +
                 '<span class="feed-server' + srvCls + '" title="' + esc(e._server) + '">' + esc(srvName) + '</span>' +
-                '<span class="feed-client" title="' + esc(e.clientIpAddress) + '">' + esc(e.clientIpAddress) + '</span>' +
+                '<span class="feed-client" data-filter-kind="clients" data-filter-value="' + esc(clientValue) + '" title="' + esc(e.clientIpAddress + ' - ' + (clientSelected ? 'Click to remove filter' : 'Click to filter')) + '">' + esc(e.clientIpAddress) + '</span>' +
                 '<span class="feed-proto">'  + esc(e.protocol || '')     + '</span>' +
                 '<span class="feed-qtype">'  + esc(e.qtype || '')        + '</span>' +
-                '<span class="feed-domain" title="' + esc(e.qname) + '">' + esc(e.qname) + '</span>' +
+                '<span class="feed-domain" data-filter-kind="' + domainKind + '" data-filter-value="' + esc(domainValue) + '" title="' + esc(e.qname + ' - ' + (domainSelected ? 'Click to remove filter' : 'Click to filter')) + '">' + esc(e.qname) + '</span>' +
                 '<span class="feed-latencytype"><span class="feed-latency ' + latCls + '">' + esc(rtt)  + '</span>' +
                 '<span class="feed-type '   + badgeCls + '">'            + esc(badgeText) + '</span></span>';
 
