@@ -47,70 +47,85 @@ class Poller {
         };
         this.state     = {};
         this.state.perf  = {};
+        this.state.top   = {};
         this.state.rttSeries = {}; // serialized mean-recursive-RTT history per server + __cluster
         this.rttHistory = {};      // source of truth: key -> Map(minuteISO -> { mean, n })
         this.feedCursors   = {};
         this._feedPollBusy = new Set();
         this.clusterServer = null;
         this._watchedServer = null;
-        this._statsTimer = null;
+        this._healthTimer = null;
+        this._healthReady = null;
         this._feedTimer  = null;
         this._topTimer   = null;
         this._perfTimer  = null;
         this._rangeTimer = null;
         this._longRangeTimer = null;
-        this._running    = false;
+        this._dashboardRunning = false;
+        this._resumeGeneration = 0;
         this._rangeRefreshPending = false;
     }
 
-    _clearTimers() {
-        clearInterval(this._statsTimer);
+    _clearDashboardTimers() {
         clearInterval(this._feedTimer);
         clearInterval(this._topTimer);
         clearInterval(this._perfTimer);
         clearInterval(this._rangeTimer);
         clearInterval(this._longRangeTimer);
-        this._statsTimer = null;
         this._feedTimer  = null;
         this._topTimer   = null;
         this._perfTimer  = null;
         this._rangeTimer = null;
         this._longRangeTimer = null;
-        this._running    = false;
+        this._dashboardRunning = false;
     }
 
-    _startTimers() {
-        if (this._running) return;
-        this._statsTimer = setInterval(() => this._pollStats(),       this.cfg.statsInterval);
+    _startDashboardTimers() {
+        if (this._dashboardRunning) return;
         this._feedTimer  = setInterval(() => this._pollFeed(),        this.cfg.feedInterval);
         this._topTimer   = setInterval(() => this._pollTop(),         this.cfg.topInterval);
         this._perfTimer  = setInterval(() => this._pollPerformance(), this.cfg.perfInterval);
         this._rangeTimer = setInterval(() => this._pollRangeData(),   this.cfg.rangeInterval);
         this._longRangeTimer = setInterval(() => this._pollLongRangeData(), this.cfg.longRangeInterval);
-        this._running    = true;
+        this._dashboardRunning = true;
     }
 
-    async _pollAll() {
-        this._pollStats();
-        await this._pollFeed();
-        this._pollTop();
-        await this._pollPerformance();
+    _startHealthTimer() {
+        if (this._healthTimer) return;
+        this._healthTimer = setInterval(() => this._pollStats(), this.cfg.statsInterval);
+    }
+
+    async _pollDashboard() {
+        await Promise.allSettled([this._healthReady || Promise.resolve()]);
+        await Promise.allSettled([
+            this._pollFeed(true),
+            this._pollTop(true),
+            this._pollPerformance(),
+        ]);
         // Range data is fetched on-demand via refreshRangeData() when an SSE
         // client connects — avoids double-fetching on first client after idle.
     }
 
+    _isServerDown(server) {
+        return !!this.state.nodes?.[server.name]?.error;
+    }
+
     start() {
-        this._pollAll();
-        this._startTimers();
+        this._healthReady = this._pollStats();
+        this._startHealthTimer();
     }
 
     pause() {
-        this._clearTimers();
+        this._resumeGeneration++;
+        this._clearDashboardTimers();
     }
 
-    resume() {
-        this._pollAll();
-        this._startTimers();
+    async resume() {
+        if (this._dashboardRunning) return;
+        const generation = ++this._resumeGeneration;
+        await this._pollDashboard();
+        if (generation !== this._resumeGeneration) return;
+        this._startDashboardTimers();
     }
 
     refreshRangeData() {
@@ -123,6 +138,10 @@ class Poller {
     }
 
     setWatchedServer(name) {
+        if (!this._dashboardRunning) {
+            if (name !== CLUSTER_KEY) this._watchedServer = name;
+            return;
+        }
         if (name === CLUSTER_KEY) {
             this._pollRangeData();
             this._pollLongRangeData();
@@ -203,6 +222,7 @@ class Poller {
             }
             console.warn(`[stats] ${key}: ${r.reason?.message}${certVerificationHint(r.reason)}`);
             nodes[key] = { error: r.reason?.message };
+            delete this.state.top[key];
         });
 
         // Detect cluster server (first healthy node with clusterInitialized)
@@ -247,6 +267,7 @@ class Poller {
                 };
             } catch (_) {
                 this.clusterServer = null; // allow re-election on next poll
+                delete this.state.top[CLUSTER_KEY];
             }
         }
 
@@ -274,9 +295,10 @@ class Poller {
         };
     }
 
-    async _pollFeed() {
+    async _pollFeed(skipDown = false) {
         const tasks = [];
         for (const server of this.servers) {
+            if (skipDown && this._isServerDown(server)) continue;
             if (this._feedPollBusy.has(server.name)) continue;
             this._feedPollBusy.add(server.name);
             tasks.push(
@@ -347,46 +369,37 @@ class Poller {
         this.broadcast({ type: 'feed', server: server.name, data: fresh, cursorReset });
     }
 
-    async _pollTop() {
-        // Per-server top stats
+    async _pollTop(skipDown = false) {
+        const tasks = [];
         for (const server of this.servers) {
-            try {
-                const [topDomains, topBlocked, topClients] = await Promise.allSettled([
-                    getTopStats(server, 'TopDomains',        this.cfg.topLimit),
-                    getTopStats(server, 'TopBlockedDomains', this.cfg.topLimit),
-                    getTopStats(server, 'TopClients',        this.cfg.topLimit)
-                ]);
-                this.broadcast({
-                    type: 'top',
-                    server: server.name,
-                    data: {
-                        domains: topDomains.status === 'fulfilled' ? (topDomains.value?.topDomains        || []) : [],
-                        blocked: topBlocked.status === 'fulfilled' ? (topBlocked.value?.topBlockedDomains || []) : [],
-                        clients: topClients.status === 'fulfilled' ? (topClients.value?.topClients        || []) : []
-                    }
-                });
-            } catch (_) { /* ignore */ }
+            if (skipDown && this._isServerDown(server)) continue;
+            tasks.push(this._pollOneTop(server));
         }
 
-        // Cluster aggregate top stats
-        if (this.clusterServer) {
-            try {
-                const [topDomains, topBlocked, topClients] = await Promise.allSettled([
-                    getTopStats(this.clusterServer, 'TopDomains',        this.cfg.topLimit, 'LastHour', 'cluster'),
-                    getTopStats(this.clusterServer, 'TopBlockedDomains', this.cfg.topLimit, 'LastHour', 'cluster'),
-                    getTopStats(this.clusterServer, 'TopClients',        this.cfg.topLimit, 'LastHour', 'cluster')
-                ]);
-                this.broadcast({
-                    type: 'top',
-                    server: CLUSTER_KEY,
-                    data: {
-                        domains: topDomains.status === 'fulfilled' ? (topDomains.value?.topDomains        || []) : [],
-                        blocked: topBlocked.status === 'fulfilled' ? (topBlocked.value?.topBlockedDomains || []) : [],
-                        clients: topClients.status === 'fulfilled' ? (topClients.value?.topClients        || []) : []
-                    }
-                });
-            } catch (_) { /* ignore */ }
+        if (this.clusterServer && !(skipDown && this._isServerDown(this.clusterServer))) {
+            tasks.push(this._pollOneTop(this.clusterServer, true));
         }
+
+        if (tasks.length === 0) return;
+        await Promise.allSettled(tasks);
+    }
+
+    async _pollOneTop(server, isCluster = false) {
+        try {
+            const [topDomains, topBlocked, topClients] = await Promise.allSettled([
+                getTopStats(server, 'TopDomains',        this.cfg.topLimit, isCluster ? 'LastHour' : undefined, isCluster ? 'cluster' : undefined),
+                getTopStats(server, 'TopBlockedDomains', this.cfg.topLimit, isCluster ? 'LastHour' : undefined, isCluster ? 'cluster' : undefined),
+                getTopStats(server, 'TopClients',        this.cfg.topLimit, isCluster ? 'LastHour' : undefined, isCluster ? 'cluster' : undefined)
+            ]);
+            const key = isCluster ? CLUSTER_KEY : server.name;
+            const data = {
+                domains: topDomains.status === 'fulfilled' ? (topDomains.value?.topDomains        || []) : [],
+                blocked: topBlocked.status === 'fulfilled' ? (topBlocked.value?.topBlockedDomains || []) : [],
+                clients: topClients.status === 'fulfilled' ? (topClients.value?.topClients        || []) : []
+            };
+            this.state.top[key] = data;
+            this.broadcast({ type: 'top', server: key, data });
+        } catch (_) { /* ignore */ }
     }
 
     async _pollPerformance() {

@@ -215,7 +215,7 @@ const App = (() => {
                 // Populate chart and top list data immediately, without waiting for first poll
                 watchServer(state.chartServer);
                 refreshChart();
-                refreshTopLists(true);
+                refreshTopLists();
             }
 
             renderClusterCards();
@@ -1640,10 +1640,10 @@ const App = (() => {
         showRangeLoading();
     }
 
-    function refreshTopLists(init) {
+    function refreshTopLists() {
         Selection.setTopPresence(topPresence());
         const effectiveServer = state.topServer === FOLLOW_CHART_KEY ? state.chartServer : state.topServer;
-        if (state.timeRange === 'LastHour' && !init) {
+        if (state.timeRange === 'LastHour') {
             renderTopLists();
             return;
         }

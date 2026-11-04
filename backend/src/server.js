@@ -299,7 +299,7 @@ async function start() {
         res.json({ ok: true });
     });
 
-    app.get('/api/stream', (req, res) => {
+    app.get('/api/stream', async (req, res) => {
         const signed = parseCookies(req)[SESSION_COOKIE];
         const sessionToken = verifySession(signed);
         if (!sessionToken || !sessions.has(sessionToken)) {
@@ -340,8 +340,17 @@ async function start() {
         });
 
         clients.add(res);
-        if (clients.size === 1) poller.resume();
         broadcastViewerCount();
+
+        const cachedTop = poller.getState().top;
+        if (cachedTop && Object.keys(cachedTop).length > 0) {
+            for (const [server, data] of Object.entries(cachedTop)) {
+                res.write(`data: ${JSON.stringify({ type: 'top', server, data })}\n\n`);
+            }
+        }
+
+        if (clients.size === 1) await poller.resume();
+        if (!clients.has(res)) return;
 
         try {
             const state = poller.getState();
