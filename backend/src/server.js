@@ -12,7 +12,7 @@ const fetch     = require('node-fetch');
 const Poller    = require('./poller');
 const Updater   = require('./updater');
 const log       = require('./log');
-const { listQueryLogApps, discoverQueryLogsApp, getCacheMaxEntries, listCache, resolveBlockedDomain } = require('./technitium');
+const { listQueryLogApps, discoverQueryLogsApp, getCacheMaxEntries, getSettings, listCache, resolveBlockedDomain } = require('./technitium');
 
 const PACKAGE = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf8'));
 const VERSION = PACKAGE.version;
@@ -460,7 +460,15 @@ async function start() {
             const blockedTarget = getBlockedLookupTarget(serverName, state);
             if (blockedTarget) {
                 try {
-                    const data = await resolveBlockedDomain(blockedTarget, domain);
+                    // One settings read per user-triggered check, so the result can say whether
+                    // Technitium is allowed to report built-in block lists. Null if it can't be read.
+                    const [data, settings] = await Promise.all([
+                        resolveBlockedDomain(blockedTarget, domain),
+                        getSettings(blockedTarget).catch(() => null),
+                    ]);
+                    const txtBlockingReport = typeof settings?.allowTxtBlockingReport === 'boolean'
+                        ? settings.allowTxtBlockingReport
+                        : null;
                     const isBlocked = Boolean(
                         (Array.isArray(data.records) && data.records.length > 0) ||
                         data.source ||
@@ -473,6 +481,7 @@ async function start() {
                         domain: blockedTarget.domain || blockedTarget.name,
                         ok: true,
                         blocked: isBlocked,
+                        txtBlockingReport,
                         blockedMeta: {
                             source: data.source || data.extraText || undefined,
                             group: data.group || undefined,

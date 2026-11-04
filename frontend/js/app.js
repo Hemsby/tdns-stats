@@ -962,7 +962,11 @@ const App = (() => {
                     ? '<div>' + item + '</div>'
                     : '<div class="blocked-lookup-meta-row"><span class="blocked-lookup-meta-label">' + (item.label ? esc(item.label + ':') : '&nbsp;') + '</span><span class="blocked-lookup-meta-value">' + item.value + '</span></div>').join('')
                     : (node.ok && !node.blocked && !hasBlockedMeta)
-                        ? '<div>No block list reported. The name is not blocked, or Allow TXT Blocking Report is off.</div>'
+                        ? '<div>' + (node.txtBlockingReport === true
+                            ? 'No block list reported. The name is not blocked.'
+                            : node.txtBlockingReport === false
+                                ? 'Allow TXT Blocking Report is off, so built-in block lists cannot be reported. This name may still be blocked.'
+                                : 'No block list reported. The name is not blocked, or Allow TXT Blocking Report is off.') + '</div>'
                         : '<div>Blocked lookup response</div>') +
             '</div>' +
         '</article>';

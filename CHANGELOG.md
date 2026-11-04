@@ -12,7 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
-- The Blocked check on Cache & Blocked now says when no block list was reported, because a blocked name can look unblocked if Allow TXT Blocking Report is off.
+- The Blocked check on Cache & Blocked now says when Allow TXT Blocking Report is off, because a name on a built-in block list then looks unblocked.
 - Block list URLs shown in the Blocked check now have token, key, secret, and password values and embedded credentials hidden.
 
 ## [2.4.2] - 2026-11-04
