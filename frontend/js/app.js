@@ -2059,7 +2059,7 @@ const App = (() => {
                 const res = await fetch('/api/changelog');
                 const data = await res.json();
                 if (data.changelog) {
-                    const cleaned = data.changelog.replace(/^[\s\S]*?(?=^## \[\d)/m, '');
+                    const cleaned = data.changelog.replace(/^[\s\S]*?(?=^## \[?\d)/m, '');
                     state.changelogHtml = marked.parse(cleaned);
                 }
             } catch (e) {

@@ -240,7 +240,7 @@ class Updater {
         log.debug('[update] executing git pull');
         try {
             const { stdout: pullStdout, stderr: pullStderr } = await execAsync(
-                'git pull origin master', { cwd, shell: '/bin/sh' }
+                'git pull --tags origin master', { cwd, shell: '/bin/sh' }
             );
             if (pullStderr) log.debug('[update] git pull stderr:', pullStderr);
             log.debug('[update] git pull complete:', pullStdout);

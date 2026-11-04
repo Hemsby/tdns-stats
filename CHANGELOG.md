@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [2.4.2] - 2026-11-04
+
+### Fixed
+
+- The in-app changelog now shows the 2.4.1 entries, which were missing from the window.
+- In-app updates on systemd installs now also fetch the new release tag.
+
 ## [2.4.1] - 2026-11-04
 
 ### Changed
