@@ -237,10 +237,19 @@ class Updater {
     async updateSystemd() {
         const cwd = this.projectRoot;
 
+        // Tags are only fetched so git describe shows the new version. A local tag that differs
+        // from the remote one (a moved tag) makes a plain tag fetch fail, so force it and never
+        // let a tag problem block the update itself.
+        try {
+            await execAsync('git fetch --tags --force origin', { cwd, shell: '/bin/sh' });
+        } catch (e) {
+            console.warn('[update] tag fetch failed, continuing with update:', e.message);
+        }
+
         log.debug('[update] executing git pull');
         try {
             const { stdout: pullStdout, stderr: pullStderr } = await execAsync(
-                'git pull --tags origin master', { cwd, shell: '/bin/sh' }
+                'git pull origin master', { cwd, shell: '/bin/sh' }
             );
             if (pullStderr) log.debug('[update] git pull stderr:', pullStderr);
             log.debug('[update] git pull complete:', pullStdout);

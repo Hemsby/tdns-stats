@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- In-app updates on systemd installs no longer fail when a local release tag differs from the one on GitHub.
+
 ## [2.4.3] - 2026-11-04
 
 ### Added
