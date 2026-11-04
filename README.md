@@ -184,23 +184,23 @@ The dashboard includes a built-in update checker that works with GitHub releases
 
 All configuration lives in `config.yml` (see `config.example.yml` for a fully annotated example).
 
-| Key                      | Default       | Description                                                        |
-| ------------------------ | ------------- | ------------------------------------------------------------------ |
-| `port`                   | `3000`        | Port the web interface listens on                                  |
+| Key                      | Default       | Description                                                  |
+| ------------------------ | ------------- | ------------------------------------------------------------ |
+| `port`                   | `3000`        | Port the web interface listens on                            |
 | `debug`                  | `false`       | Enable verbose debug logging (see [Debug logging](#debug-logging)) |
-| `servers[].name`         | required      | Display name for the server                                        |
-| `servers[].url`          | required      | Technitium API base URL (e.g. `http://ns1.example.com:5380`)       |
-| `servers[].token`        | required      | API token                                                          |
-| `servers[].ignoreSsl`    | `false`       | Skip TLS certificate verification                                  |
-| `servers[].queryLogsApp` | auto-detect   | Name of the query log app on this server                           |
-| `servers[].color`        | auto-assigned | Colour for this server in the UI                                   |
-| `poll.statsInterval`     | `10`          | Seconds between stats refreshes                                    |
-| `poll.feedInterval`      | `3`           | Seconds between live feed polls                                    |
-| `poll.topInterval`       | `30`          | Seconds between top-list refreshes                                 |
-| `poll.perfInterval`      | `30`          | Seconds between RTT/cache samples                                  |
-| `feed.pageSize`          | `20`          | Log entries fetched per poll cycle                                 |
-| `feed.maxEntries`        | `200`         | Maximum entries kept in the browser feed                           |
-| `top.limit`              | `20`          | Number of items in top domains/clients lists                       |
+| `servers[].name`         | required      | Display name for the server                                  |
+| `servers[].url`          | required      | Technitium API base URL (e.g. `http://ns1.example.com:5380`) |
+| `servers[].token`        | required      | API token                                                    |
+| `servers[].ignoreSsl`    | `false`       | Skip TLS certificate verification                            |
+| `servers[].queryLogsApp` | auto-detect   | Name of the query log app on this server                     |
+| `servers[].color`        | auto-assigned | Colour for this server in the UI                             |
+| `poll.statsInterval`     | `10`          | Seconds between stats refreshes                              |
+| `poll.feedInterval`      | `3`           | Seconds between live feed polls                              |
+| `poll.topInterval`       | `30`          | Seconds between top-list refreshes                           |
+| `poll.perfInterval`      | `30`          | Seconds between RTT/cache samples                            |
+| `feed.pageSize`          | `20`          | Log entries fetched per poll cycle                           |
+| `feed.maxEntries`        | `200`         | Maximum entries kept in the browser feed                     |
+| `top.limit`              | `20`          | Number of items in top domains/clients lists                 |
 
 ### Server colours
 

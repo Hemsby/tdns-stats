@@ -258,13 +258,16 @@ const Selection = (() => {
         const name = normalize(tab, value);
         if (!name) return;
 
-        if (action.toggle) {
-            if (selected.has(name)) selected.delete(name);
-            else selected.add(name);
-        } else if (selected.has(name)) {
-            selected.delete(name);
+        // The feed treats Domain and Blocked as one domain filter, so a value
+        // held by either set counts as selected and a click removes it from
+        // whichever set holds it.
+        const holders = (tab === 'clients' ? [tab] : ['domains', 'blocked'])
+            .filter(t => state.selected[t].has(name));
+
+        if (holders.length) {
+            for (const t of holders) state.selected[t].delete(name);
         } else {
-            selected.clear();
+            if (!action.toggle) selected.clear();
             selected.add(name);
         }
 
