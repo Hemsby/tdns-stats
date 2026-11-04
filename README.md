@@ -243,6 +243,12 @@ Debug lines are categorised (`[discovery]`, `[feed]`, `[stream]`, `[update]`, ..
 
 The browser console has its own toggle, independent of the backend setting. Run `Log.enable()` in the devtools console to turn on frontend debug output and `Log.disable()` to turn it off. The choice is stored in `localStorage` and survives reloads.
 
+## Cache & Blocked
+
+The **Cache & Blocked** page shows which servers have a domain in their DNS cache. Tick **Blocked check** to also ask the cluster whether the domain is blocked and by which list.
+
+The check sends a real query to a DNS server (the primary when searching the whole cluster), so it appears in that server's query log and the live feed as a blocked query from `127.0.0.1`. For built-in block lists Technitium must have **Allow TXT Blocking Report** enabled, otherwise a blocked name shows as not blocked. Built-in lists report every matching list. The Advanced Blocking App reports only the first one. Secrets in block list URLs (token, key, secret, and password values, and embedded credentials) are hidden.
+
 ## Live feed
 
 The live feed requires a query log app to be installed on each DNS server. Supported apps include:

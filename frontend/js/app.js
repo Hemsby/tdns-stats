@@ -936,6 +936,11 @@ const App = (() => {
             values.slice(1).forEach(value => details.push({ label: '', value }));
         });
 
+        const fromAdvancedBlocking = parsedEntries.some(entry => String(entry?.source || '').trim().toLowerCase() === 'advanced-blocking-app');
+        if (fromAdvancedBlocking) {
+            details.push({ label: 'Note', value: 'The Advanced Blocking App reports only the first matching list, so this name may be on more lists.' });
+        }
+
         const hasBlockedMeta = node.blockedMeta && (
             (Array.isArray(node.blockedMeta.entries) && node.blockedMeta.entries.length > 0) ||
             (node.blockedMeta.parsed && Object.keys(node.blockedMeta.parsed).length > 0) ||
