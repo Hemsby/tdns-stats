@@ -956,7 +956,9 @@ const App = (() => {
                 (details.length ? details.map(item => typeof item === 'string'
                     ? '<div>' + item + '</div>'
                     : '<div class="blocked-lookup-meta-row"><span class="blocked-lookup-meta-label">' + (item.label ? esc(item.label + ':') : '&nbsp;') + '</span><span class="blocked-lookup-meta-value">' + item.value + '</span></div>').join('')
-                    : '<div>Blocked lookup response</div>') +
+                    : (node.ok && !node.blocked && !hasBlockedMeta)
+                        ? '<div>No block list reported. The name is not blocked, or Allow TXT Blocking Report is off.</div>'
+                        : '<div>Blocked lookup response</div>') +
             '</div>' +
         '</article>';
     }

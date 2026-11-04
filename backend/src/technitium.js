@@ -374,6 +374,13 @@ function parseDnsClientExtraText(value) {
     return out;
 }
 
+// Block list URLs can carry credentials. Strip them before anything reaches the browser.
+function redactSecrets(text) {
+    return String(text)
+        .replace(/([?&](?:[\w.-]*(?:token|secret|passw(?:or)?d|pwd|signature)[\w.-]*|(?:[\w.-]*[_.-])?(?:api)?key|auth(?:orization)?)=)[^&;\s]+/gi, '$1redacted')
+        .replace(/(\/\/)[^\/@\s;]+@/g, '$1redacted@');
+}
+
 async function resolveBlockedDomain(server, domain) {
     const [aResult, aaaaResult] = await Promise.allSettled([
         dnsClientResolve(server, domain, 'A'),
@@ -395,7 +402,7 @@ async function resolveBlockedDomain(server, domain) {
 
     const extraStrings = [...new Set(extras
         .filter(Boolean)
-        .map(value => String(value).trim())
+        .map(value => redactSecrets(String(value).trim()))
         .filter(Boolean))];
     const extraText = extraStrings.join('; ');
     const parsedEntries = extraStrings.map(text => ({ ...parseDnsClientExtraText(text), raw: text }));
@@ -413,4 +420,4 @@ async function resolveBlockedDomain(server, domain) {
     };
 }
 
-module.exports = { getSessionInfo, getDashboard, getSettings, getClusterState, getClusterNodeState, listQueryLogApps, discoverQueryLogsApp, getQueryLogs, getRttSample, getCacheMaxEntries, getTopStats, listCache, resolveBlockedDomain, certVerificationHint };
+module.exports = { getSessionInfo, getDashboard, getSettings, getClusterState, getClusterNodeState, listQueryLogApps, discoverQueryLogsApp, getQueryLogs, getRttSample, getCacheMaxEntries, getTopStats, listCache, resolveBlockedDomain, redactSecrets, certVerificationHint };
