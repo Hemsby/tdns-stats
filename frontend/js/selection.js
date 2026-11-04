@@ -83,7 +83,6 @@ const Selection = (() => {
         const feed = document.getElementById('feedList');
         if (feed) {
             feed.addEventListener('click', handleFeedClick);
-            bindLongPress(feed);
         }
 
         const bar = document.getElementById('feedSelectionBar');
@@ -158,16 +157,9 @@ const Selection = (() => {
 
     function longPressAction(target) {
         const row = target.closest('.top-row');
-        if (row) {
-            const name = normalize(state.tab, row.dataset.name);
-            return name ? { tab: state.tab, value: name } : null;
-        }
-
-        const cell = target.closest('.feed-domain, .feed-client');
-        if (cell && cell.dataset.filterKind) {
-            return { tab: cell.dataset.filterKind, value: cell.dataset.filterValue };
-        }
-        return null;
+        if (!row) return null;
+        const name = normalize(state.tab, row.dataset.name);
+        return name ? { tab: state.tab, value: name } : null;
     }
 
     function cancelLongPress() {

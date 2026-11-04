@@ -933,7 +933,7 @@ main { position: relative; z-index: 1; min-height: 0; flex: 1; }
 .feed-domain, .feed-client { cursor: pointer; }
 .feed-domain:hover, .feed-client:hover { color: var(--text); }
 @media (hover: none) and (pointer: coarse) {
-    .top-row, .feed-domain, .feed-client {
+    .top-row {
         -webkit-touch-callout: none;
         -webkit-user-select: none;
         user-select: none;
