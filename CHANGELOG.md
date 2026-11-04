@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [2.4.3] - 2026-11-04
+
 ### Added
 
 - The Blocked check now notes when a result comes from the Advanced Blocking App, which reports only the first matching list.
