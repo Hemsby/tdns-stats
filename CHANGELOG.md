@@ -10,6 +10,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - Domain and client values in the Live Feed are now clickable filters as well, even when they're not present in Top Stats. On mobile devices, long-press now toggles a value in a multi-selection for Top Stats.
 
+### Fixed
+
+- Clicking a blocked domain in the Live Feed now removes it when it is already selected as a domain, instead of adding a second filter.
+- The Top Stats selected count no longer disappears while a new time range loads.
+
 ## [2.3.0] - 2026-11-01
 
 ### Added

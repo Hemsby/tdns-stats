@@ -1489,11 +1489,10 @@ const App = (() => {
         const names = items => (items || [])
             .map(item => item && item.name)
             .filter(name => name != null);
-        const empty = { domains: [], blocked: [], clients: [] };
 
         if (state.timeRange === 'LastHour') {
             const top = state.top[effective];
-            if (!top) return empty;
+            if (!top) return null;
             return {
                 domains: names(top.domains),
                 blocked: names(top.blocked),
@@ -1505,7 +1504,7 @@ const App = (() => {
         const domains = state.rangeCache[prefix + 'TopDomains'];
         const blocked = state.rangeCache[prefix + 'TopBlockedDomains'];
         const clients = state.rangeCache[prefix + 'TopClients'];
-        if (!domains || !blocked || !clients) return empty;
+        if (!domains || !blocked || !clients) return null;
 
         return {
             domains: names(domains.topDomains),
