@@ -6,9 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## 2.4.1 - 2026-11-04
+
 ### Changed
 
-- The dashboard now polls feed, Top Stats, and performance data only while someone has it open, instead of continuously in the background. Server, cluster, and health monitoring still run all the time, so status stays live while idle network traffic and load are reduced.
+- The dashboard now no longer polls feed, Top Stats, and performance data on startup without active viewers, instead of continuously in the background. Server, cluster, and health monitoring still run all the time, so status stays live while idle network traffic and load are reduced.
 - Top Stats polling now runs in parallel and skips servers that are unreachable, and the last known Top Stats are shown immediately when the dashboard opens. First loads and reconnects are noticeably faster, especially when a server is slow or not responding.
 
 ### Fixed
