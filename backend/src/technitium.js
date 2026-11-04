@@ -498,9 +498,7 @@ function isBlockingReport(parsed) {
     return Boolean(parsed.blocklisturl || parsed.blocklist);
 }
 
-async function resolveTxtBlockingReport(server, domain) {
-    const response = await dnsClientResolve(server, domain, 'TXT');
-    const texts = [...new Set(collectTxtStrings(response).map(text => text.trim()).filter(Boolean))];
+function listsFromReportTexts(texts, domain) {
     const seen = new Set();
     const lists = [];
     for (const text of texts) {
@@ -519,7 +517,199 @@ async function resolveTxtBlockingReport(server, domain) {
             matchedDomain: parsed.domain || domain,
         });
     }
-    return { lists };
+    return lists;
+}
+
+function listsFromBlockedResolve(data, domain) {
+    const texts = [];
+    for (const entry of data?.parsedEntries || []) {
+        if (entry?.raw) texts.push(entry.raw);
+    }
+    if (data?.extraText) texts.push(data.extraText);
+    return listsFromReportTexts(texts, domain);
+}
+
+async function resolveTxtBlockingReport(server, domain) {
+    const response = await dnsClientResolve(server, domain, 'TXT');
+    const texts = [...new Set(collectTxtStrings(response).map(text => text.trim()).filter(Boolean))];
+    return { lists: listsFromReportTexts(texts, domain) };
+}
+
+function isLoopbackClient(ip) {
+    let value = String(ip || '').trim().toLowerCase();
+    if (value.startsWith('[') && value.includes(']')) value = value.slice(1, value.indexOf(']'));
+    const zone = value.indexOf('%');
+    if (zone !== -1) value = value.slice(0, zone);
+    if (value.startsWith('::ffff:')) value = value.slice('::ffff:'.length);
+    if (/^\d{1,3}(\.\d{1,3}){3}:\d+$/.test(value)) value = value.slice(0, value.lastIndexOf(':'));
+    return value === '127.0.0.1' || value === '::1' || value === '0:0:0:0:0:0:0:1';
+}
+
+function clientIp(entry) {
+    return entry?.clientIpAddress || entry?.clientIP || entry?.clientAddress || entry?.client || '';
+}
+
+const blockReportCache = new Map();
+
+function rememberBlockReport(key, entry) {
+    if (blockReportCache.size > 2000) {
+        const now = Date.now();
+        for (const [cachedKey, cached] of blockReportCache) {
+            if (cached.expires <= now) blockReportCache.delete(cachedKey);
+        }
+    }
+    if (blockReportCache.size > 2000) {
+        const oldest = blockReportCache.keys().next().value;
+        if (oldest !== undefined) blockReportCache.delete(oldest);
+    }
+    blockReportCache.set(key, entry);
+}
+
+async function listsForDomain(server, domain, stats) {
+    const key = (server.name || server.url || '') + '\n' + domain;
+    const now = Date.now();
+    const cached = blockReportCache.get(key);
+    if (cached && cached.expires > now) {
+        if (stats) stats.cacheHits++;
+        return cached;
+    }
+    if (stats) stats.lookups++;
+    try {
+        const report = await resolveTxtBlockingReport(server, domain);
+        const lists = Array.isArray(report.lists) ? report.lists : [];
+        const entry = {
+            ok: true,
+            lists,
+            expires: now + (lists.length ? 30 * 60 * 1000 : 10 * 60 * 1000),
+        };
+        rememberBlockReport(key, entry);
+        return entry;
+    } catch (_) {
+        const entry = { ok: false, lists: [], expires: now + 60 * 1000 };
+        rememberBlockReport(key, entry);
+        return entry;
+    }
+}
+
+async function mapPool(items, limit, fn) {
+    const workers = Math.min(limit, items.length);
+    if (!workers) return;
+    let cursor = 0;
+    async function run() {
+        while (cursor < items.length) {
+            const index = cursor++;
+            await fn(items[index]);
+        }
+    }
+    await Promise.all(Array.from({ length: workers }, () => run()));
+}
+
+const blockedLogRuns = new Map();
+
+async function collectBlockedLog(serverList) {
+    const servers = (serverList || []).filter(server => server && server.queryLogsApp);
+    if (!servers.length) {
+        return {
+            ok: false,
+            error: 'Query logs are not available on the selected server.',
+            blockedQueries: 0,
+            domains: 0,
+            skippedLoopback: 0,
+            lookups: 0,
+            cacheHits: 0,
+            lists: [],
+            unmatched: { hits: 0, domains: 0 },
+            unresolved: { hits: 0, domains: 0 },
+            truncated: false,
+        };
+    }
+
+    const totals = new Map();
+    const stats = { lookups: 0, cacheHits: 0 };
+    let blockedQueries = 0;
+    let domains = 0;
+    let skippedLoopback = 0;
+    let unmatchedHits = 0;
+    let unmatchedDomains = 0;
+    let unresolvedHits = 0;
+    let unresolvedDomains = 0;
+    let truncated = false;
+
+    for (const server of servers) {
+        const page = await listBlockedQueries(server);
+        if (page.truncated) truncated = true;
+        const counts = new Map();
+        for (const entry of page.entries) {
+            if (isLoopbackClient(clientIp(entry))) {
+                skippedLoopback++;
+                continue;
+            }
+            blockedQueries++;
+            const name = String(entry.qname || '').trim().replace(/\.+$/, '').toLowerCase();
+            if (!name) {
+                unresolvedHits++;
+                continue;
+            }
+            counts.set(name, (counts.get(name) || 0) + 1);
+        }
+        domains += counts.size;
+        await mapPool([...counts.keys()], 4, async (name) => {
+            const hitCount = counts.get(name);
+            const found = await listsForDomain(server, name, stats);
+            if (!found.ok) {
+                unresolvedHits += hitCount;
+                unresolvedDomains++;
+                return;
+            }
+            if (!found.lists.length) {
+                unmatchedHits += hitCount;
+                unmatchedDomains++;
+                return;
+            }
+            for (const list of found.lists) {
+                const key = (list.source || '') + '|' + (list.url || '') + '|' + (list.name || '');
+                const row = totals.get(key) || {
+                    name: list.name || 'Block list',
+                    url: list.url || '',
+                    source: list.source || '',
+                    hits: 0,
+                    domains: 0,
+                };
+                row.hits += hitCount;
+                row.domains += 1;
+                totals.set(key, row);
+            }
+        });
+    }
+
+    return {
+        ok: true,
+        updatedAt: new Date().toISOString(),
+        blockedQueries,
+        domains,
+        skippedLoopback,
+        lookups: stats.lookups,
+        cacheHits: stats.cacheHits,
+        lists: [...totals.values()].sort((a, b) => b.hits - a.hits || a.name.localeCompare(b.name)),
+        unmatched: { hits: unmatchedHits, domains: unmatchedDomains },
+        unresolved: { hits: unresolvedHits, domains: unresolvedDomains },
+        truncated,
+        error: null,
+    };
+}
+
+function summarizeBlockedLog(serverList) {
+    const key = (serverList || [])
+        .map(server => server.name || server.url || '')
+        .sort()
+        .join('\n');
+    const existing = blockedLogRuns.get(key);
+    if (existing) return existing;
+    const run = collectBlockedLog(serverList).finally(() => {
+        if (blockedLogRuns.get(key) === run) blockedLogRuns.delete(key);
+    });
+    blockedLogRuns.set(key, run);
+    return run;
 }
 
 
@@ -542,4 +732,4 @@ async function listBlockedQueries(server, pageSize = 1000, maxPages = 20) {
     return { entries, truncated };
 }
 
-module.exports = { getSessionInfo, getDashboard, getSettings, getClusterState, getClusterNodeState, listQueryLogApps, discoverQueryLogsApp, getQueryLogs, getRttSample, getCacheMaxEntries, getTopStats, listCache, resolveBlockedDomain, resolveTxtBlockingReport, listBlockedQueries, certVerificationHint };
+module.exports = { getSessionInfo, getDashboard, getSettings, getClusterState, getClusterNodeState, listQueryLogApps, discoverQueryLogsApp, getQueryLogs, getRttSample, getCacheMaxEntries, getTopStats, listCache, resolveBlockedDomain, resolveTxtBlockingReport, listsFromBlockedResolve, listsForDomain, listBlockedQueries, summarizeBlockedLog, isLoopbackClient, listsFromReportTexts, redactListUrl, certVerificationHint };

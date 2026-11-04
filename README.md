@@ -198,7 +198,6 @@ All configuration lives in `config.yml` (see `config.example.yml` for a fully an
 | `poll.feedInterval`      | `3`           | Seconds between live feed polls                              |
 | `poll.topInterval`       | `30`          | Seconds between top-list refreshes                           |
 | `poll.perfInterval`      | `30`          | Seconds between RTT/cache samples                            |
-| `poll.listStatsInterval` | `60`          | Seconds between Which list blocked-query totals              |
 | `feed.pageSize`          | `20`          | Log entries fetched per poll cycle                           |
 | `feed.maxEntries`        | `200`         | Maximum entries kept in the browser feed                     |
 | `top.limit`              | `20`          | Number of items in top domains/clients lists                 |
@@ -244,11 +243,13 @@ Debug lines are categorised (`[discovery]`, `[feed]`, `[stream]`, `[update]`, ..
 
 The browser console has its own toggle, independent of the backend setting. Run `Log.enable()` in the devtools console to turn on frontend debug output and `Log.disable()` to turn it off. The choice is stored in `localStorage` and survives reloads.
 
-## Which list
+## Block lists
 
-The dashboard has a **Which list** card. Type a domain, or click **Which list** on a blocked Top Stats row, to see which configured block list matched. Technitium must have **Allow TXT Blocking Report** enabled. A name on more than one list shows every match, including a match on a parent name.
+On **Cache & Blocked**, turn on **Blocked check** and search a domain. The check uses the existing lookup. When that response does not already name a block list, it sends one TXT lookup. Technitium must have **Allow TXT Blocking Report** enabled to name lists. A name on more than one built-in list shows every match, including a match on a parent name. The Advanced Blocking app reports only the first matching list, so overlap is complete for built-in lists only.
 
-The same card totals blocked queries currently stored in the query log, grouped by list. A query matched by more than one list is counted on each list. Totals refresh about every 60 seconds while at least one dashboard viewer is connected, and they pause when the dashboard is idle. Set `poll.listStatsInterval` to change that interval. This needs a query log app. The count covers the log window Technitium is keeping, often about the last hour, not the Last Week or Last Month ranges.
+**Count lists** on the same tab reads the current blocked query log once. It does not run on a timer or when the dashboard opens. Queries from 127.0.0.1 and ::1 are ignored, so the dashboard does not count its own lookups. Those lookups still appear in the log. A name on two built-in lists is counted on both. The Advanced Blocking app names only the first list, so those totals credit a single list. The count covers the log window Technitium is keeping, often about the last hour, not the Last Week or Last Month ranges. It needs a query log app.
+
+Secrets in block-list URLs (`api_token`, `token`, `key`, `secret`, `password`) are redacted before they reach the browser.
 
 ## Live feed
 

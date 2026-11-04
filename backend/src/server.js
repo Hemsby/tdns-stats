@@ -12,7 +12,7 @@ const fetch     = require('node-fetch');
 const Poller    = require('./poller');
 const Updater   = require('./updater');
 const log       = require('./log');
-const { listQueryLogApps, discoverQueryLogsApp, getCacheMaxEntries, listCache, resolveBlockedDomain, resolveTxtBlockingReport } = require('./technitium');
+const { listQueryLogApps, discoverQueryLogsApp, getCacheMaxEntries, listCache, resolveBlockedDomain, listsFromBlockedResolve, listsForDomain, summarizeBlockedLog, redactListUrl } = require('./technitium');
 
 const PACKAGE = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf8'));
 const VERSION = PACKAGE.version;
@@ -104,6 +104,17 @@ function normalizeDomain(value) {
         .trim()
         .replace(/^\.+|\.+$/g, '')
         .toLowerCase();
+}
+
+function redactBlockedMeta(value) {
+    if (typeof value === 'string') return redactListUrl(value);
+    if (Array.isArray(value)) return value.map(redactBlockedMeta);
+    if (value && typeof value === 'object') {
+        const out = {};
+        for (const [key, item] of Object.entries(value)) out[key] = redactBlockedMeta(item);
+        return out;
+    }
+    return value;
 }
 
 function summarizeCache(data) {
@@ -348,11 +359,6 @@ async function start() {
                 res.write(`data: ${JSON.stringify({ type: 'top', server, data })}\n\n`);
             }
         }
-        const cachedListStats = poller.getState().listStats;
-        if (cachedListStats) {
-            res.write(`data: ${JSON.stringify({ type: 'list-stats', data: cachedListStats })}\n\n`);
-        }
-
         if (clients.size === 1) await poller.resume();
         if (!clients.has(res)) return;
 
@@ -465,7 +471,17 @@ async function start() {
             if (blockedTarget) {
                 try {
                     const data = await resolveBlockedDomain(blockedTarget, domain);
+                    let lists = listsFromBlockedResolve(data, domain);
+                    let reportError = null;
+                    // A and AAAA already carry the report on some servers. Ask once,
+                    // and only when that response did not name a list.
+                    if (!lists.length) {
+                        const found = await listsForDomain(blockedTarget, domain);
+                        if (!found.ok) reportError = 'The TXT blocking report could not be read.';
+                        else lists = Array.isArray(found.lists) ? found.lists : [];
+                    }
                     const isBlocked = Boolean(
+                        lists.length ||
                         (Array.isArray(data.records) && data.records.length > 0) ||
                         data.source ||
                         data.group ||
@@ -477,13 +493,15 @@ async function start() {
                         domain: blockedTarget.domain || blockedTarget.name,
                         ok: true,
                         blocked: isBlocked,
-                        blockedMeta: {
-                            source: data.source || data.extraText || undefined,
+                        lists,
+                        reportError,
+                        blockedMeta: redactBlockedMeta({
+                            source: data.source || undefined,
                             group: data.group || undefined,
                             parsed: data.parsed || {},
                             entries: Array.isArray(data.parsedEntries) ? data.parsedEntries : [],
                             raw: data.extraText || undefined,
-                        },
+                        }),
                     };
                 } catch (e) {
                     blockedSummary = {
@@ -508,40 +526,23 @@ async function start() {
         });
     });
 
-    app.get('/api/which-list', requireToken, async (req, res) => {
-        const rawDomain = String(req.query.domain || '').trim();
-        const domain = normalizeDomain(req.query.domain);
+    app.post('/api/block-list-stats', requireToken, async (req, res) => {
         const serverName = String(req.query.server || 'all');
-        if (!rawDomain) return res.status(400).json({ error: 'Domain is required' });
-        if (rawDomain.startsWith('.') || rawDomain.endsWith('.')) return res.status(400).json({ error: 'Domain cannot start or end with a dot' });
-        if (rawDomain.includes('..')) return res.status(400).json({ error: 'Domain cannot contain consecutive dots' });
-        if (rawDomain.length > 253) return res.status(400).json({ error: 'Domain too long (max 253 characters)' });
-        if (!/^[a-z0-9]([a-z0-9\-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9\-]*[a-z0-9])?)+$/.test(domain)) return res.status(400).json({ error: 'Invalid domain format' });
-        if (domain.split('.').some(label => label.length > 63)) return res.status(400).json({ error: 'Domain label too long (max 63 characters)' });
-
-        const state = poller.getState();
-        const blockedTarget = getBlockedLookupTarget(serverName, state);
-        if (!blockedTarget) return res.status(404).json({ error: 'Unknown server' });
+        let targets = servers;
+        if (serverName !== 'all' && serverName !== CLUSTER_KEY) {
+            const server = servers.find(s => s.name === serverName);
+            if (!server) return res.status(404).json({ ok: false, error: 'Unknown server' });
+            targets = [server];
+        }
 
         try {
-            const report = await resolveTxtBlockingReport(blockedTarget, domain);
-            const lists = Array.isArray(report.lists) ? report.lists : [];
-            res.json({
-                domain,
-                server: blockedTarget.displayName || blockedTarget.name,
-                ok: true,
-                blocked: lists.length > 0,
-                lists,
-            });
-        } catch (e) {
-            res.status(502).json({
-                domain,
-                server: blockedTarget.displayName || blockedTarget.name,
-                ok: false,
-                blocked: false,
-                lists: [],
-                error: e.message,
-            });
+            const data = await summarizeBlockedLog(targets);
+            if (data.ok) {
+                console.log(`[block-list-stats] ${data.blockedQueries} blocked, ${data.lookups} lookups, ${data.skippedLoopback} loopback skipped`);
+            }
+            res.json(data);
+        } catch (_) {
+            res.status(502).json({ ok: false, error: 'The blocked query log could not be read.' });
         }
     });
 

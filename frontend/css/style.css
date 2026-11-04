@@ -1209,39 +1209,24 @@ main { position: relative; z-index: 1; min-height: 0; flex: 1; }
     .feed-filter-content { max-height: none; overflow-y: auto; }
 }
 
-.which-list-form { display: flex; align-items: center; gap: 8px; }
-.which-list-form .search-btn { width: auto; flex-shrink: 0; }
-.which-list-form .ctrl-input { width: 280px; max-width: 46vw; }
-.which-list-body { padding: 12px 16px 14px; display: flex; flex-direction: column; gap: 8px; }
-.which-list-status { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.which-list-domain { font-family: 'JetBrains Mono', monospace; font-size: 13px; }
-.which-list-item { border-top: 1px solid var(--border-dim); padding-top: 8px; }
-.which-list-name { font-size: 13px; font-weight: 700; }
-.which-list-url { margin-top: 2px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-muted); word-break: break-all; }
-.which-list-match { margin-top: 2px; font-size: 11px; color: var(--text-dim); }
-.which-list-empty { color: var(--text-muted); font-size: 12px; }
-.which-list-btn {
-    flex-shrink: 0; height: 22px; padding: 0 7px;
-    background: var(--accent-red-bg); border: 1px solid rgba(248,113,113,.28); border-radius: 4px;
-    color: var(--accent-red); cursor: pointer; font-family: 'Chakra Petch', sans-serif;
-    font-size: 9px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase;
-}
-.which-list-btn:hover { background: rgba(248,113,113,.2); }
-@media (max-width: 600px) {
-    .which-list-form { width: 100%; }
-    .which-list-form .ctrl-input { flex: 1; width: auto; }
-}
+.blocked-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+.blocked-list-item { border-top: 1px solid var(--border-dim); padding-top: 8px; }
+.blocked-list-item:first-child { border-top: 0; padding-top: 0; }
+.blocked-list-name { font-size: 13px; font-weight: 700; }
+.blocked-list-url { margin-top: 2px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-muted); word-break: break-all; }
+.blocked-list-match, .blocked-list-note { margin-top: 4px; font-size: 11px; color: var(--text-dim); line-height: 1.4; }
 
-.which-list-stats { padding: 12px 16px 8px; display: flex; flex-direction: column; gap: 8px; }
-.which-list-stats-head { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; font-size: 12px; }
-.which-list-stats-time { color: var(--text-dim); }
-.which-list-stat-row { display: flex; flex-direction: column; gap: 3px; }
-.which-list-stat-top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
-.which-list-stat-name { font-size: 13px; font-weight: 700; min-width: 0; }
-.which-list-stat-hits { flex-shrink: 0; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-muted); }
-.which-list-stat-bar { height: 4px; background: var(--border-dim); border-radius: 2px; overflow: hidden; }
-.which-list-stat-bar > span { display: block; height: 100%; background: var(--accent-red); }
-.which-list-stat-row.dim .which-list-stat-name { font-weight: 500; color: var(--text-muted); }
-.which-list-stat-row.dim .which-list-stat-bar > span { background: var(--text-dim); }
-.which-list-stats-note { font-size: 11px; color: var(--text-dim); line-height: 1.4; }
-.which-list-body:empty { display: none; }
+.block-list-count .search-btn { width: auto; }
+.block-list-count-body { padding: 12px 16px 16px; display: flex; flex-direction: column; gap: 10px; }
+.block-list-count-note, .block-list-stats-note, .block-list-empty { font-size: 12px; color: var(--text-dim); line-height: 1.45; margin: 0; }
+.block-list-totals { display: flex; flex-direction: column; gap: 8px; }
+.block-list-stats-head { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; font-size: 12px; }
+.block-list-stats-time { color: var(--text-dim); }
+.block-list-stat-row { display: flex; flex-direction: column; gap: 3px; }
+.block-list-stat-top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.block-list-stat-name { font-size: 13px; font-weight: 700; min-width: 0; }
+.block-list-stat-hits { flex-shrink: 0; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-muted); }
+.block-list-stat-bar { height: 4px; background: var(--border-dim); border-radius: 2px; overflow: hidden; }
+.block-list-stat-bar > span { display: block; height: 100%; background: var(--accent-red); }
+.block-list-stat-row.dim .block-list-stat-name { font-weight: 500; color: var(--text-muted); }
+.block-list-stat-row.dim .block-list-stat-bar > span { background: var(--text-dim); }

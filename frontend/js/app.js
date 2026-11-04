@@ -254,9 +254,6 @@ const App = (() => {
         } else if (msg.type === 'viewer-count') {
             state.dashboardViewers = Math.max(0, Number(msg.data?.count) || 0);
             renderDashboardViewers();
-        } else if (msg.type === 'list-stats') {
-            state.listStats = msg.data;
-            renderListStats(msg.data);
         } else if (msg.type === 'range-dashboard') {
             const key = msg.server + ':' + msg.range;
             state.rangeCache[key] = msg.data;
@@ -823,7 +820,7 @@ const App = (() => {
 
         if (blockedSection) {
             blockedSection.innerHTML = data.blockedLookup && data.blockedSummary
-                ? renderBlockedLookupSummary(data.blockedSummary)
+                ? renderBlockedLookupSummary(data.blockedSummary, data.domain)
                 : '';
         }
 
@@ -892,20 +889,17 @@ const App = (() => {
             : value;
     }
 
-    function renderBlockedLookupSummary(node) {
+    function renderBlockedLookupSummary(node, queryDomain) {
         const parsedEntries = Array.isArray(node.blockedMeta?.entries) && node.blockedMeta.entries.length
             ? node.blockedMeta.entries
             : node.blockedMeta?.parsed ? [node.blockedMeta.parsed] : [];
         const labelMap = {
             source: 'Source',
             group: 'Group',
-            blocklisturl: 'Block List',
-            blocklist: 'Block List',
-            'block list': 'Block List',
-            domain: 'Domain',
             blockreason: 'Reason',
             reason: 'Reason',
         };
+        const skipKeys = new Set(['domain', 'raw', 'blocklisturl', 'blocklist', 'block list']);
 
         const splitValues = value => {
             if (typeof value !== 'string') return [String(value)];
@@ -918,9 +912,9 @@ const App = (() => {
             for (const [key, value] of Object.entries(entry || {})) {
                 if (!value) continue;
                 const normalized = key.toLowerCase();
-                if (normalized === 'domain' || normalized === 'raw') continue;
+                if (skipKeys.has(normalized) || !labelMap[normalized]) continue;
 
-                const label = labelMap[normalized] || normalized.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase());
+                const label = labelMap[normalized];
                 const displayValue = normalized === 'source' ? formatBlockedSource(value) : value;
                 const values = splitValues(displayValue).map(v => esc(v));
 
@@ -939,28 +933,51 @@ const App = (() => {
             values.slice(1).forEach(value => details.push({ label: '', value }));
         });
 
-        const hasBlockedMeta = node.blockedMeta && (
+        const lists = Array.isArray(node.lists) ? node.lists : [];
+        const asked = String(queryDomain || '').replace(/\.+$/, '').toLowerCase();
+        const listHtml = lists.map(list => {
+            const url = list.url ? '<div class="blocked-list-url">' + esc(list.url) + '</div>' : '';
+            const matched = String(list.matchedDomain || '').replace(/\.+$/, '').toLowerCase();
+            const match = list.matchedDomain && matched !== asked
+                ? '<div class="blocked-list-match">Matched ' + esc(list.matchedDomain) + '</div>'
+                : '';
+            return '<div class="blocked-list-item"><div class="blocked-list-name">' + esc(list.name || 'Block list') + '</div>' + url + match + '</div>';
+        }).join('');
+
+        const hasBlockedMeta = node.blocked || lists.length || (node.blockedMeta && (
             (Array.isArray(node.blockedMeta.entries) && node.blockedMeta.entries.length > 0) ||
             (node.blockedMeta.parsed && Object.keys(node.blockedMeta.parsed).length > 0) ||
             node.blockedMeta.source || node.blockedMeta.group
-        );
+        ));
         const statusBadge = node.ok
-            ? (node.blocked || hasBlockedMeta)
+            ? hasBlockedMeta
                 ? '<span class="status-badge danger">Blocked</span>'
                 : '<span class="status-badge success">Not blocked</span>'
             : '<span class="status-badge neutral">Lookup failed</span>';
+
+        let note = '';
+        if (!node.ok) {
+            note = '<div class="blocked-list-note">' + esc(node.error || 'Lookup failed') + '</div>';
+        } else if (node.reportError) {
+            note = '<div class="blocked-list-note">' + esc(node.reportError) + '</div>';
+        } else if (hasBlockedMeta && !lists.length) {
+            note = '<div class="blocked-list-note">No block list was reported. Allow TXT Blocking Report may be off. The Advanced Blocking app only names the first matching list, and a manual block may have no list URL.</div>';
+        } else if (lists.length) {
+            note = '<div class="blocked-list-note">Built-in lists can name every match. The Advanced Blocking app reports only the first matching list.</div>';
+        }
+
+        const detailHtml = details.length
+            ? details.map(item => '<div class="blocked-lookup-meta-row"><span class="blocked-lookup-meta-label">' + (item.label ? esc(item.label + ':') : '&nbsp;') + '</span><span class="blocked-lookup-meta-value">' + item.value + '</span></div>').join('')
+            : '';
 
         return '<article class="blocked-lookup-card">' +
             '<div class="blocked-lookup-card-header">' +
                 '<div class="blocked-lookup-card-title">' + esc(node.server) + '</div>' +
                 '<div>' + statusBadge + '</div>' +
             '</div>' +
-            '<div class="blocked-lookup-card-meta">' +
-                (details.length ? details.map(item => typeof item === 'string'
-                    ? '<div>' + item + '</div>'
-                    : '<div class="blocked-lookup-meta-row"><span class="blocked-lookup-meta-label">' + (item.label ? esc(item.label + ':') : '&nbsp;') + '</span><span class="blocked-lookup-meta-value">' + item.value + '</span></div>').join('')
-                    : '<div>Blocked lookup response</div>') +
-            '</div>' +
+            (listHtml ? '<div class="blocked-list">' + listHtml + '</div>' : '') +
+            (detailHtml ? '<div class="blocked-lookup-card-meta">' + detailHtml + '</div>' : '') +
+            note +
         '</article>';
     }
 
@@ -1529,15 +1546,18 @@ const App = (() => {
         renderTopListItems(items, colorClass);
     }
 
-    function renderListStats(data) {
-        const el = document.getElementById('whichListStats');
+    function renderBlockListTotals(data) {
+        const el = document.getElementById('blockListTotals');
         if (!el) return;
         if (!data) {
-            el.innerHTML = '<div class="which-list-empty">Counting blocked queries...</div>';
+            el.innerHTML = 'Not counted yet.';
+            return;
+        }
+        if (data.error && !data.ok) {
+            el.innerHTML = '<div class="block-list-empty">' + esc(data.error) + '</div>';
             return;
         }
 
-        const rows = [];
         const lists = Array.isArray(data.lists) ? data.lists : [];
         const extras = [];
         if (data.unmatched?.hits) extras.push({ name: 'No list reported', hits: data.unmatched.hits, domains: data.unmatched.domains, dim: true });
@@ -1551,106 +1571,58 @@ const App = (() => {
                 ? ' · ' + fmtNum(list.domains) + (list.domains === 1 ? ' name' : ' names')
                 : '';
             const title = list.url ? ' title="' + esc(list.url) + '"' : '';
-            return '<div class="which-list-stat-row' + (list.dim ? ' dim' : '') + '"' + title + '>' +
-                '<div class="which-list-stat-top"><span class="which-list-stat-name">' + esc(list.name || 'Block list') + '</span>' +
-                '<span class="which-list-stat-hits">' + fmtNum(hits) + esc(names) + '</span></div>' +
-                '<div class="which-list-stat-bar"><span style="width:' + pct + '%"></span></div></div>';
+            return '<div class="block-list-stat-row' + (list.dim ? ' dim' : '') + '"' + title + '>' +
+                '<div class="block-list-stat-top"><span class="block-list-stat-name">' + esc(list.name || 'Block list') + '</span>' +
+                '<span class="block-list-stat-hits">' + fmtNum(hits) + esc(names) + '</span></div>' +
+                '<div class="block-list-stat-bar"><span style="width:' + pct + '%"></span></div></div>';
         }
-
-        lists.forEach(list => rows.push(row(list)));
-        extras.forEach(list => rows.push(row(list)));
 
         const when = data.updatedAt ? new Date(data.updatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
-        const refresh = data.refreshSeconds || 60;
-        let note = 'Each blocked query in the current log is counted on every list that matched it. Refreshes about every ' + refresh + ' seconds.';
+        const skipped = data.skippedLoopback ? ' Skipped ' + fmtNum(data.skippedLoopback) + ' from 127.0.0.1 or ::1.' : '';
+        const looked = ' This click sent ' + fmtNum(data.lookups || 0) + ' lookups'
+            + (data.cacheHits ? ' and reused ' + fmtNum(data.cacheHits) + ' cached names.' : '.');
+        let note = 'Counted once from the current log.' + skipped + looked + ' Built-in lists count every match. The Advanced Blocking app names only the first list.';
         if (data.truncated) note = 'Newest blocked queries only. ' + note;
-        const error = data.error ? '<div class="which-list-empty">' + esc(data.error) + '</div>' : '';
-        const body = rows.length
-            ? rows.join('')
-            : '<div class="which-list-empty">No blocked queries in the current log.</div>';
+        const body = lists.length || extras.length
+            ? lists.map(row).join('') + extras.map(row).join('')
+            : '<div class="block-list-empty">No blocked queries in the current log.</div>';
 
         el.innerHTML =
-            '<div class="which-list-stats-head"><span>' + fmtNum(data.blockedQueries || 0) + ' blocked queries in the log</span>' +
-            (when ? '<span class="which-list-stats-time">' + esc(when) + '</span>' : '') + '</div>' +
-            error + body +
-            '<div class="which-list-stats-note">' + esc(note) + '</div>';
+            '<div class="block-list-stats-head"><span>' + fmtNum(data.blockedQueries || 0) + ' blocked queries in the log</span>' +
+            (when ? '<span class="block-list-stats-time">' + esc(when) + '</span>' : '') + '</div>' +
+            body +
+            '<div class="block-list-stats-note">' + esc(note) + '</div>';
     }
 
-    function whichListServer() {
-        const effective = state.topServer === FOLLOW_CHART_KEY ? state.chartServer : state.topServer;
-        return effective || 'all';
-    }
-
-    function renderWhichList(data) {
-        const body = document.getElementById('whichListBody');
-        if (!body) return;
-        const badge = !data.ok
-            ? '<span class="status-badge neutral">Lookup failed</span>'
-            : data.blocked
-                ? '<span class="status-badge danger">Blocked</span>'
-                : '<span class="status-badge success">Not blocked</span>';
-        const head = '<div class="which-list-status"><span class="which-list-domain">' + esc(data.domain || '') + '</span>' + badge + '</div>';
-        let items;
-        if (!data.ok) {
-            items = '<div class="which-list-empty">' + esc(data.error || 'Lookup failed') + '</div>';
-        } else if (Array.isArray(data.lists) && data.lists.length) {
-            items = data.lists.map(list => {
-                const url = list.url ? '<div class="which-list-url">' + esc(list.url) + '</div>' : '';
-                const match = list.matchedDomain
-                    ? '<div class="which-list-match">Matched ' + esc(list.matchedDomain) + '</div>'
-                    : '';
-                return '<div class="which-list-item"><div class="which-list-name">' + esc(list.name || 'Block list') + '</div>' + url + match + '</div>';
-            }).join('');
-        } else {
-            items = '<div class="which-list-empty">No block list reported. The name is not blocked, or Allow TXT Blocking Report is off.</div>';
-        }
-        body.innerHTML = head + items;
-    }
-
-    async function lookupWhichList(domain) {
-        const input = document.getElementById('whichListInput');
-        const body = document.getElementById('whichListBody');
-        const card = document.getElementById('whichListCard');
-        const cleaned = String(domain || '').trim().toLowerCase();
-        if (input) input.value = cleaned;
-        if (card) card.scrollIntoView({ block: 'nearest' });
-        if (!body) return;
-        if (!cleaned) {
-            body.innerHTML = '<div class="which-list-empty">Enter a domain to see which block list matched.</div>';
-            return;
-        }
-        body.innerHTML = '<div class="which-list-empty">Looking up which list...</div>';
+    async function countBlockLists() {
+        const btn = document.getElementById('countBlockListsBtn');
+        const el = document.getElementById('blockListTotals');
+        const server = document.getElementById('domainSearchServerSelect')?.value || state.domainSearchServer || 'all';
+        if (btn) btn.disabled = true;
+        if (el) el.innerHTML = '<div class="block-list-empty">Reading the blocked log...</div>';
         try {
-            const url = '/api/which-list?domain=' + encodeURIComponent(cleaned) + '&server=' + encodeURIComponent(whichListServer());
-            const res = await fetch(url, { cache: 'no-store' });
+            const res = await fetch('/api/block-list-stats?server=' + encodeURIComponent(server), {
+                method: 'POST',
+                cache: 'no-store',
+            });
             const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Lookup failed');
-            renderWhichList(data);
+            if (!res.ok) throw new Error(data.error || 'Count failed');
+            renderBlockListTotals(data);
         } catch (e) {
-            body.innerHTML = '<div class="which-list-empty">' + esc(e.message || 'Lookup failed') + '</div>';
+            if (el) el.innerHTML = '<div class="block-list-empty">' + esc(e.message || 'Count failed') + '</div>';
+        } finally {
+            if (btn) btn.disabled = false;
         }
     }
 
-    function initWhichList() {
-        const form = document.getElementById('whichListForm');
-        if (form && form.dataset.ready !== 'true') {
-            form.dataset.ready = 'true';
-            form.addEventListener('submit', e => {
-                e.preventDefault();
-                lookupWhichList(document.getElementById('whichListInput')?.value || '');
-            });
-        }
-        const content = document.getElementById('topContent');
-        if (content && content.dataset.whichListBound !== 'true') {
-            content.dataset.whichListBound = 'true';
-            content.addEventListener('click', e => {
-                const btn = e.target.closest('.which-list-btn');
-                if (!btn) return;
-                e.preventDefault();
-                const domain = btn.dataset.domain;
-                if (domain) lookupWhichList(domain);
-            });
-        }
+    function initBlockListCount() {
+        const btn = document.getElementById('countBlockListsBtn');
+        if (!btn || btn.dataset.ready === 'true') return;
+        btn.dataset.ready = 'true';
+        btn.addEventListener('click', e => {
+            e.preventDefault();
+            countBlockLists();
+        });
     }
 
     function renderTopListItems(items, colorClass) {
@@ -1676,15 +1648,11 @@ const App = (() => {
         container.innerHTML = items.map((item, i) => {
             const pct = Math.round((item.hits / max) * 100);
             const sub = item.domain ? '<span class="top-sub">' + esc(item.domain) + '</span>' : '';
-            const whichList = colorClass === 'red'
-                ? '<button type="button" class="which-list-btn" data-domain="' + esc(item.name) + '">Which list</button>'
-                : '';
             return '<div class="top-row" role="option" tabindex="0" data-name="' + esc(item.name) + '">' +
                 '<span class="top-rank">' + (i + 1) + '</span>' +
                 '<span class="top-name">' + esc(item.name) + '</span>' +
                 sub +
                 '<div class="top-bar-wrap"><div class="top-bar"><div class="top-bar-fill ' + colorClass + '" style="width:' + pct + '%"></div></div></div>' +
-                whichList +
                 '<span class="top-hits">' + fmtNum(item.hits) + '</span>' +
                 '</div>';
         }).join('');
@@ -2248,7 +2216,7 @@ const App = (() => {
             },
         });
         Selection.setTab(state.topTab);
-        initWhichList();
+        initBlockListCount();
         fetch('/api/config')
             .then(r => r.json())
             .then(cfg => {
