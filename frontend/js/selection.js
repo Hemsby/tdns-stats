@@ -97,6 +97,7 @@ const Selection = (() => {
 
     function handleRowClick(e) {
         if (isClickSuppressed()) return;
+        if (e.target.closest('.which-list-btn')) return;
         const row = e.target.closest('.top-row');
         if (!row) return;
         applyRow(row, {
@@ -156,6 +157,7 @@ const Selection = (() => {
     }
 
     function longPressAction(target) {
+        if (target.closest('.which-list-btn')) return null;
         const row = target.closest('.top-row');
         if (!row) return null;
         const name = normalize(state.tab, row.dataset.name);
@@ -170,6 +172,7 @@ const Selection = (() => {
     }
 
     function handleRowKeydown(e) {
+        if (e.target.closest && e.target.closest('.which-list-btn')) return;
         if (e.key === 'Escape') {
             if (hasSelection()) {
                 e.preventDefault();

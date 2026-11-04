@@ -1,6 +1,6 @@
 'use strict';
 
-const { getDashboard, getTopStats, getQueryLogs, getRttSample, getSessionInfo, getClusterState, getClusterNodeState, certVerificationHint } = require('./technitium');
+const { getDashboard, getTopStats, getQueryLogs, getRttSample, getSessionInfo, getClusterState, getClusterNodeState, certVerificationHint, listBlockedQueries, resolveTxtBlockingReport } = require('./technitium');
 const log = require('./log');
 
 const CLUSTER_KEY = '__cluster';
@@ -31,6 +31,19 @@ function rttHistoryToSeries(map) {
         .map(([t, v]) => ({ t, mean: +v.mean.toFixed(2) }));
 }
 
+async function mapPool(items, limit, fn) {
+    const workers = Math.min(limit, items.length);
+    if (!workers) return;
+    let cursor = 0;
+    async function run() {
+        while (cursor < items.length) {
+            const index = cursor++;
+            await fn(items[index]);
+        }
+    }
+    await Promise.all(Array.from({ length: workers }, () => run()));
+}
+
 class Poller {
     constructor(servers, broadcast, cfg) {
         this.servers   = servers;
@@ -44,7 +57,10 @@ class Poller {
             longRangeInterval: 900000,
             topLimit:      cfg?.top?.limit      || 20,
             feedPageSize:  cfg?.feed?.pageSize  || 20,
+            listStatsInterval: (cfg?.poll?.listStatsInterval || 60) * 1000,
         };
+        this._blockListCache = new Map();
+        this._listStatsBusy = false;
         this.state     = {};
         this.state.perf  = {};
         this.state.top   = {};
@@ -72,11 +88,13 @@ class Poller {
         clearInterval(this._perfTimer);
         clearInterval(this._rangeTimer);
         clearInterval(this._longRangeTimer);
+        clearInterval(this._listStatsTimer);
         this._feedTimer  = null;
         this._topTimer   = null;
         this._perfTimer  = null;
         this._rangeTimer = null;
         this._longRangeTimer = null;
+        this._listStatsTimer = null;
         this._dashboardRunning = false;
     }
 
@@ -87,6 +105,7 @@ class Poller {
         this._perfTimer  = setInterval(() => this._pollPerformance(), this.cfg.perfInterval);
         this._rangeTimer = setInterval(() => this._pollRangeData(),   this.cfg.rangeInterval);
         this._longRangeTimer = setInterval(() => this._pollLongRangeData(), this.cfg.longRangeInterval);
+        this._listStatsTimer = setInterval(() => this._pollListStats(), this.cfg.listStatsInterval);
         this._dashboardRunning = true;
     }
 
@@ -102,6 +121,7 @@ class Poller {
             this._pollTop(true),
             this._pollPerformance(),
         ]);
+        this._pollListStats();
         // Range data is fetched on-demand via refreshRangeData() when an SSE
         // client connects — avoids double-fetching on first client after idle.
     }
@@ -153,6 +173,142 @@ class Poller {
         if (!server) return;
         this._pollRangeData();
         this._pollLongRangeData();
+    }
+
+
+    _rememberBlockList(key, entry) {
+        const cache = this._blockListCache;
+        if (cache.size > 2000) {
+            const now = Date.now();
+            for (const [cachedKey, cached] of cache) {
+                if (cached.expires <= now) cache.delete(cachedKey);
+            }
+        }
+        if (cache.size > 2000) {
+            const oldest = cache.keys().next().value;
+            if (oldest !== undefined) cache.delete(oldest);
+        }
+        cache.set(key, entry);
+    }
+
+    async _listsForDomain(server, domain) {
+        const key = server.name + '\n' + domain;
+        const now = Date.now();
+        const cached = this._blockListCache.get(key);
+        if (cached && cached.expires > now) return cached;
+        try {
+            const report = await resolveTxtBlockingReport(server, domain);
+            const lists = Array.isArray(report.lists) ? report.lists : [];
+            const entry = {
+                ok: true,
+                lists,
+                expires: now + (lists.length ? 30 * 60 * 1000 : 10 * 60 * 1000),
+            };
+            this._rememberBlockList(key, entry);
+            return entry;
+        } catch (err) {
+            const entry = { ok: false, lists: [], expires: now + 60 * 1000 };
+            this._rememberBlockList(key, entry);
+            return entry;
+        }
+    }
+
+    async _collectListStats() {
+        const servers = this.servers.filter(server => !this._isServerDown(server) && server.queryLogsApp);
+        if (!servers.length) throw new Error('Query logs are not available yet');
+
+        const totals = new Map();
+        let blockedQueries = 0;
+        let domains = 0;
+        let unmatchedHits = 0;
+        let unmatchedDomains = 0;
+        let unresolvedHits = 0;
+        let unresolvedDomains = 0;
+        let truncated = false;
+
+        for (const server of servers) {
+            const page = await listBlockedQueries(server);
+            if (page.truncated) truncated = true;
+            const counts = new Map();
+            for (const entry of page.entries) {
+                blockedQueries++;
+                const name = String(entry.qname || '').trim().replace(/\.+$/, '').toLowerCase();
+                if (!name) {
+                    unresolvedHits++;
+                    continue;
+                }
+                counts.set(name, (counts.get(name) || 0) + 1);
+            }
+            domains += counts.size;
+            await mapPool([...counts.keys()], 4, async (name) => {
+                const hitCount = counts.get(name);
+                const found = await this._listsForDomain(server, name);
+                if (!found.ok) {
+                    unresolvedHits += hitCount;
+                    unresolvedDomains++;
+                    return;
+                }
+                if (!found.lists.length) {
+                    unmatchedHits += hitCount;
+                    unmatchedDomains++;
+                    return;
+                }
+                for (const list of found.lists) {
+                    const key = (list.source || '') + '|' + (list.url || '') + '|' + (list.name || '');
+                    const row = totals.get(key) || {
+                        name: list.name || 'Block list',
+                        url: list.url || '',
+                        source: list.source || '',
+                        hits: 0,
+                        domains: 0,
+                    };
+                    row.hits += hitCount;
+                    row.domains += 1;
+                    totals.set(key, row);
+                }
+            });
+        }
+
+        return {
+            updatedAt: new Date().toISOString(),
+            blockedQueries,
+            domains,
+            lists: [...totals.values()].sort((a, b) => b.hits - a.hits || a.name.localeCompare(b.name)),
+            unmatched: { hits: unmatchedHits, domains: unmatchedDomains },
+            unresolved: { hits: unresolvedHits, domains: unresolvedDomains },
+            truncated,
+            refreshSeconds: Math.round(this.cfg.listStatsInterval / 1000),
+            error: null,
+        };
+    }
+
+    async _pollListStats() {
+        if (this._listStatsBusy) return;
+        this._listStatsBusy = true;
+        try {
+            const data = await this._collectListStats();
+            this.state.listStats = data;
+            this.broadcast({ type: 'list-stats', data });
+            console.log(`[list-stats] ${data.blockedQueries} blocked queries, ${data.domains} names, ${data.lists.length} lists`);
+        } catch (err) {
+            const previous = this.state.listStats;
+            const data = {
+                blockedQueries: 0,
+                domains: 0,
+                lists: [],
+                unmatched: { hits: 0, domains: 0 },
+                unresolved: { hits: 0, domains: 0 },
+                truncated: false,
+                refreshSeconds: Math.round(this.cfg.listStatsInterval / 1000),
+                ...(previous || {}),
+                error: err.message || 'List stats failed',
+            };
+            this.state.listStats = data;
+            this.broadcast({ type: 'list-stats', data });
+            console.warn('[list-stats]', data.error);
+        } finally {
+            this._listStatsBusy = false;
+        }
     }
 
     getState() {

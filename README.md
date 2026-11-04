@@ -198,6 +198,7 @@ All configuration lives in `config.yml` (see `config.example.yml` for a fully an
 | `poll.feedInterval`      | `3`           | Seconds between live feed polls                              |
 | `poll.topInterval`       | `30`          | Seconds between top-list refreshes                           |
 | `poll.perfInterval`      | `30`          | Seconds between RTT/cache samples                            |
+| `poll.listStatsInterval` | `60`          | Seconds between Which list blocked-query totals              |
 | `feed.pageSize`          | `20`          | Log entries fetched per poll cycle                           |
 | `feed.maxEntries`        | `200`         | Maximum entries kept in the browser feed                     |
 | `top.limit`              | `20`          | Number of items in top domains/clients lists                 |
@@ -242,6 +243,12 @@ debug: true
 Debug lines are categorised (`[discovery]`, `[feed]`, `[stream]`, `[update]`, ...) so you can filter them easily.
 
 The browser console has its own toggle, independent of the backend setting. Run `Log.enable()` in the devtools console to turn on frontend debug output and `Log.disable()` to turn it off. The choice is stored in `localStorage` and survives reloads.
+
+## Which list
+
+The dashboard has a **Which list** card. Type a domain, or click **Which list** on a blocked Top Stats row, to see which configured block list matched. Technitium must have **Allow TXT Blocking Report** enabled. A name on more than one list shows every match, including a match on a parent name.
+
+The same card totals blocked queries currently stored in the query log, grouped by list. A query matched by more than one list is counted on each list. Totals refresh about every 60 seconds while at least one dashboard viewer is connected, and they pause when the dashboard is idle. Set `poll.listStatsInterval` to change that interval. This needs a query log app. The count covers the log window Technitium is keeping, often about the last hour, not the Last Week or Last Month ranges.
 
 ## Live feed
 

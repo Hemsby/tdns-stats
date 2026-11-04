@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Which list card on the dashboard. Look up a domain, or use the button on a blocked Top Stats row, to see which block list matched it via Technitium's Allow TXT Blocking Report. The same card totals blocked queries currently in the query log by list, counting a query on every list that matched it, and refreshes about every 60 seconds while a viewer is connected (`poll.listStatsInterval`). Secrets in block-list URLs (`api_token`, `token`, `key`, `secret`, `password`) are redacted before they reach the browser.
+
 ## [2.4.2] - 2026-11-04
 
 ### Fixed

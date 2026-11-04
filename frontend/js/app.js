@@ -254,6 +254,9 @@ const App = (() => {
         } else if (msg.type === 'viewer-count') {
             state.dashboardViewers = Math.max(0, Number(msg.data?.count) || 0);
             renderDashboardViewers();
+        } else if (msg.type === 'list-stats') {
+            state.listStats = msg.data;
+            renderListStats(msg.data);
         } else if (msg.type === 'range-dashboard') {
             const key = msg.server + ':' + msg.range;
             state.rangeCache[key] = msg.data;
@@ -1526,6 +1529,130 @@ const App = (() => {
         renderTopListItems(items, colorClass);
     }
 
+    function renderListStats(data) {
+        const el = document.getElementById('whichListStats');
+        if (!el) return;
+        if (!data) {
+            el.innerHTML = '<div class="which-list-empty">Counting blocked queries...</div>';
+            return;
+        }
+
+        const rows = [];
+        const lists = Array.isArray(data.lists) ? data.lists : [];
+        const extras = [];
+        if (data.unmatched?.hits) extras.push({ name: 'No list reported', hits: data.unmatched.hits, domains: data.unmatched.domains, dim: true });
+        if (data.unresolved?.hits) extras.push({ name: 'Lookup failed', hits: data.unresolved.hits, domains: data.unresolved.domains, dim: true });
+        const max = Math.max(1, ...lists.map(list => list.hits || 0), ...extras.map(list => list.hits || 0));
+
+        function row(list) {
+            const hits = list.hits || 0;
+            const pct = Math.max(hits ? 2 : 0, Math.round((hits / max) * 100));
+            const names = list.domains
+                ? ' · ' + fmtNum(list.domains) + (list.domains === 1 ? ' name' : ' names')
+                : '';
+            const title = list.url ? ' title="' + esc(list.url) + '"' : '';
+            return '<div class="which-list-stat-row' + (list.dim ? ' dim' : '') + '"' + title + '>' +
+                '<div class="which-list-stat-top"><span class="which-list-stat-name">' + esc(list.name || 'Block list') + '</span>' +
+                '<span class="which-list-stat-hits">' + fmtNum(hits) + esc(names) + '</span></div>' +
+                '<div class="which-list-stat-bar"><span style="width:' + pct + '%"></span></div></div>';
+        }
+
+        lists.forEach(list => rows.push(row(list)));
+        extras.forEach(list => rows.push(row(list)));
+
+        const when = data.updatedAt ? new Date(data.updatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
+        const refresh = data.refreshSeconds || 60;
+        let note = 'Each blocked query in the current log is counted on every list that matched it. Refreshes about every ' + refresh + ' seconds.';
+        if (data.truncated) note = 'Newest blocked queries only. ' + note;
+        const error = data.error ? '<div class="which-list-empty">' + esc(data.error) + '</div>' : '';
+        const body = rows.length
+            ? rows.join('')
+            : '<div class="which-list-empty">No blocked queries in the current log.</div>';
+
+        el.innerHTML =
+            '<div class="which-list-stats-head"><span>' + fmtNum(data.blockedQueries || 0) + ' blocked queries in the log</span>' +
+            (when ? '<span class="which-list-stats-time">' + esc(when) + '</span>' : '') + '</div>' +
+            error + body +
+            '<div class="which-list-stats-note">' + esc(note) + '</div>';
+    }
+
+    function whichListServer() {
+        const effective = state.topServer === FOLLOW_CHART_KEY ? state.chartServer : state.topServer;
+        return effective || 'all';
+    }
+
+    function renderWhichList(data) {
+        const body = document.getElementById('whichListBody');
+        if (!body) return;
+        const badge = !data.ok
+            ? '<span class="status-badge neutral">Lookup failed</span>'
+            : data.blocked
+                ? '<span class="status-badge danger">Blocked</span>'
+                : '<span class="status-badge success">Not blocked</span>';
+        const head = '<div class="which-list-status"><span class="which-list-domain">' + esc(data.domain || '') + '</span>' + badge + '</div>';
+        let items;
+        if (!data.ok) {
+            items = '<div class="which-list-empty">' + esc(data.error || 'Lookup failed') + '</div>';
+        } else if (Array.isArray(data.lists) && data.lists.length) {
+            items = data.lists.map(list => {
+                const url = list.url ? '<div class="which-list-url">' + esc(list.url) + '</div>' : '';
+                const match = list.matchedDomain
+                    ? '<div class="which-list-match">Matched ' + esc(list.matchedDomain) + '</div>'
+                    : '';
+                return '<div class="which-list-item"><div class="which-list-name">' + esc(list.name || 'Block list') + '</div>' + url + match + '</div>';
+            }).join('');
+        } else {
+            items = '<div class="which-list-empty">No block list reported. The name is not blocked, or Allow TXT Blocking Report is off.</div>';
+        }
+        body.innerHTML = head + items;
+    }
+
+    async function lookupWhichList(domain) {
+        const input = document.getElementById('whichListInput');
+        const body = document.getElementById('whichListBody');
+        const card = document.getElementById('whichListCard');
+        const cleaned = String(domain || '').trim().toLowerCase();
+        if (input) input.value = cleaned;
+        if (card) card.scrollIntoView({ block: 'nearest' });
+        if (!body) return;
+        if (!cleaned) {
+            body.innerHTML = '<div class="which-list-empty">Enter a domain to see which block list matched.</div>';
+            return;
+        }
+        body.innerHTML = '<div class="which-list-empty">Looking up which list...</div>';
+        try {
+            const url = '/api/which-list?domain=' + encodeURIComponent(cleaned) + '&server=' + encodeURIComponent(whichListServer());
+            const res = await fetch(url, { cache: 'no-store' });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Lookup failed');
+            renderWhichList(data);
+        } catch (e) {
+            body.innerHTML = '<div class="which-list-empty">' + esc(e.message || 'Lookup failed') + '</div>';
+        }
+    }
+
+    function initWhichList() {
+        const form = document.getElementById('whichListForm');
+        if (form && form.dataset.ready !== 'true') {
+            form.dataset.ready = 'true';
+            form.addEventListener('submit', e => {
+                e.preventDefault();
+                lookupWhichList(document.getElementById('whichListInput')?.value || '');
+            });
+        }
+        const content = document.getElementById('topContent');
+        if (content && content.dataset.whichListBound !== 'true') {
+            content.dataset.whichListBound = 'true';
+            content.addEventListener('click', e => {
+                const btn = e.target.closest('.which-list-btn');
+                if (!btn) return;
+                e.preventDefault();
+                const domain = btn.dataset.domain;
+                if (domain) lookupWhichList(domain);
+            });
+        }
+    }
+
     function renderTopListItems(items, colorClass) {
         const container = document.getElementById('topContent');
         if (!container) return;
@@ -1549,11 +1676,15 @@ const App = (() => {
         container.innerHTML = items.map((item, i) => {
             const pct = Math.round((item.hits / max) * 100);
             const sub = item.domain ? '<span class="top-sub">' + esc(item.domain) + '</span>' : '';
+            const whichList = colorClass === 'red'
+                ? '<button type="button" class="which-list-btn" data-domain="' + esc(item.name) + '">Which list</button>'
+                : '';
             return '<div class="top-row" role="option" tabindex="0" data-name="' + esc(item.name) + '">' +
                 '<span class="top-rank">' + (i + 1) + '</span>' +
                 '<span class="top-name">' + esc(item.name) + '</span>' +
                 sub +
                 '<div class="top-bar-wrap"><div class="top-bar"><div class="top-bar-fill ' + colorClass + '" style="width:' + pct + '%"></div></div></div>' +
+                whichList +
                 '<span class="top-hits">' + fmtNum(item.hits) + '</span>' +
                 '</div>';
         }).join('');
@@ -2117,6 +2248,7 @@ const App = (() => {
             },
         });
         Selection.setTab(state.topTab);
+        initWhichList();
         fetch('/api/config')
             .then(r => r.json())
             .then(cfg => {

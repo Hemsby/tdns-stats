@@ -413,4 +413,133 @@ async function resolveBlockedDomain(server, domain) {
     };
 }
 
-module.exports = { getSessionInfo, getDashboard, getSettings, getClusterState, getClusterNodeState, listQueryLogApps, discoverQueryLogsApp, getQueryLogs, getRttSample, getCacheMaxEntries, getTopStats, listCache, resolveBlockedDomain, certVerificationHint };
+
+function redactListUrl(url) {
+    return String(url || '').replace(/([?&](?:api_token|token|key|secret|password)=)[^&\s]+/gi, '$1redacted');
+}
+
+function listDisplayName(url, source) {
+    const src = String(source || '').toLowerCase();
+    const raw = String(url || '');
+    const lower = raw.toLowerCase();
+    if (!raw) {
+        if (src === 'blocked-zone') return 'Manual block list';
+        if (src === 'advanced-blocking-app') return 'Advanced Blocking';
+        return 'Block list';
+    }
+    if (lower.includes('multi-onlydomains')) return 'Hagezi Multi';
+    if (lower.includes('tif-onlydomains')) return 'Hagezi TIF';
+    if (lower.includes('doh-onlydomains')) return 'Hagezi DoH';
+    if (lower.includes('stevenblack')) {
+        return lower.includes('/porn/') ? 'StevenBlack (ads + porn)' : 'StevenBlack';
+    }
+    if (lower.includes('qfeeds') || lower.includes('malware_domains')) return 'Qfeeds malware';
+    try {
+        const parsed = new URL(raw);
+        const seg = parsed.pathname.split('/').filter(Boolean).pop();
+        return seg || parsed.hostname || 'Block list';
+    } catch (_) {
+        const seg = raw.split('/').filter(Boolean).pop();
+        return seg || 'Block list';
+    }
+}
+
+function cleanTxt(text) {
+    let value = String(text || '').trim();
+    if (value.length >= 2 && value.startsWith('"') && value.endsWith('"')) {
+        value = value.slice(1, -1);
+    }
+    return value.replace(/\\"/g, '"').trim();
+}
+
+function collectTxtStrings(obj, output = []) {
+    if (obj == null || typeof obj !== 'object') return output;
+    if (Array.isArray(obj)) {
+        for (const item of obj) collectTxtStrings(item, output);
+        return output;
+    }
+    const typeRaw = obj.Type ?? obj.type ?? obj.recordType ?? obj.dnsResourceRecordType;
+    const type = String(typeRaw || '').toUpperCase();
+    if (type === 'TXT' || type === '16') {
+        const rdata = obj.RDATA || obj.Rdata || obj.rdata || obj.Data || obj.data;
+        const strings = rdata && (rdata.CharacterStrings || rdata.characterStrings);
+        let text = '';
+        if (Array.isArray(strings) && strings.length) text = strings.map(part => String(part)).join('');
+        else if (rdata && typeof rdata.Text === 'string') text = rdata.Text;
+        else if (rdata && typeof rdata.text === 'string') text = rdata.text;
+        else if (typeof rdata === 'string') text = rdata;
+        else if (typeof obj.text === 'string') text = obj.text;
+        else if (typeof obj.value === 'string') text = obj.value;
+        text = cleanTxt(text);
+        if (text) output.push(text);
+        return output;
+    }
+    for (const value of Object.values(obj)) {
+        if (value && typeof value === 'object') collectTxtStrings(value, output);
+    }
+    return output;
+}
+
+function parseBlockingReport(text) {
+    const out = {};
+    for (const part of String(text || '').split(';')) {
+        const idx = part.indexOf('=');
+        if (idx <= 0) continue;
+        const key = part.slice(0, idx).trim().toLowerCase();
+        const value = part.slice(idx + 1).trim();
+        if (key) out[key] = value;
+    }
+    return out;
+}
+
+function isBlockingReport(parsed) {
+    const source = String(parsed.source || '').toLowerCase();
+    if (source === 'block-list-zone' || source === 'blocked-zone' || source === 'advanced-blocking-app') return true;
+    return Boolean(parsed.blocklisturl || parsed.blocklist);
+}
+
+async function resolveTxtBlockingReport(server, domain) {
+    const response = await dnsClientResolve(server, domain, 'TXT');
+    const texts = [...new Set(collectTxtStrings(response).map(text => text.trim()).filter(Boolean))];
+    const seen = new Set();
+    const lists = [];
+    for (const text of texts) {
+        const parsed = parseBlockingReport(text);
+        if (!isBlockingReport(parsed)) continue;
+        const source = parsed.source || '';
+        const url = parsed.blocklisturl || parsed.blocklist || '';
+        const safeUrl = url ? redactListUrl(url) : '';
+        const key = source.toLowerCase() + '|' + safeUrl;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        lists.push({
+            name: listDisplayName(url, source),
+            source,
+            url: safeUrl,
+            matchedDomain: parsed.domain || domain,
+        });
+    }
+    return { lists };
+}
+
+
+async function listBlockedQueries(server, pageSize = 1000, maxPages = 20) {
+    if (!server.queryLogsApp) return { entries: [], truncated: false };
+    const name = encodeURIComponent(server.queryLogsApp.name);
+    const classPath = encodeURIComponent(server.queryLogsApp.classPath);
+    const entries = [];
+    let truncated = false;
+    for (let page = 1; page <= maxPages; page++) {
+        const res = await apiGet(server, 'api/logs/query?name=' + name + '&classPath=' + classPath
+            + '&responseType=Blocked&entriesPerPage=' + pageSize
+            + '&pageNumber=' + page + '&descendingOrder=true');
+        const batch = Array.isArray(res?.entries) ? res.entries : [];
+        entries.push(...batch);
+        const totalPages = Number(res?.totalPages) || page;
+        if (batch.length === 0 || page >= totalPages) break;
+        if (page === maxPages) truncated = true;
+    }
+    return { entries, truncated };
+}
+
+module.exports = { getSessionInfo, getDashboard, getSettings, getClusterState, getClusterNodeState, listQueryLogApps, discoverQueryLogsApp, getQueryLogs, getRttSample, getCacheMaxEntries, getTopStats, listCache, resolveBlockedDomain, resolveTxtBlockingReport, listBlockedQueries, certVerificationHint };

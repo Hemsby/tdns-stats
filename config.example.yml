@@ -39,6 +39,7 @@ poll:
   feedInterval: 3 # seconds between live feed polls
   topInterval: 30 # seconds between top-list refreshes
   perfInterval: 30 # seconds between RTT/cache performance samples
+  listStatsInterval: 60 # seconds between Which list blocked-query totals (only while a viewer is connected)
 
 feed:
   pageSize: 20 # log entries fetched per poll cycle (Limit: 500)
