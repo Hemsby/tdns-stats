@@ -467,6 +467,12 @@ const SHRESHTA_NRD = [
     ['nrd-1m', '1 month'],
 ];
 
+const PHISHING_ARMY_FILES = [
+    'phishing-army-domains.txt',
+    'phishing_army_blocklist.txt',
+    'phishing_army_blocklist_extended.txt',
+];
+
 const NAMED_LISTS = [
     { source: 'blocked-zone', name: 'Manual block list' },
     { source: 'advanced-blocking-app', name: 'Advanced Blocking' },
@@ -494,6 +500,9 @@ const NAMED_LISTS = [
     { url: 'stevenblack', name: 'StevenBlack' },
 
     { url: ['qfeeds', 'malware_domains'], name: 'Qfeeds malware' },
+
+    ...PHISHING_ARMY_FILES.map(file => ({ url: file, name: 'Phishing Army' })),
+    { url: 'antimalwaredomains.txt', name: 'DandelionSprout Anti-Malware' },
 ];
 
 function listDisplayName(url, source) {
