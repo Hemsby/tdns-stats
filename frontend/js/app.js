@@ -1609,7 +1609,7 @@ const App = (() => {
         el.innerHTML =
             '<div class="block-list-stats-head"><span>' + fmtNum(data.blockedQueries || 0) + ' blocked queries counted' +
             (data.skippedLoopback ? ', ' + fmtNum(data.skippedLoopback) + ' skipped from 127.0.0.1 and ::1' : '') + '</span>' +
-            (when ? '<span class="block-list-stats-time">' + esc(when) + '</span>' : '') + '</div>' +
+            (when ? '<span class="block-list-stats-time">Counted at ' + esc(when) + '</span>' : '') + '</div>' +
             (lists.length || extras.length
                 ? '<div class="block-list-stat-cols"><span>Block list</span><span>Queries · distinct names</span></div>'
                 : '') +
