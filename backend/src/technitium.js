@@ -611,6 +611,13 @@ async function mapPool(items, limit, fn) {
     await Promise.all(Array.from({ length: workers }, () => run()));
 }
 
+const BLOCKED_LOG_LIMITS = {
+    pageSize: 1000,
+    maxPages: 20,
+    maxNames: 1000,
+    windowMs: 60 * 60 * 1000,
+};
+
 const blockedLogRuns = new Map();
 
 async function collectBlockedLog(serverList) {
@@ -622,6 +629,12 @@ async function collectBlockedLog(serverList) {
             blockedQueries: 0,
             domains: 0,
             skippedLoopback: 0,
+            limited: { names: 0, hits: 0 },
+            lookupLimit: BLOCKED_LOG_LIMITS.maxNames,
+            pagesFetched: 0,
+            totalPages: 0,
+            totalEntries: 0,
+            entriesScanned: 0,
             lookups: 0,
             cacheHits: 0,
             lists: [],
@@ -641,10 +654,20 @@ async function collectBlockedLog(serverList) {
     let unresolvedHits = 0;
     const unresolvedNames = new Set();
     let truncated = false;
+    let limitedNames = 0;
+    let limitedHits = 0;
+    let pagesFetched = 0;
+    let totalPages = 0;
+    let totalEntries = 0;
+    let entriesScanned = 0;
 
     for (const server of servers) {
         const page = await listBlockedQueries(server);
         if (page.truncated) truncated = true;
+        pagesFetched += page.pagesFetched;
+        totalPages += page.totalPages;
+        totalEntries += page.totalEntries;
+        entriesScanned += page.entries.length;
         const counts = new Map();
         for (const entry of page.entries) {
             if (isLoopbackClient(clientIp(entry))) {
@@ -659,8 +682,13 @@ async function collectBlockedLog(serverList) {
             }
             counts.set(name, (counts.get(name) || 0) + 1);
         }
-        for (const name of counts.keys()) allNames.add(name);
-        await mapPool([...counts.keys()], 4, async (name) => {
+        const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+        const selected = ranked.slice(0, BLOCKED_LOG_LIMITS.maxNames);
+        const skippedByLimit = ranked.slice(selected.length);
+        limitedNames += skippedByLimit.length;
+        limitedHits += skippedByLimit.reduce((sum, [, hits]) => sum + hits, 0);
+        for (const [name] of ranked) allNames.add(name);
+        await mapPool(selected.map(([name]) => name), 4, async (name) => {
             const hitCount = counts.get(name);
             const found = await listsForDomain(server, name, stats);
             if (!found.ok) {
@@ -695,6 +723,12 @@ async function collectBlockedLog(serverList) {
         blockedQueries,
         domains: allNames.size,
         skippedLoopback,
+        limited: { names: limitedNames, hits: limitedHits },
+        lookupLimit: BLOCKED_LOG_LIMITS.maxNames,
+        pagesFetched,
+        totalPages,
+        totalEntries,
+        entriesScanned,
         lookups: stats.lookups,
         cacheHits: stats.cacheHits,
         lists: [...totals.values()].map(({ names, ...row }) => ({ ...row, domains: names.size })).sort((a, b) => b.hits - a.hits || a.name.localeCompare(b.name)),
@@ -720,23 +754,37 @@ function summarizeBlockedLog(serverList) {
 }
 
 
-async function listBlockedQueries(server, pageSize = 1000, maxPages = 20) {
-    if (!server.queryLogsApp) return { entries: [], truncated: false };
+async function listBlockedQueries(server) {
+    if (!server.queryLogsApp) {
+        return { entries: [], pagesFetched: 0, totalPages: 0, totalEntries: 0, truncated: false };
+    }
     const name = encodeURIComponent(server.queryLogsApp.name);
     const classPath = encodeURIComponent(server.queryLogsApp.classPath);
+    const end = new Date();
+    const start = new Date(end.getTime() - BLOCKED_LOG_LIMITS.windowMs);
+    const startStr = start.toISOString();
+    const endStr = end.toISOString();
     const entries = [];
     let truncated = false;
-    for (let page = 1; page <= maxPages; page++) {
-        const res = await apiGet(server, 'api/logs/query?name=' + name + '&classPath=' + classPath
-            + '&responseType=Blocked&entriesPerPage=' + pageSize
-            + '&pageNumber=' + page + '&descendingOrder=true');
+    let pagesFetched = 0;
+    let totalPages = 0;
+    let totalEntries = null;
+    for (let page = 1; page <= BLOCKED_LOG_LIMITS.maxPages; page++) {
+        let path = 'api/logs/query?name=' + name + '&classPath=' + classPath
+            + '&responseType=Blocked&entriesPerPage=' + BLOCKED_LOG_LIMITS.pageSize
+            + '&pageNumber=' + page + '&descendingOrder=true';
+        path += '&start=' + encodeURIComponent(startStr);
+        path += '&end=' + encodeURIComponent(endStr);
+        const res = await apiGet(server, path);
         const batch = Array.isArray(res?.entries) ? res.entries : [];
         entries.push(...batch);
-        const totalPages = Number(res?.totalPages) || page;
+        pagesFetched++;
+        totalPages = Number(res?.totalPages) || page;
+        if (totalEntries === null) totalEntries = Number(res?.totalEntries) || 0;
         if (batch.length === 0 || page >= totalPages) break;
-        if (page === maxPages) truncated = true;
+        if (page === BLOCKED_LOG_LIMITS.maxPages) truncated = true;
     }
-    return { entries, truncated };
+    return { entries, pagesFetched, totalPages, totalEntries: totalEntries || 0, truncated };
 }
 
 module.exports = { getSessionInfo, getDashboard, getSettings, getClusterState, getClusterNodeState, listQueryLogApps, discoverQueryLogsApp, getQueryLogs, getRttSample, getCacheMaxEntries, getTopStats, listCache, resolveBlockedDomain, resolveTxtBlockingReport, listsFromBlockedResolve, listsForDomain, listBlockedQueries, summarizeBlockedLog, isLoopbackClient, listsFromReportTexts, redactListUrl, redactSecrets, certVerificationHint };

@@ -1635,10 +1635,27 @@ const App = (() => {
         }
 
         const when = data.updatedAt ? new Date(data.updatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
-        const looked = 'This click sent ' + fmtNum(data.lookups || 0) + (data.lookups === 1 ? ' lookup' : ' lookups')
-            + (data.cacheHits ? ' and reused ' + fmtNum(data.cacheHits) + ' cached names.' : '.');
-        let note = looked;
-        if (data.truncated) note = 'Newest blocked queries only. ' + note;
+        const exact = n => Number(n || 0).toLocaleString();
+        const looked = 'This click sent ' + exact(data.lookups) + (data.lookups === 1 ? ' lookup' : ' lookups')
+            + (data.cacheHits ? ' and reused ' + exact(data.cacheHits) + ' cached names.' : '.');
+        const extraNotes = [];
+        if (data.truncated) {
+            const scanned = data.entriesScanned || 0;
+            const total = data.totalEntries || 0;
+            const pages = data.totalPages > 0
+                ? ' (' + exact(data.pagesFetched) + ' of ' + exact(data.totalPages) + ' pages)'
+                : '';
+            extraNotes.push(total
+                ? 'Showing newest ' + exact(scanned) + ' of ' + exact(total) + ' blocked entries' + pages + '.'
+                : 'Showing the newest blocked queries only.');
+        }
+        if (data.limited?.names) {
+            const limit = data.lookupLimit || 0;
+            extraNotes.push('Top ' + exact(limit) + ' names by hits; ' + exact(data.limited.names)
+                + (data.limited.names === 1 ? ' name / ' : ' names / ') + exact(data.limited.hits)
+                + (data.limited.hits === 1 ? ' hit excluded.' : ' hits excluded.'));
+        }
+        const note = looked;
         const body = lists.length || extras.length
             ? lists.map(row).join('') + extras.map(row).join('')
             : '<div class="block-list-empty">No blocked queries in the current log.</div>';
@@ -1651,7 +1668,8 @@ const App = (() => {
                 ? '<div class="block-list-stat-cols"><span>Block list</span><span>Queries · distinct names</span></div>'
                 : '') +
             body +
-            '<div class="block-list-stats-note">' + esc(note) + '</div>';
+            '<div class="block-list-stats-note">' + esc(note)
+            + (extraNotes.length ? '<br>' + esc(extraNotes.join(' ')) : '') + '</div>';
     }
 
     async function countBlockLists() {
