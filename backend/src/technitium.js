@@ -611,7 +611,7 @@ async function mapPool(items, limit, fn) {
     await Promise.all(Array.from({ length: workers }, () => run()));
 }
 
-const BLOCKED_LOG_LIMITS = {
+const COUNT_LIST_LIMITS = {
     pageSize: 1000,
     maxPages: 20,
     maxNames: 1000,
@@ -630,7 +630,7 @@ async function collectBlockedLog(serverList) {
             domains: 0,
             skippedLoopback: 0,
             limited: { names: 0, hits: 0 },
-            lookupLimit: BLOCKED_LOG_LIMITS.maxNames,
+            lookupLimit: COUNT_LIST_LIMITS.maxNames,
             pagesFetched: 0,
             totalPages: 0,
             totalEntries: 0,
@@ -683,7 +683,7 @@ async function collectBlockedLog(serverList) {
             counts.set(name, (counts.get(name) || 0) + 1);
         }
         const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
-        const selected = ranked.slice(0, BLOCKED_LOG_LIMITS.maxNames);
+        const selected = ranked.slice(0, COUNT_LIST_LIMITS.maxNames);
         const skippedByLimit = ranked.slice(selected.length);
         limitedNames += skippedByLimit.length;
         limitedHits += skippedByLimit.reduce((sum, [, hits]) => sum + hits, 0);
@@ -724,7 +724,7 @@ async function collectBlockedLog(serverList) {
         domains: allNames.size,
         skippedLoopback,
         limited: { names: limitedNames, hits: limitedHits },
-        lookupLimit: BLOCKED_LOG_LIMITS.maxNames,
+        lookupLimit: COUNT_LIST_LIMITS.maxNames,
         pagesFetched,
         totalPages,
         totalEntries,
@@ -761,7 +761,7 @@ async function listBlockedQueries(server) {
     const name = encodeURIComponent(server.queryLogsApp.name);
     const classPath = encodeURIComponent(server.queryLogsApp.classPath);
     const end = new Date();
-    const start = new Date(end.getTime() - BLOCKED_LOG_LIMITS.windowMs);
+    const start = new Date(end.getTime() - COUNT_LIST_LIMITS.windowMs);
     const startStr = start.toISOString();
     const endStr = end.toISOString();
     const entries = [];
@@ -769,9 +769,9 @@ async function listBlockedQueries(server) {
     let pagesFetched = 0;
     let totalPages = 0;
     let totalEntries = null;
-    for (let page = 1; page <= BLOCKED_LOG_LIMITS.maxPages; page++) {
+    for (let page = 1; page <= COUNT_LIST_LIMITS.maxPages; page++) {
         let path = 'api/logs/query?name=' + name + '&classPath=' + classPath
-            + '&responseType=Blocked&entriesPerPage=' + BLOCKED_LOG_LIMITS.pageSize
+            + '&responseType=Blocked&entriesPerPage=' + COUNT_LIST_LIMITS.pageSize
             + '&pageNumber=' + page + '&descendingOrder=true';
         path += '&start=' + encodeURIComponent(startStr);
         path += '&end=' + encodeURIComponent(endStr);
@@ -782,7 +782,7 @@ async function listBlockedQueries(server) {
         totalPages = Number(res?.totalPages) || page;
         if (totalEntries === null) totalEntries = Number(res?.totalEntries) || 0;
         if (batch.length === 0 || page >= totalPages) break;
-        if (page === BLOCKED_LOG_LIMITS.maxPages) truncated = true;
+        if (page === COUNT_LIST_LIMITS.maxPages) truncated = true;
     }
     return { entries, pagesFetched, totalPages, totalEntries: totalEntries || 0, truncated };
 }
