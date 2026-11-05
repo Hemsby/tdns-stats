@@ -1597,10 +1597,9 @@ const App = (() => {
         }
 
         const when = data.updatedAt ? new Date(data.updatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
-        const skipped = data.skippedLoopback ? ' Skipped ' + fmtNum(data.skippedLoopback) + ' queries from 127.0.0.1 or ::1.' : '';
-        const looked = ' This click sent ' + fmtNum(data.lookups || 0) + ' lookups'
+        const looked = 'This click sent ' + fmtNum(data.lookups || 0) + (data.lookups === 1 ? ' lookup' : ' lookups')
             + (data.cacheHits ? ' and reused ' + fmtNum(data.cacheHits) + ' cached names.' : '.');
-        let note = 'Counted once from the current log.' + skipped + looked + ' Built-in lists count every match. The Advanced Blocking app names only the first list.';
+        let note = looked;
         if (data.truncated) note = 'Newest blocked queries only. ' + note;
         const body = lists.length || extras.length
             ? lists.map(row).join('') + extras.map(row).join('')
