@@ -966,7 +966,10 @@ const App = (() => {
         } else if (node.reportError) {
             note = '<div class="blocked-list-note">' + esc(node.reportError) + '</div>';
         } else if (lists.length) {
-            note = '<div class="blocked-list-note">Built-in lists can name every match. The Advanced Blocking app reports only the first matching list.</div>';
+            // The Note row above already covers Advanced Blocking results.
+            if (!fromAdvancedBlocking) {
+                note = '<div class="blocked-list-note">Built-in lists can name every match. The Advanced Blocking app reports only the first matching list.</div>';
+            }
         } else if (hasBlockedMeta) {
             note = '<div class="blocked-list-note">' + (node.txtBlockingReport === false
                 ? 'Allow TXT Blocking Report is off, so built-in block lists cannot be reported.'
