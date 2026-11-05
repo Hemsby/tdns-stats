@@ -1564,7 +1564,7 @@ const App = (() => {
         renderTopListItems(items, colorClass);
     }
 
-    function renderBlockListTotals(data) {
+    function renderBlockListTotals(data, scope) {
         const el = document.getElementById('blockListTotals');
         if (!el) return;
         if (!data) {
@@ -1608,7 +1608,7 @@ const App = (() => {
         el.innerHTML =
             '<div class="block-list-stats-head"><span>' + fmtNum(data.blockedQueries || 0) + ' blocked queries counted' +
             (data.skippedLoopback ? ', ' + fmtNum(data.skippedLoopback) + ' skipped from 127.0.0.1 and ::1' : '') + '</span>' +
-            (when ? '<span class="block-list-stats-time">Counted at ' + esc(when) + '</span>' : '') + '</div>' +
+            (when ? '<span class="block-list-stats-time">Counted for ' + esc(scope || 'the cluster') + ' at ' + esc(when) + '</span>' : '') + '</div>' +
             (lists.length || extras.length
                 ? '<div class="block-list-stat-cols"><span>Block list</span><span>Queries · distinct names</span></div>'
                 : '') +
@@ -1619,7 +1619,11 @@ const App = (() => {
     async function countBlockLists() {
         const btn = document.getElementById('countBlockListsBtn');
         const el = document.getElementById('blockListTotals');
-        const server = document.getElementById('domainSearchServerSelect')?.value || state.domainSearchServer || 'all';
+        const serverSelect = document.getElementById('domainSearchServerSelect');
+        const server = serverSelect?.value || state.domainSearchServer || 'all';
+        const scope = server === 'all' || server === CLUSTER_KEY
+            ? 'the cluster'
+            : (serverSelect?.selectedOptions?.[0]?.text || server);
         if (btn) btn.disabled = true;
         if (el) el.innerHTML = '<div class="block-list-empty">Reading the blocked log...</div>';
         try {
@@ -1629,7 +1633,7 @@ const App = (() => {
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Count failed');
-            renderBlockListTotals(data);
+            renderBlockListTotals(data, scope);
         } catch (e) {
             if (el) el.innerHTML = '<div class="block-list-empty">' + esc(e.message || 'Count failed') + '</div>';
         } finally {
