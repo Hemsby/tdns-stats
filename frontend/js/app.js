@@ -1572,7 +1572,26 @@ const App = (() => {
         const scope = server === 'all' || server === CLUSTER_KEY
             ? 'the cluster'
             : (serverSelect?.selectedOptions?.[0]?.text || server);
-        return { server, scope };
+        const key = scope === 'the cluster' ? CLUSTER_KEY : server;
+        return { server, scope, key };
+    }
+
+    // Each server (and the cluster) keeps its own last count, so switching the
+    // search selection shows that scope's result, or a blank card if it has none.
+    const blockListResults = new Map();
+    let blockListCounting = null;
+
+    function showBlockListResult() {
+        const el = document.getElementById('blockListTotals');
+        if (!el) return;
+        const { key } = blockListScope();
+        if (blockListCounting === key) {
+            el.innerHTML = '<div class="block-list-empty">Reading the blocked log...</div>';
+            return;
+        }
+        const stored = blockListResults.get(key);
+        if (stored) renderBlockListTotals(stored.data, stored.scope);
+        else el.innerHTML = 'Not counted yet.';
     }
 
     function updateBlockListScope() {
@@ -1580,6 +1599,7 @@ const App = (() => {
         if (!pill) return;
         const { scope } = blockListScope();
         pill.textContent = scope === 'the cluster' ? 'Cluster' : scope;
+        showBlockListResult();
     }
 
     function renderBlockListTotals(data, scope) {
@@ -1636,10 +1656,10 @@ const App = (() => {
 
     async function countBlockLists() {
         const btn = document.getElementById('countBlockListsBtn');
-        const el = document.getElementById('blockListTotals');
-        const { server, scope } = blockListScope();
+        const { server, scope, key } = blockListScope();
         if (btn) btn.disabled = true;
-        if (el) el.innerHTML = '<div class="block-list-empty">Reading the blocked log...</div>';
+        blockListCounting = key;
+        showBlockListResult();
         try {
             const res = await fetch('/api/block-list-stats?server=' + encodeURIComponent(server), {
                 method: 'POST',
@@ -1647,11 +1667,13 @@ const App = (() => {
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Count failed');
-            renderBlockListTotals(data, scope);
+            blockListResults.set(key, { data, scope });
         } catch (e) {
-            if (el) el.innerHTML = '<div class="block-list-empty">' + esc(e.message || 'Count failed') + '</div>';
+            blockListResults.set(key, { data: { ok: false, error: e.message || 'Count failed' }, scope });
         } finally {
+            blockListCounting = null;
             if (btn) btn.disabled = false;
+            showBlockListResult();
         }
     }
 
