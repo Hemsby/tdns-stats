@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Cache & Blocked names the block lists that matched a domain. It uses the existing lookup and, only when that response has no block-list report, one TXT lookup. A name on more than one built-in list shows every match. The Advanced Blocking app reports only the first matching list.
+- Cache & Blocked has a Count lists button. It reads the current blocked query log once per click, skips queries from 127.0.0.1 and ::1, and does not poll. A name on two built-in lists is counted on both.
+
 ## [2.4.4] - 2026-11-04
 
 ### Fixed

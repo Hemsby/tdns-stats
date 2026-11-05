@@ -12,7 +12,7 @@ const fetch     = require('node-fetch');
 const Poller    = require('./poller');
 const Updater   = require('./updater');
 const log       = require('./log');
-const { listQueryLogApps, discoverQueryLogsApp, getCacheMaxEntries, getSettings, listCache, resolveBlockedDomain } = require('./technitium');
+const { listQueryLogApps, discoverQueryLogsApp, getCacheMaxEntries, getSettings, listCache, resolveBlockedDomain, listsFromBlockedResolve, listsForDomain, summarizeBlockedLog, redactListUrl } = require('./technitium');
 
 const PACKAGE = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf8'));
 const VERSION = PACKAGE.version;
@@ -104,6 +104,17 @@ function normalizeDomain(value) {
         .trim()
         .replace(/^\.+|\.+$/g, '')
         .toLowerCase();
+}
+
+function redactBlockedMeta(value) {
+    if (typeof value === 'string') return redactListUrl(value);
+    if (Array.isArray(value)) return value.map(redactBlockedMeta);
+    if (value && typeof value === 'object') {
+        const out = {};
+        for (const [key, item] of Object.entries(value)) out[key] = redactBlockedMeta(item);
+        return out;
+    }
+    return value;
 }
 
 function summarizeCache(data) {
@@ -348,7 +359,6 @@ async function start() {
                 res.write(`data: ${JSON.stringify({ type: 'top', server, data })}\n\n`);
             }
         }
-
         if (clients.size === 1) await poller.resume();
         if (!clients.has(res)) return;
 
@@ -469,7 +479,17 @@ async function start() {
                     const txtBlockingReport = typeof settings?.allowTxtBlockingReport === 'boolean'
                         ? settings.allowTxtBlockingReport
                         : null;
+                    let lists = listsFromBlockedResolve(data, domain);
+                    let reportError = null;
+                    // A and AAAA already carry the report on some servers. Ask once,
+                    // and only when that response did not name a list.
+                    if (!lists.length) {
+                        const found = await listsForDomain(blockedTarget, domain);
+                        if (!found.ok) reportError = 'The TXT blocking report could not be read.';
+                        else lists = Array.isArray(found.lists) ? found.lists : [];
+                    }
                     const isBlocked = Boolean(
+                        lists.length ||
                         (Array.isArray(data.records) && data.records.length > 0) ||
                         data.source ||
                         data.group ||
@@ -482,13 +502,15 @@ async function start() {
                         ok: true,
                         blocked: isBlocked,
                         txtBlockingReport,
-                        blockedMeta: {
+                        lists,
+                        reportError,
+                        blockedMeta: redactBlockedMeta({
                             source: data.source || data.extraText || undefined,
                             group: data.group || undefined,
                             parsed: data.parsed || {},
                             entries: Array.isArray(data.parsedEntries) ? data.parsedEntries : [],
                             raw: data.extraText || undefined,
-                        },
+                        }),
                     };
                 } catch (e) {
                     blockedSummary = {
@@ -511,6 +533,26 @@ async function start() {
             recordCount: results.reduce((sum, r) => sum + (r.recordCount || 0), 0),
             results,
         });
+    });
+
+    app.post('/api/block-list-stats', requireToken, async (req, res) => {
+        const serverName = String(req.query.server || 'all');
+        let targets = servers;
+        if (serverName !== 'all' && serverName !== CLUSTER_KEY) {
+            const server = servers.find(s => s.name === serverName);
+            if (!server) return res.status(404).json({ ok: false, error: 'Unknown server' });
+            targets = [server];
+        }
+
+        try {
+            const data = await summarizeBlockedLog(targets);
+            if (data.ok) {
+                console.log(`[block-list-stats] ${data.blockedQueries} blocked, ${data.lookups} lookups, ${data.skippedLoopback} loopback skipped`);
+            }
+            res.json(data);
+        } catch (_) {
+            res.status(502).json({ ok: false, error: 'The blocked query log could not be read.' });
+        }
     });
 
     app.get('/api/version', (req, res) => {
