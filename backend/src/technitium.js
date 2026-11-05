@@ -449,13 +449,18 @@ const HAGEZI_TIERS = [
     ['doh', 'HaGeZi DOH'],
 ];
 
-const HAGEZI_NRD_RANGES = [
-    ['nrd7.txt', '1-7'],
-    ['nrd14-8.txt', '8-14'],
-    ['nrd21-15.txt', '15-21'],
-    ['nrd28-22.txt', '22-28'],
-    ['nrd35-29.txt', '29-35'],
+const HAGEZI_NRD_ENDS = [
+    ['nrd7.txt', 7],
+    ['nrd14-8.txt', 14],
+    ['nrd21-15.txt', 21],
+    ['nrd28-22.txt', 28],
+    ['nrd35-29.txt', 35],
 ];
+
+function hageziNrdEnd(url) {
+    const match = String(url || '').toLowerCase().match(/(?:^|\/)nrd(\d+)(?:-\d+)?\.txt(?:[?#]|$)/);
+    return match ? Number(match[1]) : 0;
+}
 
 const SHRESHTA_NRD = [
     ['nrd-1w', '1 week'],
@@ -473,9 +478,9 @@ const NAMED_LISTS = [
     { url: 'spam-tlds-adblock-aggressive', name: 'HaGeZi Most Abused TLDs Aggressive' },
     { url: 'spam-tlds-adblock', name: 'HaGeZi Most Abused TLDs' },
 
-    ...HAGEZI_NRD_RANGES.map(([file, range]) => ({
+    ...HAGEZI_NRD_ENDS.map(([file, days]) => ({
         url: file,
-        name: `HaGeZi NRD (${range} days)`,
+        name: `HaGeZi NRD (${days} days)`,
     })),
     ...SHRESHTA_NRD.map(([file, range]) => ({
         url: file,
@@ -580,10 +585,13 @@ function listsFromReportTexts(texts, domain) {
         const key = source.toLowerCase() + '|' + safeUrl;
         if (seen.has(key)) continue;
         seen.add(key);
+        const nrdEnd = hageziNrdEnd(safeUrl);
         lists.push({
             name: listDisplayName(url, source),
             source,
             url: safeUrl,
+            group: nrdEnd ? 'hagezi-nrd' : '',
+            nrdEnd,
             matchedDomain: parsed.domain || domain,
         });
     }
@@ -766,16 +774,26 @@ async function collectBlockedLog(serverList) {
                 return;
             }
             for (const list of found.lists) {
-                const key = (list.source || '') + '|' + (list.url || '') + '|' + (list.name || '');
+                const key = list.group
+                    ? 'group|' + list.group
+                    : (list.source || '') + '|' + (list.url || '') + '|' + (list.name || '');
                 const row = totals.get(key) || {
                     name: list.name || 'Block list',
                     url: list.url || '',
+                    urls: new Set(),
                     source: list.source || '',
+                    group: list.group || '',
+                    nrdEnd: 0,
                     hits: 0,
                     names: new Set(),
                 };
                 row.hits += hitCount;
                 row.names.add(name);
+                if (list.url) row.urls.add(list.url);
+                if ((list.nrdEnd || 0) > row.nrdEnd) {
+                    row.nrdEnd = list.nrdEnd;
+                    row.name = list.name || row.name;
+                }
                 totals.set(key, row);
             }
         });
@@ -795,7 +813,11 @@ async function collectBlockedLog(serverList) {
         entriesScanned,
         lookups: stats.lookups,
         cacheHits: stats.cacheHits,
-        lists: [...totals.values()].map(({ names, ...row }) => ({ ...row, domains: names.size })).sort((a, b) => b.hits - a.hits || a.name.localeCompare(b.name)),
+        lists: [...totals.values()].map(({ names, urls, nrdEnd, group, ...row }) => ({
+            ...row,
+            url: urls.size ? [...urls].sort((a, b) => hageziNrdEnd(a) - hageziNrdEnd(b)).join(', ') : row.url,
+            domains: names.size,
+        })).sort((a, b) => b.hits - a.hits || a.name.localeCompare(b.name)),
         unmatched: { hits: unmatchedHits, domains: unmatchedNames.size },
         unresolved: { hits: unresolvedHits, domains: unresolvedNames.size },
         truncated,
