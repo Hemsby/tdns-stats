@@ -1588,15 +1588,16 @@ const App = (() => {
             const names = list.domains
                 ? ' · ' + fmtNum(list.domains) + (list.domains === 1 ? ' name' : ' names')
                 : '';
+            const queries = fmtNum(hits) + (hits === 1 ? ' query' : ' queries');
             const title = list.url ? ' title="' + esc(list.url) + '"' : '';
             return '<div class="block-list-stat-row' + (list.dim ? ' dim' : '') + '"' + title + '>' +
                 '<div class="block-list-stat-top"><span class="block-list-stat-name">' + esc(list.name || 'Block list') + '</span>' +
-                '<span class="block-list-stat-hits">' + fmtNum(hits) + esc(names) + '</span></div>' +
+                '<span class="block-list-stat-hits">' + esc(queries + names) + '</span></div>' +
                 '<div class="block-list-stat-bar"><span style="width:' + pct + '%"></span></div></div>';
         }
 
         const when = data.updatedAt ? new Date(data.updatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
-        const skipped = data.skippedLoopback ? ' Skipped ' + fmtNum(data.skippedLoopback) + ' from 127.0.0.1 or ::1.' : '';
+        const skipped = data.skippedLoopback ? ' Skipped ' + fmtNum(data.skippedLoopback) + ' queries from 127.0.0.1 or ::1.' : '';
         const looked = ' This click sent ' + fmtNum(data.lookups || 0) + ' lookups'
             + (data.cacheHits ? ' and reused ' + fmtNum(data.cacheHits) + ' cached names.' : '.');
         let note = 'Counted once from the current log.' + skipped + looked + ' Built-in lists count every match. The Advanced Blocking app names only the first list.';
@@ -1606,8 +1607,12 @@ const App = (() => {
             : '<div class="block-list-empty">No blocked queries in the current log.</div>';
 
         el.innerHTML =
-            '<div class="block-list-stats-head"><span>' + fmtNum(data.blockedQueries || 0) + ' blocked queries in the log</span>' +
+            '<div class="block-list-stats-head"><span>' + fmtNum(data.blockedQueries || 0) + ' blocked queries counted' +
+            (data.skippedLoopback ? ', ' + fmtNum(data.skippedLoopback) + ' skipped from 127.0.0.1 and ::1' : '') + '</span>' +
             (when ? '<span class="block-list-stats-time">' + esc(when) + '</span>' : '') + '</div>' +
+            (lists.length || extras.length
+                ? '<div class="block-list-stat-cols"><span>Block list</span><span>Queries · distinct names</span></div>'
+                : '') +
             body +
             '<div class="block-list-stats-note">' + esc(note) + '</div>';
     }

@@ -1222,6 +1222,7 @@ main { position: relative; z-index: 1; min-height: 0; flex: 1; }
 .block-list-totals { display: flex; flex-direction: column; gap: 8px; }
 .block-list-stats-head { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; font-size: 12px; }
 .block-list-stats-time { color: var(--text-dim); }
+.block-list-stat-cols { display: flex; justify-content: space-between; gap: 8px; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-dim); }
 .block-list-stat-row { display: flex; flex-direction: column; gap: 3px; }
 .block-list-stat-top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
 .block-list-stat-name { font-size: 13px; font-weight: 700; min-width: 0; }
