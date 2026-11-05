@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [2.5.1] - 2026-11-05
+
+### Changed
+
+- Count lists now covers the last hour of blocked queries and looks up at most the 1,000 most blocked names per server, so each click sends a bounded number of lookups.
+- Count lists notes under the results when the page limit or name limit cut the count short.
+
 ## [2.5.0] - 2026-11-05
 
 ### Added

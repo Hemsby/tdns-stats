@@ -1636,7 +1636,7 @@ const App = (() => {
 
         const when = data.updatedAt ? new Date(data.updatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
         const exact = n => Number(n || 0).toLocaleString();
-        const looked = 'This click sent ' + exact(data.lookups) + (data.lookups === 1 ? ' lookup' : ' lookups')
+        const looked = 'Last hour. This click sent ' + exact(data.lookups) + (data.lookups === 1 ? ' lookup' : ' lookups')
             + (data.cacheHits ? ' and reused ' + exact(data.cacheHits) + ' cached names.' : '.');
         const extraNotes = [];
         if (data.truncated) {
@@ -1654,10 +1654,9 @@ const App = (() => {
                 + (data.limited.names === 1 ? ' name / ' : ' names / ') + exact(data.limited.hits)
                 + (data.limited.hits === 1 ? ' hit excluded.' : ' hits excluded.'));
         }
-        const note = looked;
         const body = lists.length || extras.length
             ? lists.map(row).join('') + extras.map(row).join('')
-            : '<div class="block-list-empty">No blocked queries in the current log.</div>';
+            : '<div class="block-list-empty">No blocked queries in the last hour.</div>';
 
         el.innerHTML =
             '<div class="block-list-stats-head"><span>' + fmtNum(data.blockedQueries || 0) + ' blocked queries counted' +
@@ -1667,7 +1666,7 @@ const App = (() => {
                 ? '<div class="block-list-stat-cols"><span>Block list</span><span>Queries · distinct names</span></div>'
                 : '') +
             body +
-            '<div class="block-list-stats-note">' + esc(note)
+            '<div class="block-list-stats-note">' + esc(looked)
             + (extraNotes.length ? '<br>' + esc(extraNotes.join(' ')) : '') + '</div>';
     }
 

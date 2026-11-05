@@ -556,16 +556,17 @@ function clientIp(entry) {
     return entry?.clientIpAddress || entry?.clientIP || entry?.clientAddress || entry?.client || '';
 }
 
+const BLOCK_REPORT_CACHE_MAX = 5000;
 const blockReportCache = new Map();
 
 function rememberBlockReport(key, entry) {
-    if (blockReportCache.size > 2000) {
+    if (blockReportCache.size > BLOCK_REPORT_CACHE_MAX) {
         const now = Date.now();
         for (const [cachedKey, cached] of blockReportCache) {
             if (cached.expires <= now) blockReportCache.delete(cachedKey);
         }
     }
-    if (blockReportCache.size > 2000) {
+    if (blockReportCache.size > BLOCK_REPORT_CACHE_MAX) {
         const oldest = blockReportCache.keys().next().value;
         if (oldest !== undefined) blockReportCache.delete(oldest);
     }
