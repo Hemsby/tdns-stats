@@ -425,27 +425,69 @@ function redactListUrl(url) {
     return redactSecrets(String(url || ''));
 }
 
+const STEVENBLACK_VARIANTS = [
+    'fakenews', 'gambling', 'porn', 'social',
+    'fakenews-gambling', 'fakenews-porn', 'fakenews-social',
+    'gambling-porn', 'gambling-social', 'porn-social',
+    'fakenews-gambling-porn', 'fakenews-gambling-social',
+    'fakenews-porn-social', 'gambling-porn-social',
+    'fakenews-gambling-porn-social',
+];
+
+const HAGEZI_TIERS = [
+    ['light', 'HaGeZi Multi LIGHT'],
+    ['multi', 'HaGeZi Multi NORMAL'],
+    ['pro.plus.mini', 'HaGeZi Multi PRO++ Mini'],
+    ['pro.plus', 'HaGeZi Multi PRO++'],
+    ['pro.mini', 'HaGeZi Multi PRO Mini'],
+    ['pro', 'HaGeZi Multi PRO'],
+    ['ultimate.mini', 'HaGeZi Multi ULTIMATE Mini'],
+    ['ultimate', 'HaGeZi Multi ULTIMATE'],
+    ['tif.medium', 'HaGeZi TIF Medium'],
+    ['tif.mini', 'HaGeZi TIF Mini'],
+    ['tif', 'HaGeZi TIF'],
+    ['doh', 'HaGeZi DOH'],
+];
+
+const HAGEZI_NRD_RANGES = [
+    ['nrd7.txt', '1-7'],
+    ['nrd14-8.txt', '8-14'],
+    ['nrd21-15.txt', '15-21'],
+    ['nrd28-22.txt', '22-28'],
+    ['nrd35-29.txt', '29-35'],
+];
+
+const SHRESHTA_NRD = [
+    ['nrd-1w', '1 week'],
+    ['nrd-1m', '1 month'],
+];
+
 const NAMED_LISTS = [
     { source: 'blocked-zone', name: 'Manual block list' },
     { source: 'advanced-blocking-app', name: 'Advanced Blocking' },
 
-    { url: 'multi-onlydomains', name: 'HaGeZi Multi NORMAL' },
-    { url: 'light-onlydomains', name: 'HaGeZi Multi LIGHT' },
-    { url: 'pro.plus.mini-onlydomains', name: 'HaGeZi Multi PRO++ Mini' },
-    { url: 'pro.plus-onlydomains', name: 'HaGeZi Multi PRO++' },
-    { url: 'pro.mini-onlydomains', name: 'HaGeZi Multi PRO Mini' },
-    { url: 'pro-onlydomains', name: 'HaGeZi Multi PRO' },
-    { url: 'ultimate.mini-onlydomains', name: 'HaGeZi Multi ULTIMATE Mini' },
-    { url: 'ultimate-onlydomains', name: 'HaGeZi Multi ULTIMATE' },
-    { url: 'tif.medium-onlydomains', name: 'HaGeZi TIF Medium' },
-    { url: 'tif.mini-onlydomains', name: 'HaGeZi TIF Mini' },
-    { url: 'tif-onlydomains', name: 'HaGeZi TIF' },
-    { url: 'doh-onlydomains', name: 'HaGeZi DOH' },
+    { url: ['oisd', 'big'], name: 'OISD Big' },
+    { url: ['oisd', 'nsfw'], name: 'OISD NSFW' },
+
+    ...HAGEZI_TIERS.map(([tier, name]) => ({ url: `${tier}-onlydomains`, name })),
     { url: 'spam-tlds-adblock-aggressive', name: 'HaGeZi Most Abused TLDs Aggressive' },
     { url: 'spam-tlds-adblock', name: 'HaGeZi Most Abused TLDs' },
 
-    { url: ['stevenblack', '/porn/'], name: 'StevenBlack (ads + porn)' },
+    ...HAGEZI_NRD_RANGES.map(([file, range]) => ({
+        url: file,
+        name: `HaGeZi NRD (${range} days)`,
+    })),
+    ...SHRESHTA_NRD.map(([file, range]) => ({
+        url: file,
+        name: `Shreshta NRD (${range})`,
+    })),
+
+    ...STEVENBLACK_VARIANTS.map(variant => ({
+        url: `/alternates/${variant}/hosts`,
+        name: `StevenBlack (ads + ${variant.split('-').join(' + ')})`,
+    })),
     { url: 'stevenblack', name: 'StevenBlack' },
+
     { url: ['qfeeds', 'malware_domains'], name: 'Qfeeds malware' },
 ];
 
