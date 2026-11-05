@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [2.5.2] - 2026-11-05
+
+### Changed
+
+- Count lists now shows readable names for every built-in Technitium Quick Add block list, including the StevenBlack and OISD sets, HaGeZi Multi and TIF tiers, DOH variants, Most Abused TLDs, and HaGeZi and Shreshta NRD range lists.
+- The Count lists scope pill now distinguishes Cluster, All servers, and a single server; the counted-at line and card note use the same wording.
+
 ## [2.5.1] - 2026-11-05
 
 ### Changed
