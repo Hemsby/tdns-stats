@@ -155,7 +155,6 @@ class Poller {
         this._pollLongRangeData();
     }
 
-
     getState() {
         return this.state;
     }

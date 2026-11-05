@@ -634,12 +634,12 @@ async function collectBlockedLog(serverList) {
     const totals = new Map();
     const stats = { lookups: 0, cacheHits: 0 };
     let blockedQueries = 0;
-    let domains = 0;
+    const allNames = new Set();
     let skippedLoopback = 0;
     let unmatchedHits = 0;
-    let unmatchedDomains = 0;
+    const unmatchedNames = new Set();
     let unresolvedHits = 0;
-    let unresolvedDomains = 0;
+    const unresolvedNames = new Set();
     let truncated = false;
 
     for (const server of servers) {
@@ -659,18 +659,18 @@ async function collectBlockedLog(serverList) {
             }
             counts.set(name, (counts.get(name) || 0) + 1);
         }
-        domains += counts.size;
+        for (const name of counts.keys()) allNames.add(name);
         await mapPool([...counts.keys()], 4, async (name) => {
             const hitCount = counts.get(name);
             const found = await listsForDomain(server, name, stats);
             if (!found.ok) {
                 unresolvedHits += hitCount;
-                unresolvedDomains++;
+                unresolvedNames.add(name);
                 return;
             }
             if (!found.lists.length) {
                 unmatchedHits += hitCount;
-                unmatchedDomains++;
+                unmatchedNames.add(name);
                 return;
             }
             for (const list of found.lists) {
@@ -680,10 +680,10 @@ async function collectBlockedLog(serverList) {
                     url: list.url || '',
                     source: list.source || '',
                     hits: 0,
-                    domains: 0,
+                    names: new Set(),
                 };
                 row.hits += hitCount;
-                row.domains += 1;
+                row.names.add(name);
                 totals.set(key, row);
             }
         });
@@ -693,13 +693,13 @@ async function collectBlockedLog(serverList) {
         ok: true,
         updatedAt: new Date().toISOString(),
         blockedQueries,
-        domains,
+        domains: allNames.size,
         skippedLoopback,
         lookups: stats.lookups,
         cacheHits: stats.cacheHits,
-        lists: [...totals.values()].sort((a, b) => b.hits - a.hits || a.name.localeCompare(b.name)),
-        unmatched: { hits: unmatchedHits, domains: unmatchedDomains },
-        unresolved: { hits: unresolvedHits, domains: unresolvedDomains },
+        lists: [...totals.values()].map(({ names, ...row }) => ({ ...row, domains: names.size })).sort((a, b) => b.hits - a.hits || a.name.localeCompare(b.name)),
+        unmatched: { hits: unmatchedHits, domains: unmatchedNames.size },
+        unresolved: { hits: unresolvedHits, domains: unresolvedNames.size },
         truncated,
         error: null,
     };
