@@ -1569,11 +1569,19 @@ const App = (() => {
     function blockListScope() {
         const serverSelect = document.getElementById('domainSearchServerSelect');
         const server = serverSelect?.value || state.domainSearchServer || 'all';
-        const scope = server === 'all' || server === CLUSTER_KEY
-            ? 'the cluster'
-            : (serverSelect?.selectedOptions?.[0]?.text || server);
-        const key = scope === 'the cluster' ? CLUSTER_KEY : server;
-        return { server, scope, key };
+        let label;
+        let scope;
+        if (server === CLUSTER_KEY && state.isCluster) {
+            label = 'Cluster';
+            scope = 'the cluster';
+        } else if (server === 'all' || server === CLUSTER_KEY) {
+            label = 'All servers';
+            scope = 'all servers';
+        } else {
+            label = serverSelect?.selectedOptions?.[0]?.text || server;
+            scope = label;
+        }
+        return { server, scope, label, key: server };
     }
 
     // Each server (and the cluster) keeps its own last count, so switching the
@@ -1597,8 +1605,8 @@ const App = (() => {
     function updateBlockListScope() {
         const pill = document.getElementById('blockListScopePill');
         if (!pill) return;
-        const { scope } = blockListScope();
-        pill.textContent = scope === 'the cluster' ? 'Cluster' : scope;
+        const { label } = blockListScope();
+        pill.textContent = label;
         showBlockListResult();
     }
 
