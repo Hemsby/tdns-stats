@@ -425,22 +425,43 @@ function redactListUrl(url) {
     return redactSecrets(String(url || ''));
 }
 
+const NAMED_LISTS = [
+    { source: 'blocked-zone', name: 'Manual block list' },
+    { source: 'advanced-blocking-app', name: 'Advanced Blocking' },
+
+    { url: 'multi-onlydomains', name: 'HaGeZi Multi NORMAL' },
+    { url: 'light-onlydomains', name: 'HaGeZi Multi LIGHT' },
+    { url: 'pro.plus.mini-onlydomains', name: 'HaGeZi Multi PRO++ Mini' },
+    { url: 'pro.plus-onlydomains', name: 'HaGeZi Multi PRO++' },
+    { url: 'pro.mini-onlydomains', name: 'HaGeZi Multi PRO Mini' },
+    { url: 'pro-onlydomains', name: 'HaGeZi Multi PRO' },
+    { url: 'ultimate.mini-onlydomains', name: 'HaGeZi Multi ULTIMATE Mini' },
+    { url: 'ultimate-onlydomains', name: 'HaGeZi Multi ULTIMATE' },
+    { url: 'tif.medium-onlydomains', name: 'HaGeZi TIF Medium' },
+    { url: 'tif.mini-onlydomains', name: 'HaGeZi TIF Mini' },
+    { url: 'tif-onlydomains', name: 'HaGeZi TIF' },
+    { url: 'doh-onlydomains', name: 'HaGeZi DOH' },
+    { url: 'spam-tlds-adblock-aggressive', name: 'HaGeZi Most Abused TLDs Aggressive' },
+    { url: 'spam-tlds-adblock', name: 'HaGeZi Most Abused TLDs' },
+
+    { url: ['stevenblack', '/porn/'], name: 'StevenBlack (ads + porn)' },
+    { url: 'stevenblack', name: 'StevenBlack' },
+    { url: ['qfeeds', 'malware_domains'], name: 'Qfeeds malware' },
+];
+
 function listDisplayName(url, source) {
     const src = String(source || '').toLowerCase();
     const raw = String(url || '');
     const lower = raw.toLowerCase();
     if (!raw) {
-        if (src === 'blocked-zone') return 'Manual block list';
-        if (src === 'advanced-blocking-app') return 'Advanced Blocking';
-        return 'Block list';
+        const bySource = NAMED_LISTS.find(rule => rule.source === src);
+        return bySource ? bySource.name : 'Block list';
     }
-    if (lower.includes('multi-onlydomains')) return 'Hagezi Multi';
-    if (lower.includes('tif-onlydomains')) return 'Hagezi TIF';
-    if (lower.includes('doh-onlydomains')) return 'Hagezi DoH';
-    if (lower.includes('stevenblack')) {
-        return lower.includes('/porn/') ? 'StevenBlack (ads + porn)' : 'StevenBlack';
+    for (const rule of NAMED_LISTS) {
+        if (!rule.url) continue;
+        const needles = Array.isArray(rule.url) ? rule.url : [rule.url];
+        if (needles.every(needle => lower.includes(needle))) return rule.name;
     }
-    if (lower.includes('qfeeds') || lower.includes('malware_domains')) return 'Qfeeds malware';
     try {
         const parsed = new URL(raw);
         const seg = parsed.pathname.split('/').filter(Boolean).pop();
