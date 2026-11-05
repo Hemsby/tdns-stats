@@ -502,7 +502,7 @@ const NAMED_LISTS = [
     { url: ['qfeeds', 'malware_domains'], name: 'Qfeeds malware' },
 
     ...PHISHING_ARMY_FILES.map(file => ({ url: file, name: 'Phishing Army' })),
-    { url: 'antimalwaredomains.txt', name: 'DandelionSprout Anti-Malware' },
+    { url: ['dandelionsprout', 'antimalwaredomains.txt'], name: 'DandelionSprout Anti-Malware' },
 ];
 
 function listDisplayName(url, source) {
