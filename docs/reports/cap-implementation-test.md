@@ -54,5 +54,5 @@ Live traffic uses 3 and 1 pages and well under 1,000 names, so the fixed limits 
 
 The bottom note in the **Block list totals** card shows the lookup count first, then a second line for any limit notes:
 
-- `Showing newest 20,000 of 63,000 blocked entries (20 of 63 pages).` when the page limit truncates.
+- `Showing newest 20,000 blocked entries (20 of 63 pages).` when the page limit truncates.
 - `Top 1,000 names by hits; 2,890 names / 2,890 hits excluded.` when the name cap skips names.

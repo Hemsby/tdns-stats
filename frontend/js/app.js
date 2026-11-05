@@ -1640,13 +1640,12 @@ const App = (() => {
             + (data.cacheHits ? ' and reused ' + exact(data.cacheHits) + ' cached names.' : '.');
         const extraNotes = [];
         if (data.truncated) {
-            const scanned = data.entriesScanned || 0;
-            const total = data.totalEntries || 0;
+            const scanned = data.blockedQueries || 0;
             const pages = data.totalPages > 0
                 ? ' (' + exact(data.pagesFetched) + ' of ' + exact(data.totalPages) + ' pages)'
                 : '';
-            extraNotes.push(total
-                ? 'Showing newest ' + exact(scanned) + ' of ' + exact(total) + ' blocked entries' + pages + '.'
+            extraNotes.push(scanned
+                ? 'Showing newest ' + exact(scanned) + ' blocked entries' + pages + '.'
                 : 'Showing the newest blocked queries only.');
         }
         if (data.limited?.names) {
