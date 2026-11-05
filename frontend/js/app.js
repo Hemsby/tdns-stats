@@ -966,9 +966,11 @@ const App = (() => {
         } else if (node.reportError) {
             note = '<div class="blocked-list-note">' + esc(node.reportError) + '</div>';
         } else if (lists.length) {
-            // The Note row above already covers Advanced Blocking results.
-            if (!fromAdvancedBlocking) {
-                note = '<div class="blocked-list-note">Built-in lists can name every match. The Advanced Blocking app reports only the first matching list.</div>';
+            // The Note row above already covers Advanced Blocking results, and manual
+            // entries have no overlap to explain. Only built-in URL lists get this line.
+            const hasUrlList = lists.some(list => String(list.source || '').trim().toLowerCase() === 'block-list-zone');
+            if (hasUrlList && !fromAdvancedBlocking) {
+                note = '<div class="blocked-list-note">Every built-in block list that matched is shown.</div>';
             }
         } else if (hasBlockedMeta) {
             note = '<div class="blocked-list-note">' + (node.txtBlockingReport === false
