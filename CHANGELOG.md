@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [2.5.3] - 2026-11-05
+
+### Changed
+
+- Count lists now supports showing readable names for two further blocklists, DandelionSprout's Anti-Malware list and Phishing Army's domains list.
+
 ## [2.5.2] - 2026-11-05
 
 ### Changed
