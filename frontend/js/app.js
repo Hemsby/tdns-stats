@@ -549,6 +549,7 @@ const App = (() => {
 
         populateSelect('domainSearchServerSelect', options, selected);
         state.domainSearchServer = selected;
+        updateBlockListScope();
 
         const sel = document.getElementById('domainSearchServerSelect');
         if (sel) sel.hidden = state.serverNames.length <= 1;
@@ -660,6 +661,7 @@ const App = (() => {
         });
         el('domainSearchServerSelect') && (el('domainSearchServerSelect').onchange = e => {
             state.domainSearchServer = e.target.value;
+            updateBlockListScope();
         });
         loadAndApplyFeedFilters();
 
@@ -1564,6 +1566,22 @@ const App = (() => {
         renderTopListItems(items, colorClass);
     }
 
+    function blockListScope() {
+        const serverSelect = document.getElementById('domainSearchServerSelect');
+        const server = serverSelect?.value || state.domainSearchServer || 'all';
+        const scope = server === 'all' || server === CLUSTER_KEY
+            ? 'the cluster'
+            : (serverSelect?.selectedOptions?.[0]?.text || server);
+        return { server, scope };
+    }
+
+    function updateBlockListScope() {
+        const pill = document.getElementById('blockListScopePill');
+        if (!pill) return;
+        const { scope } = blockListScope();
+        pill.textContent = scope === 'the cluster' ? 'Cluster' : scope;
+    }
+
     function renderBlockListTotals(data, scope) {
         const el = document.getElementById('blockListTotals');
         if (!el) return;
@@ -1619,11 +1637,7 @@ const App = (() => {
     async function countBlockLists() {
         const btn = document.getElementById('countBlockListsBtn');
         const el = document.getElementById('blockListTotals');
-        const serverSelect = document.getElementById('domainSearchServerSelect');
-        const server = serverSelect?.value || state.domainSearchServer || 'all';
-        const scope = server === 'all' || server === CLUSTER_KEY
-            ? 'the cluster'
-            : (serverSelect?.selectedOptions?.[0]?.text || server);
+        const { server, scope } = blockListScope();
         if (btn) btn.disabled = true;
         if (el) el.innerHTML = '<div class="block-list-empty">Reading the blocked log...</div>';
         try {
