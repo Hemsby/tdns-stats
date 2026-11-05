@@ -477,8 +477,6 @@ const NAMED_LISTS = [
     { source: 'blocked-zone', name: 'Manual block list' },
     { source: 'advanced-blocking-app', name: 'Advanced Blocking' },
 
-    { url: ['oisd', 'big'], name: 'OISD Big' },
-    { url: ['oisd', 'nsfw'], name: 'OISD NSFW' },
 
     ...HAGEZI_TIERS.map(([tier, name]) => ({ url: `${tier}-onlydomains`, name })),
     { url: 'spam-tlds-adblock-aggressive', name: 'HaGeZi Most Abused TLDs Aggressive' },
@@ -499,9 +497,12 @@ const NAMED_LISTS = [
     })),
     { url: 'stevenblack', name: 'StevenBlack' },
 
-    { url: ['qfeeds', 'malware_domains'], name: 'Qfeeds malware' },
-
     ...PHISHING_ARMY_FILES.map(file => ({ url: file, name: 'Phishing Army' })),
+
+    { url: ['oisd', 'big'], name: 'OISD Big' },
+    { url: ['oisd', 'nsfw'], name: 'OISD NSFW' },
+
+    { url: ['qfeeds', 'malware_domains'], name: 'Qfeeds malware' },
     { url: ['dandelionsprout', 'antimalwaredomains.txt'], name: 'DandelionSprout Anti-Malware' },
 ];
 
