@@ -2,6 +2,7 @@
 
 const CLUSTER_KEY = '__cluster';
 const FOLLOW_CHART_KEY = '__follow_chart';
+const TOP_BLOCKLIST_ICON = '<svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor" aria-hidden="true"><path d="M8 1.5 2.5 3.4v4.2c0 3.1 2.2 5.8 5.5 7 3.3-1.2 5.5-3.9 5.5-7V3.4L8 1.5z"/></svg>';
 
 const App = (() => {
     const state = {
@@ -756,6 +757,149 @@ const App = (() => {
         if (blockedSection) blockedSection.innerHTML = '';
         // optionally reset server select to 'all'
         if (serverSel) { serverSel.value = state.domainSearchServer || 'all'; syncCustomSelect('domainSearchServerSelect'); }
+    }
+
+    let topBlockListPopover = null;
+    let topBlockListPopoverButton = null;
+    let topBlockListPopoverTimer = null;
+
+    function clearTopPopoverTimer() {
+        if (topBlockListPopoverTimer) clearTimeout(topBlockListPopoverTimer);
+        topBlockListPopoverTimer = null;
+    }
+
+    function closeTopBlockListPopover() {
+        clearTopPopoverTimer();
+        if (topBlockListPopoverButton) {
+            topBlockListPopoverButton.removeEventListener('mouseleave', scheduleCloseTopBlockListPopover);
+            topBlockListPopoverButton.classList.remove('top-row-action-open');
+            topBlockListPopoverButton = null;
+        }
+        if (!topBlockListPopover) return;
+        topBlockListPopover.remove();
+        topBlockListPopover = null;
+        document.removeEventListener('pointerdown', handleTopPopoverDismiss, true);
+        document.removeEventListener('keydown', handleTopPopoverDismiss, true);
+        window.removeEventListener('resize', closeTopBlockListPopover);
+        window.removeEventListener('scroll', handleTopPopoverScroll, true);
+    }
+
+    function scheduleCloseTopBlockListPopover() {
+        clearTopPopoverTimer();
+        topBlockListPopoverTimer = setTimeout(closeTopBlockListPopover, 220);
+    }
+
+    function handleTopPopoverScroll(e) {
+        if (topBlockListPopover?.contains(e.target)) return;
+        closeTopBlockListPopover();
+    }
+
+    function handleTopPopoverDismiss(e) {
+        if (e.type === 'keydown') {
+            if (e.key !== 'Escape') return;
+            e.preventDefault();
+            e.stopPropagation();
+        } else if (topBlockListPopover?.contains(e.target) || e.target.closest?.('.top-row-action')) {
+            return;
+        }
+        closeTopBlockListPopover();
+    }
+
+    function positionTopBlockListPopover(button, el) {
+        const rect = button.getBoundingClientRect();
+        const pad = 8;
+        const width = el.offsetWidth;
+        const height = el.offsetHeight;
+        const left = Math.max(pad, Math.min(rect.right - width, window.innerWidth - width - pad));
+        let top = rect.bottom + 6;
+        if (top + height > window.innerHeight - pad) top = Math.max(pad, rect.top - height - 6);
+        el.style.left = Math.round(left) + 'px';
+        el.style.top = Math.round(top) + 'px';
+    }
+
+    async function showBlockListsFromTop(button, domain) {
+        const name = String(domain || '').trim();
+        if (!name) return;
+
+        if (topBlockListPopover) {
+            const same = topBlockListPopover.dataset.domain === name;
+            closeTopBlockListPopover();
+            if (same) return;
+        }
+
+        const effectiveServer = state.topServer === FOLLOW_CHART_KEY ? state.chartServer : state.topServer;
+        const sel = document.getElementById('domainSearchServerSelect');
+        const allowed = sel ? Array.from(sel.options).map(option => option.value) : [];
+        let target = effectiveServer || 'all';
+        if (allowed.length && !allowed.includes(target)) target = state.isCluster ? CLUSTER_KEY : 'all';
+
+        const el = document.createElement('div');
+        el.className = 'block-list-popover';
+        el.dataset.domain = name;
+        el.setAttribute('role', 'dialog');
+        el.setAttribute('aria-label', 'Blocklists for ' + name);
+        el.style.visibility = 'hidden';
+        document.body.appendChild(el);
+        topBlockListPopover = el;
+        topBlockListPopoverButton = button;
+        button.classList.add('top-row-action-open');
+        const setContent = html => {
+            el.style.visibility = 'hidden';
+            el.innerHTML = html;
+            const title = el.querySelector('.block-list-popover-title');
+            if (title) {
+                const needed = title.scrollWidth + 26;
+                el.style.width = Math.min(needed, window.innerWidth - 16) + 'px';
+            } else {
+                el.style.width = '';
+            }
+            positionTopBlockListPopover(button, el);
+            el.style.visibility = '';
+        };
+        document.addEventListener('pointerdown', handleTopPopoverDismiss, true);
+        document.addEventListener('keydown', handleTopPopoverDismiss, true);
+        window.addEventListener('resize', closeTopBlockListPopover);
+        window.addEventListener('scroll', handleTopPopoverScroll, true);
+        if (window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
+            button.addEventListener('mouseleave', scheduleCloseTopBlockListPopover);
+            el.addEventListener('mouseenter', clearTopPopoverTimer);
+            el.addEventListener('mouseleave', scheduleCloseTopBlockListPopover);
+        }
+
+        try {
+            const url = '/api/cache/search?domain=' + encodeURIComponent(name) + '&server=' + encodeURIComponent(target) + '&blocked=1';
+            const res = await fetch(url, { cache: 'no-store' });
+            const data = await res.json();
+            if (!res.ok) throw new Error('Lookup failed.');
+            if (topBlockListPopover !== el) return;
+
+            const summary = data.blockedSummary;
+            const lists = Array.isArray(summary?.lists) ? summary.lists : [];
+            const names = [...new Set(lists.map(list => String(list.name || '').trim()).filter(Boolean))];
+            if (!summary || !summary.ok || !names.length) {
+                setContent('<div class="block-list-popover-title">Lookup failed.</div>');
+            } else {
+                setContent('<div class="block-list-popover-title">Appears on the following blocklist(s):</div>' +
+                    '<div class="block-list-popover-names">' + names.map(listName => '<div class="block-list-popover-name">- ' + esc(listName) + '</div>').join('') + '</div>');
+            }
+        } catch {
+            if (topBlockListPopover !== el) return;
+            setContent('<div class="block-list-popover-title">Lookup failed.</div>');
+        }
+    }
+
+    function initTopBlockListActions() {
+        const content = document.getElementById('topContent');
+        if (!content || content.dataset.ready === 'true') return;
+        content.dataset.ready = 'true';
+        content.addEventListener('click', e => {
+            const btn = e.target.closest('.top-row-action');
+            if (!btn) return;
+            e.preventDefault();
+            e.stopPropagation();
+            const row = btn.closest('.top-row');
+            showBlockListsFromTop(btn, btn.dataset.name || row?.dataset.name || '');
+        });
     }
 
     async function searchDomainCache() {
@@ -1711,46 +1855,110 @@ const App = (() => {
         });
     }
 
+    function createTopRow() {
+        const row = document.createElement('div');
+        row.className = 'top-row';
+        row.setAttribute('role', 'option');
+        row.tabIndex = 0;
+        row.innerHTML =
+            '<span class="top-rank"></span>' +
+            '<span class="top-name"></span>' +
+            '<div class="top-bar-wrap"><div class="top-bar"><div class="top-bar-fill"></div></div></div>' +
+            '<span class="top-hits"></span>';
+        return row;
+    }
+
+    function updateTopRow(row, item, index, colorClass, max) {
+        if (row.dataset.name !== item.name) row.dataset.name = item.name;
+        row.querySelector('.top-rank').textContent = index + 1;
+        row.querySelector('.top-name').textContent = item.name;
+
+        let sub = row.querySelector('.top-sub');
+        if (item.domain) {
+            if (!sub) {
+                sub = document.createElement('span');
+                sub.className = 'top-sub';
+                row.querySelector('.top-name').after(sub);
+            }
+            if (sub.textContent !== item.domain) sub.textContent = item.domain;
+        } else if (sub) {
+            sub.remove();
+        }
+
+        const pct = Math.round((item.hits / max) * 100);
+        const fill = row.querySelector('.top-bar-fill');
+        const fillClass = 'top-bar-fill ' + colorClass;
+        if (fill.className !== fillClass) fill.className = fillClass;
+        if (fill.style.width !== pct + '%') fill.style.width = pct + '%';
+
+        const hits = row.querySelector('.top-hits');
+        const hitsText = fmtNum(item.hits);
+        if (hits.textContent !== hitsText) hits.textContent = hitsText;
+
+        let btn = row.querySelector('.top-row-action');
+        if (state.topTab === 'blocked') {
+            if (!btn) {
+                btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'top-row-action';
+                btn.innerHTML = TOP_BLOCKLIST_ICON;
+                row.insertBefore(btn, hits);
+            }
+            row.classList.add('top-row-actionable');
+            if (btn.dataset.name !== item.name) btn.dataset.name = item.name;
+            const label = 'Show blocklist(s) for ' + item.name;
+            if (btn.title !== label) btn.title = label;
+            if (btn.getAttribute('aria-label') !== label) btn.setAttribute('aria-label', label);
+        } else {
+            if (btn) btn.remove();
+            row.classList.remove('top-row-actionable');
+        }
+    }
+
     function renderTopListItems(items, colorClass) {
         const container = document.getElementById('topContent');
         if (!container) return;
 
-        // Stats updates replace the whole list, which would drop keyboard focus
-        // mid-navigation. Remember the focused row and restore it afterwards.
         const rowsBefore = Array.from(container.querySelectorAll('.top-row'));
-        const activeRow = container.contains(document.activeElement)
-            ? document.activeElement.closest('.top-row')
-            : null;
+        const activeEl = container.contains(document.activeElement) ? document.activeElement : null;
+        const activeRow = activeEl ? activeEl.closest('.top-row') : null;
+        const activeWasAction = Boolean(activeEl && activeEl.closest('.top-row-action'));
         const activeIndex = activeRow ? rowsBefore.indexOf(activeRow) : -1;
         const activeName = activeRow ? activeRow.dataset.name : null;
         const scrollTop = container.scrollTop;
 
         if (!items.length) {
-            container.innerHTML = '<div class="no-data">No data yet</div>';
+            if (!container.querySelector('.no-data')) container.innerHTML = '<div class="no-data">No data yet</div>';
+            container.scrollTop = scrollTop;
             return;
         }
 
+        container.querySelector('.no-data')?.remove();
+
         const max = items[0]?.hits || 1;
-        container.innerHTML = items.map((item, i) => {
-            const pct = Math.round((item.hits / max) * 100);
-            const sub = item.domain ? '<span class="top-sub">' + esc(item.domain) + '</span>' : '';
-            return '<div class="top-row" role="option" tabindex="0" data-name="' + esc(item.name) + '">' +
-                '<span class="top-rank">' + (i + 1) + '</span>' +
-                '<span class="top-name">' + esc(item.name) + '</span>' +
-                sub +
-                '<div class="top-bar-wrap"><div class="top-bar"><div class="top-bar-fill ' + colorClass + '" style="width:' + pct + '%"></div></div></div>' +
-                '<span class="top-hits">' + fmtNum(item.hits) + '</span>' +
-                '</div>';
-        }).join('');
+        const byName = new Map(rowsBefore.map(row => [row.dataset.name, row]));
+        const desired = items.map((item, i) => {
+            const row = byName.get(item.name) || createTopRow();
+            updateTopRow(row, item, i, colorClass, max);
+            return row;
+        });
+
+        rowsBefore.forEach(row => { if (!desired.includes(row)) row.remove(); });
+        desired.forEach((row, i) => {
+            const current = container.children[i];
+            if (current !== row) container.insertBefore(row, current || null);
+        });
 
         Selection.applyToRows();
-
         container.scrollTop = scrollTop;
-        if (activeRow) {
+
+        if (activeRow && !container.contains(document.activeElement)) {
             const rowsAfter = Array.from(container.querySelectorAll('.top-row'));
-            const next = rowsAfter.find(row => row.dataset.name === activeName) ||
-                rowsAfter[activeIndex];
-            if (next) next.focus({ preventScroll: true });
+            const next = rowsAfter.find(row => row.dataset.name === activeName) || rowsAfter[activeIndex];
+            if (next) {
+                const focusTarget = activeWasAction ? next.querySelector('.top-row-action') : next;
+                if (focusTarget) focusTarget.focus({ preventScroll: true });
+            }
         }
     }
 
@@ -2302,6 +2510,7 @@ const App = (() => {
             },
         });
         Selection.setTab(state.topTab);
+        initTopBlockListActions();
         initBlockListCount();
         fetch('/api/config')
             .then(r => r.json())

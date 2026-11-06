@@ -266,6 +266,8 @@ If you have more than one query log app installed, specify which one to use with
 
 Click a row in **Top Stats**, or a domain or client in the **Live Feed**, to filter the feed. Selections from different Top Stats tabs can be combined (e.g. a specific domain from a specific client). Ctrl/Cmd+click (long-press on mobile) toggles individual Top Stats rows and Shift+click selects a range; active filters appear as chips above the feed and can be removed individually or with **Clear All**.
 
+The **Blocked** tab of **Top Stats** also has a shield button on each row. Select it to see which block list(s) matched that domain in a popover, without leaving the dashboard.
+
 A domain / client value in the feed can be filtered even if it's not in Top Stats; the Top Stats selected count only includes filters which are present there.
 
 Filters only apply to entries already in the live feed, not the entire count shown by the Top Stats window, so a selected domain can show "No feed entries match the selected filters" until a matching query arrives.

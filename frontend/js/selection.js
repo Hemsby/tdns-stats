@@ -97,6 +97,7 @@ const Selection = (() => {
 
     function handleRowClick(e) {
         if (isClickSuppressed()) return;
+        if (e.target.closest('.top-row-action')) return;
         const row = e.target.closest('.top-row');
         if (!row) return;
         applyRow(row, {
@@ -156,6 +157,7 @@ const Selection = (() => {
     }
 
     function longPressAction(target) {
+        if (target.closest('.top-row-action')) return null;
         const row = target.closest('.top-row');
         if (!row) return null;
         const name = normalize(state.tab, row.dataset.name);
@@ -177,6 +179,8 @@ const Selection = (() => {
             }
             return;
         }
+
+        if (e.target.closest('.top-row-action')) return;
 
         const row = e.target.closest('.top-row');
         if (!row) return;
