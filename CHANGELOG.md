@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [2.6.0] - 2026-11-08
+
 ### Added
 
 - The Blocked tab of Top Stats shows a small shield button on each row; select it to see which blocklist(s) the domain appears on, without leaving the dashboard.
