@@ -867,7 +867,7 @@ const App = (() => {
         }
 
         try {
-            const url = '/api/cache/search?domain=' + encodeURIComponent(name) + '&server=' + encodeURIComponent(target) + '&blocked=1';
+            const url = '/api/cache/search?domain=' + encodeURIComponent(name) + '&server=' + encodeURIComponent(target) + '&blocked=1&cache=0';
             const res = await fetch(url, { cache: 'no-store' });
             const data = await res.json();
             if (!res.ok) throw new Error('Lookup failed.');
@@ -876,8 +876,10 @@ const App = (() => {
             const summary = data.blockedSummary;
             const lists = Array.isArray(summary?.lists) ? summary.lists : [];
             const names = [...new Set(lists.map(list => String(list.name || '').trim()).filter(Boolean))];
-            if (!summary || !summary.ok || !names.length) {
+            if (!summary || !summary.ok) {
                 setContent('<div class="block-list-popover-title">Lookup failed.</div>');
+            } else if (!names.length) {
+                setContent('<div class="block-list-popover-title">No block list reported.</div>');
             } else {
                 setContent('<div class="block-list-popover-title">Appears on the following blocklist(s):</div>' +
                     '<div class="block-list-popover-names">' + names.map(listName => '<div class="block-list-popover-name">- ' + esc(listName) + '</div>').join('') + '</div>');

@@ -426,6 +426,7 @@ async function start() {
         const domain = normalizeDomain(req.query.domain);
         const serverName = String(req.query.server || 'all');
         const blockedLookup = String(req.query.blocked || '').toLowerCase() === '1' || String(req.query.blocked || '').toLowerCase() === 'true';
+        const skipCacheListing = blockedLookup && String(req.query.cache || '') === '0';
         if (!rawDomain) return res.status(400).json({ error: 'Domain is required' });
         if (rawDomain.startsWith('.') || rawDomain.endsWith('.')) return res.status(400).json({ error: 'Domain cannot start or end with a dot' });
         if (rawDomain.includes('..')) return res.status(400).json({ error: 'Domain cannot contain consecutive dots' });
@@ -438,7 +439,8 @@ async function start() {
         const targets = getCacheSearchTargets(serverName, state);
         if (!targets || !targets.length) return res.status(404).json({ error: 'Unknown server' });
 
-        const results = await Promise.all(targets.map(async server => {
+        // The Top Stats popover only needs the blocked summary, so it skips the per-node cache listing.
+        const results = skipCacheListing ? [] : await Promise.all(targets.map(async server => {
             try {
                 const data = await listCache(server, domain);
                 const node = state.nodes?.[server.name] || {};
