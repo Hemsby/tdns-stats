@@ -583,11 +583,11 @@ function isBlockingReport(parsed) {
     return Boolean(parsed.blocklisturl || parsed.blocklist);
 }
 
-function listsFromReportTexts(texts, domain) {
+function listsFromReportStrings(reportStrings, domain) {
     const seen = new Set();
     const lists = [];
-    for (const text of texts) {
-        const parsed = parseBlockingReport(text);
+    for (const reportString of reportStrings) {
+        const parsed = parseBlockingReport(reportString);
         if (!isBlockingReport(parsed)) continue;
         const source = parsed.source || '';
         const url = parsed.blocklisturl || parsed.blocklist || '';
@@ -609,18 +609,18 @@ function listsFromReportTexts(texts, domain) {
 }
 
 function listsFromBlockedResolve(data, domain) {
-    const texts = [];
+    const reportStrings = [];
     for (const entry of data?.parsedEntries || []) {
-        if (entry?.raw) texts.push(entry.raw);
+        if (entry?.raw) reportStrings.push(entry.raw);
     }
-    if (data?.extraText) texts.push(data.extraText);
-    return listsFromReportTexts(texts, domain);
+    if (data?.extraText) reportStrings.push(data.extraText);
+    return listsFromReportStrings(reportStrings, domain);
 }
 
 async function resolveTxtBlockingReport(server, domain) {
     const response = await dnsClientResolve(server, domain, 'TXT');
-    const texts = [...new Set(collectTxtStrings(response).map(text => text.trim()).filter(Boolean))];
-    return { lists: listsFromReportTexts(texts, domain) };
+    const reportStrings = [...new Set(collectTxtStrings(response).map(reportString => reportString.trim()).filter(Boolean))];
+    return { lists: listsFromReportStrings(reportStrings, domain) };
 }
 
 function isLoopbackClient(ip) {
@@ -883,4 +883,4 @@ async function listBlockedQueries(server) {
     return { entries, pagesFetched, totalPages, totalEntries: totalEntries || 0, truncated };
 }
 
-module.exports = { getSessionInfo, getDashboard, getSettings, getClusterState, getClusterNodeState, listQueryLogApps, discoverQueryLogsApp, getQueryLogs, getRttSample, getCacheMaxEntries, getTopStats, listCache, resolveBlockedDomain, resolveTxtBlockingReport, listsFromBlockedResolve, listsForDomain, listBlockedQueries, summarizeBlockedLog, isLoopbackClient, listsFromReportTexts, redactListUrl, redactSecrets, certVerificationHint };
+module.exports = { getSessionInfo, getDashboard, getSettings, getClusterState, getClusterNodeState, listQueryLogApps, discoverQueryLogsApp, getQueryLogs, getRttSample, getCacheMaxEntries, getTopStats, listCache, resolveBlockedDomain, listsFromBlockedResolve, listsForDomain, summarizeBlockedLog, redactListUrl, certVerificationHint };

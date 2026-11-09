@@ -411,5 +411,5 @@ const Selection = (() => {
             .replace(/"/g, '&quot;');
     }
 
-    return { init, setTab, setTopPresence, applyToRows, getFilters, clearAll };
+    return { init, setTab, setTopPresence, applyToRows, getFilters };
 })();
