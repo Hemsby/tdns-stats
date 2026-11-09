@@ -637,7 +637,7 @@ main { position: relative; z-index: 1; min-height: 0; flex: 1; }
 }
 .top-row-action:focus-visible {
     opacity: 1; pointer-events: auto;
-    outline: 2px solid var(--accent-blue); outline-offset: 1px;
+    outline: 2px solid var(--accent-blue); outline-offset: 0;
 }
 .top-row.selected .top-row-action { color: var(--accent-blue); border-color: rgba(34,211,238,.35); }
 :root[data-theme="light"] .top-row.selected .top-row-action { border-color: rgba(37,99,235,.3); }
