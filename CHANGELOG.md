@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [2.6.1] - 2026-11-09
+
+### Fixed
+
+- The live feed no longer appears to be potentially stalled on one or more servers when older queries leave the log; entries here are now tracked by timestamp as well as row number.
+- Corrected a small visual issue on the Blocked tab of Top Stats, where the keyboard focus ring on the shield button could exceed the selection border on a filtered row.
+
 ## [2.6.0] - 2026-11-08
 
 ### Added
