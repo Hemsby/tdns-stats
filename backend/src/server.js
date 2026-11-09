@@ -303,6 +303,15 @@ async function start() {
     }
 
     app.get('/api/session', (req, res) => {
+        if (config.accessToken) {
+            const supplied = Buffer.from(req.get('X-Access-Token') || '');
+            const expected = Buffer.from(config.accessToken);
+            const valid = supplied.length === expected.length && crypto.timingSafeEqual(supplied, expected);
+            if (!valid) {
+                log.debug('[auth] session request rejected: invalid access token');
+                return res.status(401).json({ error: 'Unauthorized' });
+            }
+        }
         const token = crypto.randomBytes(16).toString('hex');
         sessions.add(token);
         res.setHeader('Set-Cookie', `${SESSION_COOKIE}=${signSession(token)}; HttpOnly; SameSite=Lax; Path=/`);
