@@ -74,7 +74,10 @@ const Feed = (() => {
 
         const deduped = [];
         for (const e of newEntries) {
-            const id = serverName + ':' + e.rowNumber;
+            // rowNumber is a position in the query log, not a stable ID: Technitium
+            // renumbers every row when it prunes old entries. Include the timestamp so
+            // a renumbered row is not mistaken for an already-seen one.
+            const id = serverName + ':' + e.timestamp + '|' + e.rowNumber;
             if (seen.has(id)) continue;
             seen.add(id);
             deduped.push({ ...e, _server: serverName, _time: new Date(e.timestamp).getTime() });
@@ -110,7 +113,7 @@ const Feed = (() => {
         for (let k = limit; k < merged.length; k++) {
             const s = merged[k]._server;
             const sSet = seenByServer[s];
-            if (sSet) sSet.delete(s + ':' + merged[k].rowNumber);
+            if (sSet) sSet.delete(s + ':' + merged[k].timestamp + '|' + merged[k].rowNumber);
         }
     }
 
@@ -198,7 +201,6 @@ const Feed = (() => {
 
             const row = document.createElement('div');
             row.className = 'feed-row ' + rowClass(e);
-            row.dataset.id = `${e._server}:${e.rowNumber}`;
 
             const ts    = formatTime(e.timestamp);
             const srvCls  = colorMap[e._server] ? ' ' + colorMap[e._server] : '';
