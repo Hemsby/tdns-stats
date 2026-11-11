@@ -1,5 +1,7 @@
 /* ================================================================
-   TECHNITIUM STATISTICS — DEEP OPS CONSOLE
+   TECHNITIUM STATISTICS, DEEP OPS CONSOLE
+   The stylesheet for the dashboard: the two themes, the layout, the
+   cards and the live feed.
    Typeface: Chakra Petch + JetBrains Mono
    ================================================================ */
 
@@ -109,7 +111,7 @@ body {
     display: none !important;
 }
 
-/* Subtle dot-grid texture in dark mode */
+/* Subtle dot-grid texture in dark mode. */
 body::before {
     content: '';
     position: fixed;
@@ -196,7 +198,7 @@ main {
     min-width: 0;
 }
 
-/* Topbar server pills: shrink with ellipsis on one line */
+/* Topbar server pills: shrink with ellipsis on one line. */
 .topbar-status .server-pill {
     white-space: nowrap;
     overflow: hidden;
@@ -230,7 +232,7 @@ main {
     font-family: 'JetBrains Mono', monospace;
     letter-spacing: 0.4px;
 }
-/* Main Page Tabs */
+/* Main page tabs */
 .main-tabs {
     display: flex;
     height: 100%;
@@ -307,7 +309,7 @@ main {
     position: relative;
     flex-shrink: 0;
 }
-/* The single visible trigger — shows only the active theme icon */
+/* The single visible trigger, which shows only the active theme icon. */
 .theme-trigger {
     display: flex;
     align-items: center;
@@ -541,7 +543,7 @@ main {
     color: var(--text);
 }
 
-/* Colored dots */
+/* Coloured dots */
 .tab-dot {
     display: inline-block;
     width: 6px;
@@ -1707,7 +1709,7 @@ main {
     font-size: 11px;
 }
 
-/* ---- Live Feed ---- */
+/* ---- Live feed ---- */
 .feed-stall-banner {
     margin: 0 12px 8px;
     padding: 5px 10px;
@@ -2082,7 +2084,7 @@ main {
     background: var(--accent-pur-bg);
     color: var(--accent-pur);
 }
-/* Refused responses (treated as authoritative refusal) */
+/* Refused responses (treated as authoritative refusal). */
 .feed-type.refused {
     background: var(--border-dim);
     color: var(--accent-slate);
@@ -2276,7 +2278,7 @@ main {
 @media (max-width: 900px) {
 }
 
-/* ---- Small Desktop: ≤1199px ---- */
+/* ---- Small desktop: ≤1199px ---- */
 @media (max-width: 1199px) {
     .brand-name {
         display: none;
@@ -2301,21 +2303,21 @@ main {
     }
 }
 
-/* ---- Tablet Landscape: ≤1024px ---- */
+/* ---- Tablet landscape: ≤1024px ---- */
 @media (max-width: 1024px) {
     .chart-wrap {
         height: 200px;
     }
 }
 
-/* ---- Compact Tablet: ≤900px ---- */
+/* ---- Compact tablet: ≤900px ---- */
 @media (max-width: 900px) {
     .version-info {
         display: none;
     }
 }
 
-/* ---- Tablet Portrait: ≤768px ---- */
+/* ---- Tablet portrait: ≤768px ---- */
 @media (max-width: 768px) {
     .navbar {
         position: static;
@@ -2386,7 +2388,7 @@ main {
     }
 }
 
-/* ---- Phone Landscape: ≤600px ---- */
+/* ---- Phone landscape: ≤600px ---- */
 @media (max-width: 600px) {
     .card-header {
         flex-direction: column;
@@ -2474,7 +2476,7 @@ main {
     }
 }
 
-/* ---- Phone Portrait: ≤480px ---- */
+/* ---- Phone portrait: ≤480px ---- */
 @media (max-width: 480px) {
     .content {
         padding: 8px;

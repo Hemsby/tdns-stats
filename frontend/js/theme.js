@@ -1,14 +1,16 @@
-// The theme on the page.
-//
-// This is a plain script in the head, not a module: modules are deferred and
-// would run after the page had already been painted, and the first paint has
-// to be in the right colours. app.js drives the switching and reads the same
-// values from here.
+/**
+ * The theme on the page.
+ *
+ * This is a plain script in the head, not a module: modules are deferred and
+ * would run after the page had already been painted, and the first paint has
+ * to be in the right colours. app.js drives the switching and reads the same
+ * values from here.
+ */
 (function () {
     const KEY = 'tdns-theme';
     const systemScheme = window.matchMedia('(prefers-color-scheme: light)');
 
-    // 'system' follows the operating system, so it resolves to a real theme.
+    /** The 'system' theme follows the operating system, so it resolves to a real theme. */
     function resolve(theme) {
         return theme === 'system' ? (systemScheme.matches ? 'light' : 'dark') : theme;
     }

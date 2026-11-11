@@ -13,7 +13,7 @@ npm run test:production   # code the dashboard is made of
 npm run test:mock         # mock Technitium that tests stand against
 ```
 
-One file at a time — one group of tests for one source file:
+One file at a time: one group of tests for one source file:
 
 ```sh
 node --test backend/tests/technitium.test.js
@@ -131,7 +131,7 @@ const mock = await createTechnitiumServer({
 | `cache` | `/api/cache/list`, as names the cache holds |
 | `dnsClient` | `/api/dnsClient/resolve` |
 | `resolve` | `/api/dnsClient/resolve`, as a function of the query |
-| `cluster` | the nodes this server belongs to, as `() => [{ name, state }]` — a request for another node is answered with that node's data, and a request for the cluster with the totals of every node |
+| `cluster` | the nodes this server belongs to, as `() => [{ name, state }]`, where a request for another node is answered with that node's data, and a request for the cluster with the totals of every node |
 
 Two methods on mock Technitium exist for the tests themselves:
 
@@ -212,8 +212,8 @@ node backend/tests/helpers/run-mock.js
 node backend/tests/helpers/run-mock.js --cluster 3 --seed 7
 ```
 
-It prints a whole `config.yml` to paste in — every option the server reads,
-with the mock servers filled in — then stays up until stopped.
+It prints a whole `config.yml` to paste in, with every option the server reads
+and the mock servers filled in, then stays up until stopped.
 
 ### By hand, with a config file of its own
 
@@ -254,21 +254,21 @@ Seams that exist today:
 
 | Seam | How to use it |
 | --- | --- |
-| `technitium.js` — HTTP client | `__setFetch(fn)` swaps the transport |
-| `technitium.js` — caches | `__resetState()` clears them between tests |
-| `blocklists.js` — caches | `__resetState()` clears them between tests |
-| `server.js` — config | `setConfig(cfg)` injects a config instead of reading the file |
-| `server.js` — app | `createApp(poller, updater)` builds the routes without a listener |
-| `server.js` — HTTP client | `__setFetch(fn)` swaps the transport, so the update check can be answered without a network |
-| `poller.js` — Technitium module | fourth constructor argument replaces it |
-| `updater.js` — shell | second constructor argument replaces `execAsync` |
-| `updater.js` — filesystem | third constructor argument replaces `fs.existsSync`, so the answer does not depend on the machine a test runs on |
-| `feed.js` — rows | `filterEntries(server, filters)` returns them without a DOM |
-| `selection.js` — selection | `applyValue(...)` and `clearAll()` change it without a DOM |
-| `selection.js` — decisions | `rangeSelection(...)`, `nextFocusIndex(...)` and `countSelected(...)` say what a click, a key press or a count does |
-| `charts.js` — labels | `formatLabels(labels, fmt, tzOffset)` formats them without a DOM |
-| `charts.js` — decisions | `allowedDatasets(mode)` and `rttForLabels(labels, series)` say which counters a view shows and where RTT lands |
-| `app.js` — decisions | `serverNamesOf(...)`, `isClusterState(...)`, `defaultTabFor(...)`, `isAggregateTab(...)`, `effectiveTopServer(...)`, `queryLogStatusOf(...)`, `rangeCacheKey(...)` and `viewerCount(...)` say what a message means without a DOM |
+| `technitium.js` - `HTTP client | `__setFetch(fn)` swaps the transport |
+| `technitium.js` - `caches | `__resetState()` clears them between tests |
+| `blocklists.js` - `caches | `__resetState()` clears them between tests |
+| `server.js` - `config | `setConfig(cfg)` injects a config instead of reading the file |
+| `server.js` - `app | `createApp(poller, updater)` builds the routes without a listener |
+| `server.js` - `HTTP client | `__setFetch(fn)` swaps the transport, so the update check can be answered without a network |
+| `poller.js` - `Technitium module | fourth constructor argument replaces it |
+| `updater.js` - `shell | second constructor argument replaces `execAsync` |
+| `updater.js` - `filesystem | third constructor argument replaces `fs.existsSync`, so the answer does not depend on the machine a test runs on |
+| `feed.js` - `rows | `filterEntries(server, filters)` returns them without a DOM |
+| `selection.js` - `selection | `applyValue(...)` and `clearAll()` change it without a DOM |
+| `selection.js` - `decisions | `rangeSelection(...)`, `nextFocusIndex(...)` and `countSelected(...)` say what a click, a key press or a count does |
+| `charts.js` - `labels | `formatLabels(labels, fmt, tzOffset)` formats them without a DOM |
+| `charts.js` - `decisions | `allowedDatasets(mode)` and `rttForLabels(labels, series)` say which counters a view shows and where RTT lands |
+| `app.js` - `decisions | `serverNamesOf(...)`, `isClusterState(...)`, `defaultTabFor(...)`, `isAggregateTab(...)`, `effectiveTopServer(...)`, `queryLogStatusOf(...)`, `rangeCacheKey(...)` and `viewerCount(...)` say what a message means without a DOM |
 
 ## How to name a test
 
@@ -284,7 +284,7 @@ test.describe('frontend/js/feed.js', () => {
 ```
 
 **No name starts with "the".** Neither group nor case: `report cache`,
-`cluster election`, `rows` — not `the report cache`, `the rows`. Section
+`cluster election`, `rows`, not `the report cache`, `the rows`. Section
 headings in source files follow the same rule: `// ---- HTTP transport ----`,
 never `// ---- The HTTP transport ----`.
 

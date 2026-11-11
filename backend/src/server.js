@@ -1,5 +1,12 @@
 'use strict';
 
+/**
+ * The dashboard server.
+ *
+ * Reads the config, builds the Express app with its routes and pushes what
+ * the poller finds to the browser over the event stream.
+ */
+
 const express = require('express');
 const helmet = require('helmet');
 const http = require('http');
@@ -23,9 +30,13 @@ const {
 } = require('./blocklists');
 
 // ---- Version and config ----------------------------------------------------------
-// The package file sits at the root of the project. The second path is the
-// layout the project used to have, so an install that has not been updated
-// yet still finds its version instead of refusing to start.
+/**
+ * Reads the package file for the version.
+ *
+ * The package file sits at the root of the project. The second path is the
+ * layout the project used to have, so an install that has not been updated
+ * yet still finds its version instead of refusing to start.
+ */
 function readPackage() {
     const paths = [path.join(__dirname, '../../package.json'), path.join(__dirname, '../package.json')];
     for (const p of paths) {
@@ -45,8 +56,12 @@ const CLUSTER_KEY = '__cluster';
 
 const CONFIG_PATHS = ['/etc/tdns-stats/config.yml', path.join(__dirname, '../../config.yml')];
 
-// `--config <path>` names the config file to read. Without it, the search
-// order in CONFIG_PATHS decides. Both `--config path` and `--config=path` work.
+/**
+ * Finds the config file named on the command line.
+ *
+ * `--config <path>` names the config file to read. Without it, the search
+ * order in CONFIG_PATHS decides. Both `--config path` and `--config=path` work.
+ */
 function configPathFromArgv(argv) {
     const index = argv.indexOf('--config');
     if (index !== -1) {
@@ -86,8 +101,10 @@ function loadConfig(argv = process.argv) {
     throw new Error('No config.yml found. Copy config.example.yml to config.yml and fill it in.');
 }
 
-// The config file is read on first use rather than on import, so requiring this
-// module (from a test, or from tooling) does not need a config.yml on disk.
+/**
+ * The config file is read on first use rather than on import, so requiring this
+ * module (from a test, or from tooling) does not need a config.yml on disk.
+ */
 let config = null;
 let servers = null;
 
@@ -256,11 +273,13 @@ function broadcastViewerCount() {
 }
 
 // ---- Apps on the servers ---------------------------------------------------------
-// How often to retry app discovery for servers that don't have a queryLogsApp
-// yet. Technitium (or its query log app) can still be starting up when
-// tdns-stats does, and that one-shot lookup at boot never got a second try.
-// A server that wasn't ready in time stayed without live feed/RTT for the
-// life of the process until someone noticed and restarted tdns-stats.
+/**
+ * How often to retry app discovery for servers that do not have a queryLogsApp
+ * yet. Technitium (or its query log app) can still be starting up when
+ * tdns-stats does, and that one-shot lookup at boot never got a second try.
+ * A server that wasn't ready in time stayed without live feed/RTT for the
+ * life of the process until someone noticed and restarted tdns-stats.
+ */
 const APP_DISCOVERY_RETRY_MS = 60000;
 let appDiscoveryTimer = null;
 
@@ -315,9 +334,11 @@ function scheduleAppDiscoveryRetry() {
 
 // ---- API routes ------------------------------------------------------------------
 
-// The fetch implementation is swappable so a test can answer the update check
-// without a network. Production always uses node-fetch; `__setFetch` is the only
-// way to change it.
+/**
+ * The fetch implementation is swappable so a test can answer the update check
+ * without a network. Production always uses node-fetch; `__setFetch` is the only
+ * way to change it.
+ */
 let fetchImpl = nodeFetch;
 function __setFetch(fn) {
     fetchImpl = fn || nodeFetch;
@@ -379,7 +400,7 @@ function createApp(poller, updater) {
         res.setHeader('X-Accel-Buffering', 'no');
         res.flushHeaders();
 
-        // Tell browser to wait 5s before retrying if connection is lost
+        // Tell the browser to wait 5s before retrying if the connection is lost.
         res.write('retry: 5000\n\n');
 
         res.sessionToken = sessionToken;
@@ -528,7 +549,7 @@ function createApp(poller, updater) {
             if (blockedTarget) {
                 try {
                     // One settings read per user-triggered check, so the result can say whether
-                    // Technitium is allowed to report built-in block lists. Null if it can't be read.
+                    // Technitium is allowed to report built-in block lists. Null if it cannot be read.
                     const [data, settings] = await Promise.all([
                         resolveBlockedDomain(blockedTarget, domain),
                         getSettings(blockedTarget).catch(() => null),
@@ -710,7 +731,6 @@ function createApp(poller, updater) {
 async function start() {
     const cfg = getConfig();
 
-    // Discover query logs app for each server in parallel
     await Promise.allSettled(servers.map(s => discoverServerApps(s)));
 
     if (servers.some(s => s.queryLogsAppName && !s.queryLogsApp)) {
@@ -789,8 +809,10 @@ if (require.main === module) {
     });
 }
 
-// Module-level mutable state, grouped so a test can reset it in one call instead
-// of reaching into individual variables.
+/**
+ * Module-level mutable state, grouped so a test can reset it in one call instead
+ * of reaching into individual variables.
+ */
 function __resetState() {
     clients.clear();
     sessions.clear();

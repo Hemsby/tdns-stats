@@ -1,5 +1,12 @@
 'use strict';
 
+/**
+ * The selection.
+ *
+ * The names the user has picked in the top lists, the range a shift-click
+ * picks and the counters that say how much is selected.
+ */
+
 import { esc, normClient, normDomain } from './helpers.js';
 
 const Selection = (() => {
@@ -34,7 +41,7 @@ const Selection = (() => {
     let pressAction = null;
     let suppressClickUntil = 0;
 
-    // ---- The selection ---------------------------------------------------------------
+    // ---- Selection -------------------------------------------------------------------
     function init(opts) {
         onChange = opts && typeof opts.onChange === 'function' ? opts.onChange : null;
         bind();

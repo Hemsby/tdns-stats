@@ -1,5 +1,13 @@
 'use strict';
 
+/**
+ * The Technitium API client.
+ *
+ * Everything that talks to a Technitium server goes through here: the
+ * dashboard and session reads, the query log and cache reads, the cluster
+ * calls and the TLS handling.
+ */
+
 const nodeFetch = require('node-fetch');
 const http = require('http');
 const https = require('https');
@@ -10,16 +18,20 @@ const _agentHttp = new http.Agent(AGENT_OPTS);
 const _agentHttps = new https.Agent(AGENT_OPTS);
 const _agentInsecure = new https.Agent({ ...AGENT_OPTS, rejectUnauthorized: false });
 
-// The fetch implementation is swappable so tests can drive the transport without a
-// network. Production always uses node-fetch; `__setFetch` is the only way to change it.
+/**
+ * The fetch implementation is swappable so tests can drive the transport without a
+ * network. Production always uses node-fetch; `__setFetch` is the only way to change it.
+ */
 let fetchImpl = nodeFetch;
 function __setFetch(fn) {
     fetchImpl = fn || nodeFetch;
 }
 
-// Module-level mutable state, grouped so a test can reset it in one call instead of
-// reaching into individual variables. `__resetState` clears everything the module caches
-// between requests (the TLS fallback set).
+/**
+ * Module-level mutable state, grouped so a test can reset it in one call instead of
+ * reaching into individual variables. `__resetState` clears everything the module caches
+ * between requests (the TLS fallback set).
+ */
 const state = {
     insecureRequiredHosts: new Set(),
 };
@@ -29,7 +41,7 @@ function __resetState() {
 
 function makeAgent(server, opts) {
     if (!server.url.startsWith('https')) return _agentHttp;
-    // forceInsecure is used by getClusterNodeState's verify-then-fallback below.
+    // The forceInsecure flag is used by getClusterNodeState's verify-then-fallback below.
     if (opts?.forceInsecure) return _agentInsecure;
     return server.ignoreSsl ? _agentInsecure : _agentHttps;
 }
@@ -43,10 +55,12 @@ function makeNoKeepAliveAgent(server, opts) {
     return new https.Agent({ keepAlive: false, rejectUnauthorized: !(opts?.forceInsecure || server.ignoreSsl) });
 }
 
-// Defensive retry for a body that fails to read after the response headers
-// already came back ok (e.g. a genuine transient connection drop on a pooled
-// socket). Retries once on a fresh, non-pooled connection rather than failing
-// the whole call on what's usually a one-off network hiccup.
+/**
+ * Defensive retry for a body that fails to read after the response headers
+ * already came back ok (e.g. a genuine transient connection drop on a pooled
+ * socket). Retries once on a fresh, non-pooled connection rather than failing
+ * the whole call on what's usually a one-off network hiccup.
+ */
 async function readJsonBody(server, url, res, opts) {
     try {
         return await res.json();
@@ -169,11 +183,15 @@ async function getClusterState(server, opts) {
 }
 
 // ---- TLS certificates ------------------------------------------------------------
-// Node/OpenSSL's TLS verification failures surface as one of these specific error codes on
-// the thrown error (verified empirically against node-fetch: a self-signed cert throws
-// FetchError with err.code === 'DEPTH_ZERO_SELF_SIGNED_CERT'). Distinct from other failure
-// codes like ECONNREFUSED/ETIMEDOUT/ENOTFOUND, which should NOT trigger a fallback - those
-// mean the node is actually unreachable, and retrying without verification wouldn't help.
+/**
+ * The certificate errors that mean the certificate itself is the problem.
+ *
+ * Node/OpenSSL's TLS verification failures surface as one of these specific error codes on
+ * the thrown error (verified empirically against node-fetch: a self-signed cert throws
+ * FetchError with err.code === 'DEPTH_ZERO_SELF_SIGNED_CERT'). Distinct from other failure
+ * codes like ECONNREFUSED/ETIMEDOUT/ENOTFOUND, which should NOT trigger a fallback. Those
+ * mean the node is actually unreachable, and retrying without verification would not help.
+ */
 const CERT_VERIFICATION_ERROR_CODES = new Set([
     'DEPTH_ZERO_SELF_SIGNED_CERT',
     'SELF_SIGNED_CERT_IN_CHAIN',
@@ -191,10 +209,14 @@ function isCertVerificationError(err) {
     return CERT_VERIFICATION_ERROR_CODES.has(err?.code);
 }
 
-// Exposed so callers (e.g. the poller) can turn a bare TLS error code into an
-// actionable log line instead of just the raw OpenSSL message, which doesn't
-// mention that trusting the CA (e.g. via NODE_EXTRA_CA_CERTS) or setting
-// "ignoreSsl: true" are the two ways out of it.
+/**
+ * The hint to add to a TLS error.
+ *
+ * Exposed so callers (e.g. the poller) can turn a bare TLS error code into an
+ * actionable log line instead of the raw OpenSSL message, which does not
+ * mention that trusting the CA (e.g. via NODE_EXTRA_CA_CERTS) or setting
+ * "ignoreSsl: true" are the two ways out of it.
+ */
 function certVerificationHint(err) {
     if (!isCertVerificationError(err)) return '';
     return ` - TLS certificate verification failed (${err.code}). Trust its CA (e.g. via NODE_EXTRA_CA_CERTS) or set "ignoreSsl: true" for this server in config.yml if skipping verification is acceptable.`;
@@ -204,16 +226,20 @@ function certVerificationHint(err) {
 // calls skip straight to the insecure agent instead of re-attempting a doomed verified
 // connection every poll cycle. Without this, a permanently-untrusted cert still causes a
 // fresh connection (and fresh DNS lookup) every cycle even though getClusterNodeState as a
-// whole "succeeds" via fallback - the verified attempt alone never gets to reuse a pooled
+// whole "succeeds" via fallback. The verified attempt alone never gets to reuse a pooled
 // connection, since a TLS-rejected socket is discarded rather than kept alive for reuse.
 
-// For a cluster peer's own reported URL: Technitium requires that to be HTTPS unconditionally,
-// regardless of how the admin API itself is configured, and its cert may or may not be one the
-// user has arranged for Node to trust (e.g. via NODE_EXTRA_CA_CERTS covering their whole PKI).
-// Try with full verification first, so a properly-trusted setup stays verified end to end;
-// only fall back to skipping verification if that specifically fails on a certificate error
-// (not any other kind of failure, which a fallback wouldn't fix anyway) - and remember that
-// outcome per host so it doesn't repeat the failing attempt on every subsequent poll.
+/**
+ * Reads the state of a cluster peer.
+ *
+ * For a cluster peer's own reported URL: Technitium requires that to be HTTPS unconditionally,
+ * regardless of how the admin API itself is configured, and its cert may or may not be one the
+ * user has arranged for Node to trust (e.g. via NODE_EXTRA_CA_CERTS covering their whole PKI).
+ * Try with full verification first, so a properly-trusted setup stays verified end to end;
+ * only fall back to skipping verification if that specifically fails on a certificate error
+ * (not any other kind of failure, which a fallback would not fix anyway). Remember that
+ * outcome per host so it does not repeat the failing attempt on every subsequent poll.
+ */
 async function getClusterNodeState(server) {
     const host = new URL(server.url).host;
 
@@ -223,7 +249,7 @@ async function getClusterNodeState(server) {
         return await getClusterState(server);
     } catch (err) {
         if (!isCertVerificationError(err)) throw err;
-        // This is the only place this fallback is decided, and it's remembered
+        // This is the only place this fallback is decided, and it is remembered
         // per host from here on, so log it once now or it never surfaces at all.
         console.warn(
             `[tls] ${host}: TLS certificate verification failed (${err.code}), falling back to insecure for this cluster peer from now on. Trust its CA (e.g. via NODE_EXTRA_CA_CERTS) to verify it properly instead.`,
@@ -234,7 +260,6 @@ async function getClusterNodeState(server) {
 }
 
 // ---- Query log and cache reads ---------------------------------------------------
-/** The query log apps of a server, with the class that does the logging. */
 function queryLogApps(apps) {
     const found = [];
     for (const app of apps || []) {
@@ -254,9 +279,13 @@ async function listQueryLogApps(server) {
     }
 }
 
-// Throws on failure (network/auth/etc) instead of swallowing it, so the caller
-// can distinguish "server unreachable" from "no matching app installed" rather
-// than reporting both as a generic "not found".
+/**
+ * Finds the query log app of a server.
+ *
+ * Throws on failure (network/auth/etc) instead of swallowing it, so the caller
+ * can distinguish "server unreachable" from "no matching app installed" rather
+ * than reporting both as a generic "not found".
+ */
 async function discoverQueryLogsApp(server, preferredName) {
     const res = await apiGet(server, 'api/apps/list');
     const preferred = normalizeName(preferredName);
@@ -359,7 +388,7 @@ module.exports = {
     getTopStats,
     listCache,
     certVerificationHint,
-    // The pieces the blocklist module builds on.
+    // The pieces the block list module builds on.
     apiGet,
     dnsClientResolve,
     normalizeName,

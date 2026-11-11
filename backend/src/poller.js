@@ -1,17 +1,28 @@
 'use strict';
 
+/**
+ * The poller.
+ *
+ * Reads the statistics, the feed, the top lists and the performance numbers
+ * from the Technitium servers on a timer and pushes what it finds to the
+ * dashboard over the event stream.
+ */
+
 const technitium = require('./technitium');
 const log = require('./log');
 
 const CLUSTER_KEY = '__cluster';
 
-// How many minutes of mean recursive RTT to keep for the real-time chart overlay.
 const RTT_HISTORY_MINUTES = 60;
 
 // ---- RTT history -----------------------------------------------------------------
-// Floor an ISO timestamp to its UTC minute, matching the label format that
-// normalizeLabels() produces for the LastHour chart so the frontend can align
-// the RTT series directly against the chart's x-axis labels.
+/**
+ * Floors an ISO timestamp to its UTC minute.
+ *
+ * The floor matches the label format that normalizeLabels() produces for the
+ * LastHour chart, so the frontend can align the RTT series directly against
+ * the chart's x-axis labels.
+ */
 function minuteKey(ts) {
     const d = new Date(ts);
     if (!Number.isFinite(d.getTime())) return null;
@@ -100,7 +111,7 @@ class Poller {
         await Promise.allSettled([this._healthReady || Promise.resolve()]);
         await Promise.allSettled([this._pollFeed(true), this._pollTop(true), this._pollPerformance()]);
         // Range data is fetched on-demand via refreshRangeData() when an SSE
-        // client connects — avoids double-fetching on first client after idle.
+        // client connects, which avoids double-fetching on the first client after idle.
     }
 
     _isServerDown(server) {
@@ -181,7 +192,7 @@ class Poller {
             const data = await this.technitium.getDashboard(server, rangeType, node, 0);
             this.broadcast({ type: 'range-dashboard', range: rangeType, server: serverKey, data });
         } catch (_) {
-            /* ignore */
+            // Ignore the failure.
         }
 
         if (skipTop) return;
@@ -190,11 +201,10 @@ class Poller {
             const topData = await this._fetchTopLists(server, rangeType, node);
             this.broadcast({ type: 'range-top', range: rangeType, server: serverKey, data: topData });
         } catch (_) {
-            /* ignore */
+            // Ignore the failure.
         }
     }
 
-    /** The range data of every server for the given ranges. */
     async _pollRanges(types) {
         const watched = this._watchedServer ? this.servers.find(s => s.name === this._watchedServer) : this.servers[0];
         if (!watched) return;
@@ -229,13 +239,11 @@ class Poller {
             delete this.state.top[key];
         });
 
-        // Detect cluster server (first healthy node with clusterInitialized)
         if (!this.clusterServer) {
             const idx = results.findIndex(r => r.status === 'fulfilled' && r.value.clusterInitialized);
             if (idx !== -1) this.clusterServer = this.servers[idx];
         }
 
-        // Fetch cluster aggregate stats
         if (this.clusterServer) {
             try {
                 const [clusterDash, clusterState] = await Promise.all([
@@ -245,13 +253,12 @@ class Poller {
 
                 // Query each node individually to get its configLastSynced. node.url is the
                 // node's own cluster-sync URL, which Technitium requires to be HTTPS regardless
-                // of how the admin API itself is configured - see getClusterNodeState for why
+                // of how the admin API itself is configured. See getClusterNodeState for why
                 // this needs its own verify-then-fallback handling instead of plain getClusterState.
                 const enrichedNodes = await Promise.all(
                     (clusterState?.clusterNodes || []).map(async node => {
                         try {
                             const nodeState = await this.technitium.getClusterNodeState({ ...this.clusterServer, url: node.url });
-                            // Find this node's entry in the response to get its configLastSynced
                             const selfNode = (nodeState?.clusterNodes || []).find(n => n.id === node.id || n.name === node.name);
                             return {
                                 ...node,
@@ -392,7 +399,7 @@ class Poller {
             this.state.top[key] = data;
             this.broadcast({ type: 'top', server: key, data });
         } catch (_) {
-            /* ignore */
+            // Ignore the failure.
         }
     }
 
@@ -406,7 +413,7 @@ class Poller {
             const st = this.state.nodes?.[server.name]?.stats?.stats || {};
             const totalRecursive = st.totalRecursive || 0;
 
-            // No stats yet or zero recursive in the last hour — nothing to compute
+            // No stats yet or zero recursive in the last hour, so there is nothing to compute.
             if (!totalRecursive) {
                 delete this.state.perf[server.name];
                 this.broadcast({ type: 'perf', server: server.name, data: null });
@@ -425,8 +432,8 @@ class Poller {
             // array untouched for the jitter calc; sort a copy for the percentiles.
             const vals = sample.map(s => s.rtt);
 
-            // Calculate Jitter (EWMA of RTT variation)
-            // Measures how much response times vary between consecutive queries
+            // Calculate the jitter: an EWMA of how much the response times vary
+            // between consecutive queries.
             let jitter = null;
             if (vals.length >= 2) {
                 let j = 0;
@@ -455,7 +462,7 @@ class Poller {
             this.state.rttSeries[server.name] = rttHistoryToSeries(history);
             this.broadcast({ type: 'perf-series', server: server.name, data: this.state.rttSeries[server.name] });
 
-            // Statistical Metrics (sorted copy; never sort `sample`/`vals`)
+            // Statistical metrics, from a sorted copy. Never sort `sample`/`vals`.
             const sorted = [...vals].sort((a, b) => a - b);
             const n = sorted.length;
             const mean = sorted.reduce((s, v) => s + v, 0) / n;

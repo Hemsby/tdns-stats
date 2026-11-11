@@ -1,8 +1,5 @@
 'use strict';
 
-const http = require('node:http');
-const server = require('../../src/server');
-
 /**
  * The app with a mock poller and updater, so the routes can be driven without
  * a Technitium server and without a fixed port.
@@ -10,6 +7,10 @@ const server = require('../../src/server');
  * The server URL points at a port nothing listens on: the routes that talk to
  * Technitium then fail immediately instead of waiting on a DNS timeout.
  */
+
+const http = require('node:http');
+const server = require('../../src/server');
+
 function makeApp(options = {}) {
     server.setConfig({
         port: 3000,

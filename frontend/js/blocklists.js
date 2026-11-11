@@ -6,21 +6,20 @@ import { esc, fmtNum, CLUSTER_KEY } from './helpers.js';
  * Everything to do with block lists.
  *
  * The popover that names the lists a domain is on, the card that shows what a
- * lookup found, and the count of the queries each list caught.
+ * lookup found and the count of the queries each list caught.
  */
 const Blocklists = (() => {
-    // What the module needs from the app: the server the lookups run against,
-    // whether the dashboard is showing a cluster, and the server the top lists
-    // are showing.
+    /**
+     * What the module needs from the app: the server the lookups run against,
+     * whether the dashboard is showing a cluster, and the server the top lists
+     * are showing.
+     */
     let context = {
         searchServer: () => 'all',
         isCluster: () => false,
         topServer: () => null,
     };
 
-    /**
-     * Hands the module what it needs from the app, and wires the two buttons.
-     */
     function init(ctx) {
         context = { ...context, ...(ctx || {}) };
         initTopBlockListActions();

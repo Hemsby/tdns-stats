@@ -1,5 +1,13 @@
 'use strict';
 
+/**
+ * The updater.
+ *
+ * Updates the dashboard in place, by the method it was deployed with: a git
+ * pull and a service restart for systemd, a git reset and a container rebuild
+ * for Docker.
+ */
+
 const fs = require('fs');
 const path = require('path');
 const { exec } = require('child_process');
@@ -40,10 +48,6 @@ function satisfies(version, range) {
     return false;
 }
 
-/**
- * Put two versions in order: -1 when the first is older, 0 when they are the
- * same, 1 when the first is newer.
- */
 function compareVersions(a, b) {
     const left = a.split('.').map(Number);
     const right = b.split('.').map(Number);
@@ -128,7 +132,7 @@ class Updater {
         return null;
     }
 
-    // ---- Installing dependencies --------------------------------------------------
+    // ---- Installing dependencies -----------------------------------------------------
     /**
      * The npm that belongs to the node this process runs on.
      *
@@ -156,9 +160,6 @@ class Updater {
         }
     }
 
-    /**
-     * The dependencies the project asks for, with the version it asks for.
-     */
     projectDependencies(cwd) {
         const files = [path.join(cwd, 'package.json'), path.join(cwd, 'backend', 'package.json')];
         for (const file of files) {
@@ -195,9 +196,6 @@ class Updater {
         return null;
     }
 
-    /**
-     * The dependencies the server cannot start without.
-     */
     missingDependencies(cwd) {
         const missing = [];
         for (const [name, range] of Object.entries(this.projectDependencies(cwd))) {

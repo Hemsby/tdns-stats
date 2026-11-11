@@ -1,5 +1,12 @@
 'use strict';
 
+/**
+ * The dashboard.
+ *
+ * Opens the event stream, keeps the state the messages bring in, and draws
+ * the cards, the tabs, the top lists and the theme switcher from it.
+ */
+
 import { Log } from './log.js';
 import { Feed } from './feed.js';
 import { Selection } from './selection.js';
@@ -36,24 +43,14 @@ function serverNamesOf(nodes) {
     return Object.keys(nodes || {}).filter(name => name !== CLUSTER_KEY);
 }
 
-/**
- * Whether the stats say the dashboard is showing a cluster.
- */
 function isClusterState(nodes) {
     return !!(nodes && nodes[CLUSTER_KEY]);
 }
 
-/**
- * The tab the dashboard opens on: the cluster when there is one, the first
- * server otherwise.
- */
 function defaultTabFor(names, isCluster) {
     return isCluster ? CLUSTER_KEY : names[0] || null;
 }
 
-/**
- * Whether a tab shows every server at once rather than one of them.
- */
 function isAggregateTab(tab) {
     return tab === CLUSTER_KEY || tab === 'all';
 }
@@ -85,16 +82,10 @@ function queryLogStatusOf(nodes) {
     return status;
 }
 
-/**
- * The key the data of a range is kept under.
- */
 function rangeCacheKey(server, range) {
     return server + ':' + range;
 }
 
-/**
- * The number of people looking at the dashboard.
- */
 function viewerCount(data) {
     return Math.max(0, Number(data?.count) || 0);
 }
@@ -190,7 +181,7 @@ const App = (() => {
     }
 
     async function connect() {
-        // Cooldown: prevent rapid cycling (at most once every 2 seconds)
+        // Cooldown: prevent rapid cycling (at most once every 2 seconds).
         const now = Date.now();
         if (now - lastConnectAttempt < 2000) {
             Log.debug('[stream] connect attempt blocked by cooldown');
@@ -215,7 +206,7 @@ const App = (() => {
 
         es = new EventSource('/api/stream');
 
-        // Timeout: if we don't get connected within 5 seconds, retry
+        // Timeout: if we do not get connected within 5 seconds, retry.
         connectTimeout = setTimeout(() => {
             if (!state.connected && es) {
                 Log.debug('[stream] connection timeout, retrying...');
@@ -296,13 +287,13 @@ const App = (() => {
                     state.topServer = isAggregate ? FOLLOW_CHART_KEY : state.activeTab;
                 }
                 state.feedServer = isAggregate ? 'all' : state.activeTab;
-                // Initialize feed panel data-tab-type based on feed's own dropdown
+                // Initialize the feed panel data-tab-type based on the feed's own dropdown.
                 const fp = document.getElementById('feedPanel');
                 if (fp) fp.dataset.tabType = state.feedServer === 'all' ? 'aggregate' : 'single';
                 buildServerUI();
-                renderPerfCards(); // show placeholders immediately on first server discovery
+                renderPerfCards(); // Show the placeholders immediately on the first server discovery.
 
-                // Populate chart and top list data immediately, without waiting for first poll
+                // Populate the chart and top list data immediately, without waiting for the first poll.
                 watchServer(state.chartServer);
                 refreshChart();
                 refreshTopLists();
@@ -520,7 +511,6 @@ const App = (() => {
             nav.appendChild(makeTab(name, name));
         }
 
-        // Ensure activeTab is still valid
         const validKeys = [state.isCluster ? CLUSTER_KEY : 'all', ...state.serverNames];
         if (!validKeys.includes(state.activeTab)) {
             state.activeTab = validKeys[0];
@@ -563,7 +553,7 @@ const App = (() => {
         }
 
         document.querySelectorAll('.stab').forEach(b => b.classList.toggle('active', b.dataset.key === key));
-        // Set data-tab-type on feed panel for responsive feed column visibility
+        // Set the data-tab-type on the feed panel for responsive feed column visibility.
         const feedPanel = document.getElementById('feedPanel');
         if (feedPanel) {
             feedPanel.dataset.tabType = state.feedServer === 'all' ? 'aggregate' : 'single';
@@ -611,7 +601,7 @@ const App = (() => {
         addSelectListeners();
 
         initCustomSelect('timeRangeSelect');
-        // Browser form-restore may update the select after App.init() reads it
+        // The browser form-restore may update the select after App.init() reads it.
         const trSel = document.getElementById('timeRangeSelect');
         if (trSel && state.timeRange !== trSel.value) {
             state.timeRange = trSel.value;
@@ -873,7 +863,6 @@ const App = (() => {
         }
         if (results) results.innerHTML = '';
         if (blockedSection) blockedSection.innerHTML = '';
-        // optionally reset server select to 'all'
         if (serverSel) {
             serverSel.value = state.domainSearchServer || 'all';
             syncCustomSelect('domainSearchServerSelect');
@@ -1103,10 +1092,8 @@ const App = (() => {
         const cluster = state.nodes[CLUSTER_KEY];
         if (!cluster) return;
 
-        // Aggregate stat card
         container.appendChild(buildAggregateCard(cluster));
 
-        // Per-node stat cards
         const nodeRoles = {};
         for (const cn of cluster.clusterNodes || []) {
             nodeRoles[cn.name] = cn.type; // "Primary" or "Secondary"
@@ -1118,7 +1105,6 @@ const App = (() => {
             container.appendChild(buildServerCard(name, node, role));
         }
 
-        // Cluster node table (full width)
         if (cluster.clusterNodes?.length) {
             container.appendChild(buildNodeTable(cluster.clusterNodes, cluster.clusterDomain));
         }
@@ -1204,13 +1190,14 @@ const App = (() => {
     }
 
     // ---- Card parts ------------------------------------------------------------------
-    // The cluster card, the server cards and the performance card all start with
-    // the same header, so it is built once.
+    /**
+     * The cluster card, the server cards and the performance card all start with
+     * the same header, so it is built once.
+     */
     function cardHeader(name, badge, badgeStyle) {
         return `<div class="srv-card-header"><span class="srv-card-name">${esc(name)}</span><span class="card-badge"${badgeStyle ? ` style="${badgeStyle}"` : ''}>${badge}</span></div>`;
     }
 
-    // The eleven counters every stat card shows, and the blocked share of them.
     function cardStats(st) {
         const total = st.totalQueries || 0;
         const blocked = st.totalBlocked || 0;
@@ -1316,7 +1303,7 @@ const App = (() => {
         const el = document.getElementById('serverIndicators');
         if (!el) return;
 
-        // Only re-render when server list or online/offline states change
+        // Only re-render when the server list or the online/offline states change.
         const fingerprint = state.serverNames
             .map(name => {
                 const node = state.nodes[name];
@@ -1328,7 +1315,7 @@ const App = (() => {
 
         if (indicatorObs) indicatorObs.disconnect();
 
-        // Render both full and short formats inside the DOM once
+        // Render both the full and the short format inside the DOM once.
         el.innerHTML = state.serverNames
             .map(name => {
                 const node = state.nodes[name];
@@ -1337,10 +1324,10 @@ const App = (() => {
             })
             .join('');
 
-        // Measure natural full width using offscreen clone
+        // Measure the natural full width using an offscreen clone.
         indicatorFullWidth = measureNaturalWidth(state.serverNames, false) || el.scrollWidth;
 
-        // Initial check: if it overflows, toggle to short mode
+        // Initial check: if it overflows, toggle to short mode.
         const clientWidth = el.clientWidth;
         const shouldBeShort = clientWidth > 0 && indicatorFullWidth > clientWidth;
         indicatorMode = shouldBeShort ? 'short' : 'full';
@@ -1354,7 +1341,7 @@ const App = (() => {
             });
         }
 
-        // Smoothly toggle class on resize threshold to avoid layout thrashing and DOM writes
+        // Smoothly toggle the class on the resize threshold, to avoid layout thrashing and DOM writes.
         indicatorObs = new ResizeObserver(entries => {
             for (const entry of entries) {
                 const width = entry.contentRect.width;
@@ -1384,7 +1371,7 @@ const App = (() => {
         const container = document.getElementById('perfCards');
         if (!container) return;
 
-        // Single server: perf card is rendered inline next to the stats card
+        // Single server: the perf card is rendered inline next to the stats card.
         if (state.activeTab !== CLUSTER_KEY && state.activeTab !== 'all') {
             container.innerHTML = '';
             return;
@@ -1645,8 +1632,10 @@ const App = (() => {
         return null;
     }
 
-    // The RTT overlay only exists for the live LastHour chart; disable the toggle
-    // (rather than silently doing nothing) for the historical ranges.
+    /**
+     * The RTT overlay only exists for the live LastHour chart; disable the toggle
+     * (rather than silently doing nothing) for the historical ranges.
+     */
     function syncRttToggle() {
         const wrap = document.getElementById('chartRttToggleWrap');
         const cb = document.getElementById('chartRttToggle');
@@ -1747,13 +1736,11 @@ const App = (() => {
 
         if (!switcher || !trigger || !dropdown) return;
 
-        // Toggle dropdown open/close on trigger click
         trigger.addEventListener('click', e => {
             e.stopPropagation();
             switcher.classList.toggle('open');
         });
 
-        // Select a theme from the dropdown
         document.querySelectorAll('.theme-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 const t = btn.dataset.theme;
@@ -1763,14 +1750,12 @@ const App = (() => {
             });
         });
 
-        // Close on outside click
         document.addEventListener('click', e => {
             if (!switcher.contains(e.target)) {
                 switcher.classList.remove('open');
             }
         });
 
-        // Close on Escape
         document.addEventListener('keydown', e => {
             if (e.key === 'Escape') switcher.classList.remove('open');
         });
@@ -1794,7 +1779,6 @@ const App = (() => {
             btn.addEventListener('click', () => setMainTab(btn.dataset.tab));
         });
 
-        // Restore last active tab
         const saved = localStorage.getItem('tdns-main-tab') || 'dashboard';
         setMainTab(saved);
     }
@@ -1964,7 +1948,6 @@ const App = (() => {
             state.updateStatus = 'restarting';
             updateStatusDisplay();
 
-            // Poll for service recovery
             await pollHealth();
         } catch (e) {
             console.error('[update] failed to trigger update:', e);
@@ -1981,7 +1964,7 @@ const App = (() => {
         state.updateStatus = 'reconnecting';
         updateStatusDisplay();
 
-        // Capture initial started_at before polling
+        // Capture the initial started_at before polling.
         try {
             const res = await fetch('/api/health', { cache: 'no-store' });
             if (res.ok) {
@@ -1989,7 +1972,7 @@ const App = (() => {
                 initialStartedAt = data.started_at;
             }
         } catch (e) {
-            // Ignore - will get it on first poll attempt
+            // Ignore: it will come on the first poll attempt.
         }
 
         const poll = async () => {
@@ -1998,11 +1981,10 @@ const App = (() => {
                 const res = await fetch('/api/health', { cache: 'no-store' });
                 if (res.ok) {
                     const data = await res.json();
-                    // Service only considered "back" if started_at has changed
+                    // The service is only considered "back" if started_at has changed.
                     if (initialStartedAt && data.started_at && data.started_at > initialStartedAt) {
                         state.updateStatus = 'done';
                         updateStatusDisplay();
-                        // Clear caches and reload
                         try {
                             if ('caches' in window) {
                                 const keys = await caches.keys();
@@ -2010,7 +1992,7 @@ const App = (() => {
                             }
                         } catch (e) {}
 
-                        // Clear any pending reconnection timer before reload
+                        // Clear any pending reconnection timer before the reload.
                         if (reconnectTimer) {
                             clearInterval(reconnectTimer);
                             reconnectTimer = null;
@@ -2021,7 +2003,7 @@ const App = (() => {
                     }
                 }
             } catch (e) {
-                // Service not ready yet
+                // The service is not ready yet.
             }
 
             if (attempts < maxAttempts) {
@@ -2114,14 +2096,13 @@ const App = (() => {
             .catch(() => {})
             .finally(() => connect());
 
-        // Show a warning banner if the feed has gone silent while SSE is connected
         setInterval(() => {
             if (!state.connected || state.lastFeedEvent === null) return;
             setFeedStall(Date.now() - state.lastFeedEvent > 120000);
         }, 15000);
 
-        // Trigger a render refresh after extended idle (DPMS sleep, tab backgrounded, etc) -
-        // browser can stall compositing until a user interaction event, leaving stale DOM
+        // Trigger a render refresh after extended idle (DPMS sleep, tab backgrounded, etc).
+        // The browser can stall compositing until a user interaction event, leaving stale DOM
         // visible. Any pointermove or tab-return resets the 15-min cooldown.
         let lastInteraction = Date.now();
         function refreshAfterIdle() {

@@ -5,7 +5,7 @@
 
 A self-hosted statistics dashboard for [Technitium DNS Server](https://technitium.com/dns/) v15 and later.
 
-Displays live query feeds, per-server and cluster stats, top domains/clients, performance metrics (RTT, cache hit rate), and a real-time chart — all pushed to the browser via Server-Sent Events with no page refreshes required.
+Displays live query feeds, per-server and cluster stats, top domains/clients, performance metrics (RTT, cache hit rate), and a real-time chart, all pushed to the browser via Server-Sent Events with no page refreshes required.
 
 See the [CHANGELOG](CHANGELOG.md) for a full history of changes.
 
@@ -13,15 +13,15 @@ See the [CHANGELOG](CHANGELOG.md) for a full history of changes.
 
 ### Dark mode
 
-![Cluster overview — dark](docs/dark-cluster.png)
+![Cluster overview (dark)](docs/dark-cluster.png)
 
-![Live feed — dark](docs/dark-feed.png)
+![Live feed (dark)](docs/dark-feed.png)
 
 ### Light mode
 
-![Cluster overview — light](docs/light-cluster.png)
+![Cluster overview (light)](docs/light-cluster.png)
 
-![Live feed — light](docs/light-feed.png)
+![Live feed (light)](docs/light-feed.png)
 
 ## Requirements
 

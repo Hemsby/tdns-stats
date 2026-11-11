@@ -1,19 +1,28 @@
 'use strict';
 
+/**
+ * The chart.
+ *
+ * Draws the counters the server sends, with the mean recursive RTT as an
+ * overlay on its own axis, and remembers which labels the user has hidden.
+ */
+
 const Charts = (() => {
     let chart = null;
     let lastView = null;
     const hiddenByView = { overview: new Set(), all: new Set() };
     let persistCallback = null;
 
-    // Mean recursive RTT overlay: plotted on its own right-hand axis, so it never
-    // participates in the per-view legend hide/show persistence. Its legend toggle
-    // state lives in this single flag instead (dataset index is not stable across
-    // the overview/all dataset-count change).
+    /**
+     * Mean recursive RTT overlay: plotted on its own right-hand axis, so it never
+     * participates in the per-view legend hide/show persistence. Its legend toggle
+     * state lives in this single flag instead (dataset index is not stable across
+     * the overview/all dataset-count change).
+     */
     const RTT_LABEL = 'Recursive RTT';
     let rttHidden = false;
 
-    // Map dataset labels to CSS variable names so chart colors follow the UI theme
+    /** Maps the dataset labels to CSS variable names, so the chart colours follow the UI theme. */
     const DATASET_COLORS = {
         Total: { borderVar: '--accent-blue', bgVar: '--accent-blue-bg' },
         'No Error': { borderVar: '--accent-green', bgVar: '--accent-green-bg' },
@@ -56,12 +65,11 @@ const Charts = (() => {
     }
 
     function resolveColor(entry) {
-        // entry may have borderVar and bgVar
         const border = entry.borderVar ? cssVar(entry.borderVar) : null;
         let bg = entry.bgVar ? cssVar(entry.bgVar) : null;
 
         if (!bg) {
-            // Try to synthesize a translucent background from the border color
+            // Try to synthesise a translucent background from the border colour.
             if (border && border.startsWith('rgb(')) {
                 bg = border.replace('rgb(', 'rgba(').replace(')', ', .08)');
             } else if (border && border.startsWith('#')) {
@@ -74,8 +82,10 @@ const Charts = (() => {
 
     const OVERVIEW_DATASETS = ['Total', 'Blocked', 'Cached', 'Recursive'];
 
-    // The chart takes its colours from the stylesheet, so they have to be
-    // resolved again whenever the theme changes.
+    /**
+     * The chart takes its colours from the stylesheet, so they have to be
+     * resolved again whenever the theme changes.
+     */
     function themeColors() {
         const text = cssVar('--text');
         const muted = cssVar('--text-muted');
@@ -118,7 +128,7 @@ const Charts = (() => {
         chart.update('none');
     }
 
-    // ---- The chart -------------------------------------------------------------------
+    // ---- Chart -----------------------------------------------------------------------
     function setPersistCallback(callback) {
         persistCallback = callback;
     }
@@ -268,7 +278,7 @@ const Charts = (() => {
     function updateFromData(responseOrChartData, datasetMode, opts) {
         if (!chart) init();
         if (!chart) return;
-        // Accept either the raw API response object or just mainChartData directly
+        // Accept either the raw API response object or mainChartData directly.
         const chartData = responseOrChartData?.mainChartData || responseOrChartData;
         if (!chartData?.labels) return;
 
@@ -289,9 +299,8 @@ const Charts = (() => {
             }
         }
 
-        // If view mode changed, load saved state for the new view
         if (lastView !== datasetMode && hiddenByView[datasetMode].size === 0) {
-            // Only load if we haven't already populated this view
+            // Only load if we have not already populated this view.
             if (typeof loadChartHiddenState !== 'undefined') {
                 hiddenByView[datasetMode] = loadChartHiddenState(datasetMode);
             }
@@ -360,14 +369,13 @@ const Charts = (() => {
 
         chart.update('none');
 
-        // Persist current state after update
         if (persistCallback) {
             persistCallback(datasetMode, hiddenByView[datasetMode]);
         }
     }
 
     function setLoadCallback(loadFn) {
-        // Store the load function for use when view mode changes
+        // Store the load function for use when the view mode changes.
         window.loadChartHiddenState = loadFn;
     }
 

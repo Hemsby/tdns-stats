@@ -1,7 +1,11 @@
 'use strict';
 
-// Debug logging is opt-in and off by default. Enable it from the browser
-// console with Log.enable(); the choice is remembered across reloads.
+/**
+ * Debug logging for the browser console.
+ *
+ * Debug logging is opt-in and off by default. Enable it from the browser
+ * console with Log.enable(); the choice is remembered across reloads.
+ */
 const Log = (() => {
     const KEY = 'tdns-stats-debug';
 
@@ -34,8 +38,7 @@ const Log = (() => {
     return { debug, enable, disable, isEnabled };
 })();
 
-// Kept on the window so the debug switch stays reachable from the browser
-// console (Log.enable()), the same way it was before this file became a module.
+// Kept on the window so the debug switch stays reachable from the browser console (Log.enable()).
 if (typeof window !== 'undefined') window.Log = Log;
 
 export { Log };

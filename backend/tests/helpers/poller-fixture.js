@@ -1,7 +1,5 @@
 'use strict';
 
-const Poller = require('../../src/poller');
-
 /**
  * A stand-in for the technitium module.
  *
@@ -9,6 +7,9 @@ const Poller = require('../../src/poller');
  * driven without any HTTP. Every method returns an empty result unless the
  * test overrides it.
  */
+
+const Poller = require('../../src/poller');
+
 function mockTechnitium(overrides = {}) {
     return {
         getDashboard: async () => ({ stats: { totalRecursive: 0, totalCached: 0, cachedEntries: 0 } }),

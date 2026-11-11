@@ -6,18 +6,18 @@
  * The unit tests in technitium.test.js only need one field at a time, so they
  * pass their own fixtures. This file is the other half: a whole Technitium
  * server's worth of data, shaped and moving the way a real one is, so the
- * dashboard can be driven end to end — every card, every list, the feed, the
- * cache and the blocked lookup — and so a cluster can be stood up without a
- * real cluster.
+ * dashboard can be driven end to end: every card, every list, the feed, the
+ * cache and the blocked lookup. A cluster can be stood up without a real
+ * cluster because of it.
  *
  * The data is generated from a seed, so the same seed always produces the same
  * numbers, but it is not a loop of repeated values. The volume follows the
  * time of day, the mix of answers follows the load, the response times have
  * the long tail a resolver really has, and the popular names are popular in
- * the same places — in the query log and in the top lists — so the dashboard
+ * the same places (in the query log and in the top lists), so the dashboard
  * shows one story rather than several.
  *
- * The one thing that moves is the clock: query-log entries are built around
+ * The one thing that moves is the clock: query log entries are built around
  * the time they are asked for, because a feed that replays the same fixed rows
  * is consumed by the first poll and every later poll sees nothing.
  */
@@ -145,7 +145,7 @@ function shuffle(random, list) {
  * One of a set of names, chosen by weight.
  *
  * The weights are shares of the traffic, so the name that is asked for
- * constantly really is the one that comes up.
+ * constantly is the one that comes up.
  */
 function weightedPick(random, items) {
     const roll = random();
@@ -230,7 +230,7 @@ function pickClients(random) {
     );
 }
 
-/** The names a node blocks, and how often each one is asked for. */
+/** The names a node blocks and how often each one is asked for. */
 function pickTracking(random) {
     const names = shuffle(random, TRACKING_DOMAINS);
     const head = 0.36 + random() * 0.14;
@@ -879,7 +879,7 @@ function blockingReport(domain, listUrl, source) {
  * Everything about a name is drawn from the name itself, so the same name is
  * always answered the same way: the same block lists report it and it always
  * resolves to the same address. A block list can still change over time -
- * that is the list's business, not the server's - but the server does not
+ * that is the list's business, not the server's, but the server does not
  * make a name change its mind from one lookup to the next.
  */
 function buildResolveAnswer(query) {

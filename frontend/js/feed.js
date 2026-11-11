@@ -1,5 +1,12 @@
 'use strict';
 
+/**
+ * The live feed.
+ *
+ * Holds the query log entries as they arrive, keeps them in order and free of
+ * duplicates, and draws the rows the feed shows.
+ */
+
 import { Log } from './log.js';
 import { esc, normDomain, normClient } from './helpers.js';
 import { Selection } from './selection.js';
@@ -31,8 +38,10 @@ const Feed = (() => {
         if (maxEntries > 0) MAX_ENTRIES = maxEntries;
     }
 
-    // The feed owns its list, so it answers the clicks on the names and the
-    // client addresses itself.
+    /**
+     * The feed owns its list, so it answers the clicks on the names and the
+     * client addresses itself.
+     */
     function bindFeedClicks(list) {
         if (list.dataset.ready === 'true') return;
         list.dataset.ready = 'true';
@@ -55,8 +64,10 @@ const Feed = (() => {
         serverDisplayMap = map;
     }
 
-    // Lets the "no data" message distinguish a genuinely quiet feed from a
-    // configured query log app that the backend couldn't find on the server.
+    /**
+     * Lets the "no data" message distinguish a genuinely quiet feed from a
+     * configured query log app that the backend could not find on the server.
+     */
     function setServerStatus(status) {
         serverStatus = status || {};
         render(lastFilter, lastBlocked);
@@ -66,7 +77,7 @@ const Feed = (() => {
         const relevant = serverFilter === 'all' ? Object.values(serverStatus) : [serverStatus[serverFilter]];
         const unresolved = relevant.filter(st => st && st.queryLogsAppName && !st.queryLogsApp);
         // A genuinely missing app is the actionable problem, so it wins over a
-        // lookup that simply hasn't succeeded yet (e.g. DNS not up after a boot).
+        // lookup that has not succeeded yet (e.g. DNS not up after a boot).
         const missing = unresolved.find(st => !st.queryLogsLookupFailed);
         if (missing) {
             const scope = serverFilter === 'all' ? ' on one or more servers' : '';
@@ -91,7 +102,7 @@ const Feed = (() => {
     function add(serverName, newEntries, cursorReset) {
         if (cursorReset) {
             Log.debug(`[feed] ${serverName}: feed cursor reset`);
-            // Log rotated — wipe this server's seen IDs and drop its entries wholesale.
+            // The log rotated, so wipe this server's seen IDs and drop its entries wholesale.
             seenByServer[serverName] = new Set();
             let writeIdx = 0;
             for (let i = 0; i < entries.length; i++) {
@@ -104,7 +115,7 @@ const Feed = (() => {
 
         const deduped = [];
         for (const e of newEntries) {
-            // rowNumber is a position in the query log, not a stable ID: Technitium
+            // A rowNumber is a position in the query log, not a stable ID: Technitium
             // renumbers every row when it prunes old entries. Include the timestamp so
             // a renumbered row is not mistaken for an already-seen one.
             const id = serverName + ':' + e.timestamp + '|' + e.rowNumber;
@@ -116,7 +127,7 @@ const Feed = (() => {
 
         // Merge new entries into the sorted array in O(n + m) instead of O(n × m).
         // Both `entries` and `deduped` are sorted by _time descending. Sort deduped
-        // explicitly since we shouldn't assume API ordering across edge cases.
+        // explicitly since we should not assume API ordering across edge cases.
         deduped.sort((a, b) => b._time - a._time || b.rowNumber - a.rowNumber);
 
         const merged = [];
@@ -136,7 +147,7 @@ const Feed = (() => {
         while (i < entries.length) merged.push(entries[i++]);
         while (j < deduped.length) merged.push(deduped[j++]);
 
-        // Replace entries contents and evict beyond MAX_ENTRIES
+        // Replace the entries and evict the ones beyond MAX_ENTRIES.
         const limit = Math.min(merged.length, MAX_ENTRIES);
         entries.length = 0;
         for (let k = 0; k < limit; k++) entries.push(merged[k]);
@@ -147,7 +158,7 @@ const Feed = (() => {
         }
     }
 
-    // Debounce: batch rapid feed updates from multiple servers into one render
+    // Debounce: batch rapid feed updates from multiple servers into one render.
     function setPaused(p) {
         paused = p;
         if (!paused) render(lastFilter, lastBlocked);
@@ -181,12 +192,11 @@ const Feed = (() => {
         }, 250);
     }
 
-    // The rows the feed shows for the current server filter and type filter.
     function filterEntries(serverFilter, filters) {
         return entries.filter(e => {
             if (serverFilter !== 'all' && e._server !== serverFilter) return false;
             if (filters.size > 0) {
-                // Determine what this entry "is" based on our priority logic
+                // Determine what this entry "is" based on our priority logic.
                 let entryType = e.responseType;
                 const rcode = (e.rcode || '').toLowerCase().replace(/\s+/g, '');
 
@@ -315,7 +325,7 @@ const Feed = (() => {
     }
 
     function fmtMs(n, type) {
-        // If it's not a recursive query, it's effectively 0ms latency from the server's perspective
+        // If it is not a recursive query, it is effectively 0ms latency from the server's perspective.
         const instantTypes = ['Cached', 'Blocked', 'Authoritative', 'Refused', 'Dropped'];
         if (instantTypes.includes(type)) {
             return '';
@@ -330,10 +340,10 @@ const Feed = (() => {
     function rowClass(e) {
         if (!e) return '';
 
-        // 1. Priority: Response Type 'Blocked' is always Red
+        // 1. Priority: a response type of 'Blocked' is always red.
         if (e.responseType === 'Blocked') return 'blocked';
 
-        // 2. Secondary: Check RCODE for NXDOMAIN, Server Failure, or Refused
+        // 2. Secondary: check the RCODE for NXDOMAIN, Server Failure or Refused.
         const rcode = (e.rcode || '').toLowerCase().replace(/\s+/g, '');
         if (rcode === 'nxdomain') return 'nxdomain';
         if (rcode === 'serverfailure') return 'servfail';

@@ -9,7 +9,7 @@ const { buildTechnitiumData, aggregateCluster, cacheForDomain } = require('./tec
  *
  * It is a real HTTP server on an ephemeral port, not a stubbed fetch, so the
  * tests exercise the real transport: the Authorization header, the status
- * codes, the JSON envelopes Technitium uses, and the retry path.
+ * codes, the JSON envelopes Technitium uses and the retry path.
  *
  * Every request is recorded so a test can assert on what was actually asked
  * for (which is often the point: "the poller asked for the top list with the
@@ -207,7 +207,7 @@ function createTechnitiumServer(options = {}) {
         fail(prefix, status = 500) {
             state.fail[prefix] = { status };
         },
-        /** Replace the query-log entries the server hands out. */
+        /** Replace the query log entries the server hands out. */
         setLogEntries(entries) {
             state.logEntries = entries;
         },

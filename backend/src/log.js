@@ -1,7 +1,11 @@
 'use strict';
 
-// Debug logging is opt-in. Enable it with `debug: true` in config.yml.
-// Everything logged through log.debug() is silent unless enabled.
+/**
+ * Debug logging for the backend.
+ *
+ * Debug logging is opt-in. Enable it with `debug: true` in config.yml.
+ * Everything logged through log.debug() is silent unless enabled.
+ */
 let enabled = false;
 
 function configure(configDebug) {

@@ -1,26 +1,29 @@
 'use strict';
 
-// Everything to do with block lists: the reports a server sends, the names of
-// the lists those reports name, and the count of the blocked queries each list
-// caught. The transport and the generic Technitium reads stay in technitium.js.
+/**
+ * Everything to do with block lists.
+ *
+ * The reports a server sends, the names of the lists those reports name and
+ * the count of the blocked queries each list caught. The transport and the
+ * generic Technitium reads stay in technitium.js.
+ */
 
 const { apiGet, dnsClientResolve, normalizeName } = require('./technitium');
 
-// The caches this module keeps between requests: the blocking report of a
-// name, and a count run that two callers share.
+/** The caches this module keeps between requests: the blocking report of a name and a count run that two callers share. */
 const state = {
     blockReportCache: new Map(),
     blockedLogRuns: new Map(),
 };
 
-// Test seam. Not used by production code.
+/** Test seam. Not used by production code. */
 function __resetState() {
     state.blockReportCache.clear();
     state.blockedLogRuns.clear();
 }
 
 // ---- Reading the DNS answer ------------------------------------------------------
-// The fields a DNS answer can have, and the keys it can come under.
+/** The fields a DNS answer can have and the keys it can come under. */
 const RECORD_FIELDS = ['type', 'recordType', 'dnsResourceRecordType', 'address', 'value', 'data', 'text', 'rdata'];
 const RECORD_LIST_KEYS = ['records', 'responseRecords', 'answers', 'answer', 'Answer', 'Authority', 'Additional'];
 const RECORD_SINGLE_KEYS = ['record', 'rdata'];
@@ -78,9 +81,11 @@ function normalizeExtraKey(key) {
     return normalizeName(key);
 }
 
-// Parses semicolon/newline-separated key=value or key:value strings,
-// handling multi-line values where a line after a key with no value
-// becomes that key's value.
+/**
+ * Parses semicolon/newline-separated key=value or key:value strings, handling
+ * multi-line values where a line after a key with no value becomes that key's
+ * value.
+ */
 function parseDnsClientExtraText(value) {
     if (!value) return {};
     const raw = String(value);
@@ -120,7 +125,7 @@ function parseDnsClientExtraText(value) {
     return out;
 }
 
-// Block list URLs can carry credentials. Strip them before anything reaches the browser.
+/** Block list URLs can carry credentials. Strip them before anything reaches the browser. */
 function redactSecrets(text) {
     return String(text)
         .replace(
