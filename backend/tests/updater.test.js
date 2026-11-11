@@ -33,7 +33,7 @@ const COMPOSE_FILE = 'services:\n  tdns-stats:\n    build: .\n';
  * config in /etc/tdns-stats/config.yml and in the project root, and a
  * development machine has the config in the project root rather than in /etc.
  */
-function makeUpdater(answers = {}, exists = {}) {
+function makeUpdater(answers = {}, exists = {}, projectRoot = '/tmp/project') {
     const calls = [];
     const execFn = async (command, options) => {
         calls.push({ command, options });
@@ -43,8 +43,31 @@ function makeUpdater(answers = {}, exists = {}) {
         return { stdout: answer ?? '', stderr: '' };
     };
     const existsFn = path => !!exists[path];
-    return { updater: new Updater('/tmp/project', execFn, existsFn), calls };
+    return { updater: new Updater(projectRoot, execFn, existsFn), calls };
 }
+
+/**
+ * A project directory with a package file and the dependency folder the
+ * project used to keep, like an install that has not been updated yet.
+ *
+ * `installed` says which dependencies are on the machine.
+ */
+function tempInstall(installed = ['express']) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tdns-install-'));
+    const dependencies = {};
+    for (const name of installed) dependencies[name] = '^4.18.2';
+    fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name: 'tdns-stats', dependencies }));
+
+    for (const name of installed) {
+        const folder = path.join(dir, 'backend', 'node_modules', name);
+        fs.mkdirSync(folder, { recursive: true });
+        fs.writeFileSync(path.join(folder, 'package.json'), JSON.stringify({ name, version: '4.18.2' }));
+    }
+    return dir;
+}
+
+// The command the updater runs to install the dependencies.
+const INSTALL = 'npm install --omit=dev --no-audit --no-fund --prefer-offline';
 
 test.describe('backend/src/updater.js', () => {
     test.describe('shell', () => {
@@ -216,11 +239,15 @@ test.describe('backend/src/updater.js', () => {
             const commands = calls.map(c => c.command);
             assert.ok(commands.includes('git fetch --tags --force origin'));
             assert.ok(commands.includes('git pull origin master'));
+            assert.ok(commands.includes(INSTALL), 'the dependencies are installed');
             assert.ok(commands.includes('systemctl restart tdns-stats'));
 
             // The pull happens in the project directory.
             const pull = calls.find(c => c.command === 'git pull origin master');
             assert.equal(pull.options.cwd, '/tmp/project');
+
+            // The dependencies are installed before the service is restarted.
+            assert.ok(commands.indexOf(INSTALL) < commands.indexOf('systemctl restart tdns-stats'));
         });
 
         test.it('still updates when the tags cannot be fetched', async () => {
@@ -235,6 +262,73 @@ test.describe('backend/src/updater.js', () => {
             const commands = calls.map(c => c.command);
             assert.ok(commands.includes('git pull origin master'));
             assert.ok(commands.includes('systemctl restart tdns-stats'));
+        });
+    });
+
+    test.describe('dependency install', () => {
+        test.it('installs dependencies and clears the folder the project used to keep', async t => {
+            const dir = tempInstall();
+            t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+            const { updater, calls } = makeUpdater(
+                {},
+                {
+                    [path.join(dir, 'backend', 'node_modules')]: true,
+                    [path.join(dir, 'backend', 'node_modules', 'express', 'package.json')]: true,
+                },
+                dir,
+            );
+
+            await updater.updateSystemd();
+
+            const commands = calls.map(c => c.command);
+            assert.ok(commands.includes(INSTALL), 'the dependencies are installed');
+
+            // The install runs in the project directory, next to the package file.
+            assert.equal(calls.find(c => c.command === INSTALL).options.cwd, dir);
+
+            // The folder the project used to keep is gone, so node looks in the
+            // root and finds the versions that were just installed.
+            assert.equal(fs.existsSync(path.join(dir, 'backend', 'node_modules')), false);
+        });
+
+        test.it('goes on when the dependencies are there and stops when one is missing', async t => {
+            const dir = tempInstall();
+            t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+            const exists = {
+                [path.join(dir, 'backend', 'node_modules')]: true,
+                [path.join(dir, 'backend', 'node_modules', 'express', 'package.json')]: true,
+            };
+
+            // The install fails, but the service can still start with the
+            // dependencies it already has.
+            const working = makeUpdater({ [INSTALL]: new Error('the registry is out of reach') }, exists, dir);
+
+            await working.updater.updateSystemd();
+
+            assert.ok(working.calls.map(c => c.command).includes('systemctl restart tdns-stats'));
+
+            // The install fails and a dependency the project needs is not on
+            // the machine, so the service is left running the old code.
+            const broken = tempInstall(['express']);
+            t.after(() => fs.rmSync(broken, { recursive: true, force: true }));
+            fs.writeFileSync(
+                path.join(broken, 'package.json'),
+                JSON.stringify({ name: 'tdns-stats', dependencies: { express: '^4.18.2', 'js-yaml': '^4.1.0' } }),
+            );
+
+            const failing = makeUpdater(
+                { [INSTALL]: new Error('the registry is out of reach') },
+                {
+                    [path.join(broken, 'backend', 'node_modules')]: true,
+                    [path.join(broken, 'backend', 'node_modules', 'express', 'package.json')]: true,
+                },
+                broken,
+            );
+
+            await assert.rejects(() => failing.updater.updateSystemd(), /Dependencies are missing/);
+            assert.ok(!failing.calls.map(c => c.command).includes('systemctl restart tdns-stats'));
         });
     });
 });

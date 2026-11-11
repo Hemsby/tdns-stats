@@ -8,6 +8,52 @@ const log = require('./log');
 
 const execAsync = promisify(exec);
 
+/**
+ * Whether a version is the one a range asks for.
+ *
+ * Only the forms the project uses are answered: an exact version, a caret
+ * range and a tilde range. Anything else is not confirmed, because a
+ * dependency that cannot be checked is not a dependency that can be trusted.
+ */
+function satisfies(version, range) {
+    if (typeof version !== 'string' || typeof range !== 'string') return false;
+    if (version.includes('-')) return false;
+
+    const wanted = range.trim();
+    const exact = wanted.match(/^(\d+)\.(\d+)\.(\d+)$/);
+    if (exact) return compareVersions(version, exact.slice(1, 4).join('.')) === 0;
+
+    const caret = wanted.match(/^\^(\d+)\.(\d+)\.(\d+)$/);
+    if (caret) {
+        const [major, minor, patch] = caret.slice(1, 4).map(Number);
+        if (compareVersions(version, `${major}.${minor}.${patch}`) < 0) return false;
+        return compareVersions(version, `${major + 1}.0.0`) < 0;
+    }
+
+    const tilde = wanted.match(/^~(\d+)\.(\d+)\.(\d+)$/);
+    if (tilde) {
+        const [major, minor, patch] = tilde.slice(1, 4).map(Number);
+        if (compareVersions(version, `${major}.${minor}.${patch}`) < 0) return false;
+        return compareVersions(version, `${major}.${minor + 1}.0`) < 0;
+    }
+
+    return false;
+}
+
+/**
+ * Put two versions in order: -1 when the first is older, 0 when they are the
+ * same, 1 when the first is newer.
+ */
+function compareVersions(a, b) {
+    const left = a.split('.').map(Number);
+    const right = b.split('.').map(Number);
+    for (let i = 0; i < 3; i++) {
+        const difference = (left[i] || 0) - (right[i] || 0);
+        if (difference !== 0) return difference < 0 ? -1 : 1;
+    }
+    return 0;
+}
+
 class Updater {
     constructor(projectRoot, execFn, existsFn) {
         this.projectRoot = projectRoot;
@@ -80,6 +126,104 @@ class Updater {
 
         this.deploymentType = null;
         return null;
+    }
+
+    // ---- Installing dependencies --------------------------------------------------
+    /**
+     * The npm that belongs to the node this process runs on.
+     *
+     * A systemd unit starts with a small PATH, and npm is not always on it.
+     */
+    npmCommand() {
+        const beside = path.join(path.dirname(process.execPath), 'npm');
+        return this.existsSync(beside) ? beside : 'npm';
+    }
+
+    /**
+     * Install the dependencies the project needs.
+     *
+     * The cache is used first, so a machine that installed the dependencies
+     * before does not need the network to install them again.
+     */
+    async installDependencies(cwd) {
+        const command = `${this.npmCommand()} install --omit=dev --no-audit --no-fund --prefer-offline`;
+        try {
+            await this.runLogged('dependencies installed', command, { cwd });
+            return true;
+        } catch (e) {
+            console.warn('[update] could not install dependencies:', e.message);
+            return false;
+        }
+    }
+
+    /**
+     * The dependencies the project asks for, with the version it asks for.
+     */
+    projectDependencies(cwd) {
+        const files = [path.join(cwd, 'package.json'), path.join(cwd, 'backend', 'package.json')];
+        for (const file of files) {
+            try {
+                const pkg = JSON.parse(fs.readFileSync(file, 'utf8'));
+                if (pkg.dependencies && Object.keys(pkg.dependencies).length > 0) return pkg.dependencies;
+            } catch (e) {
+                // Try the next file.
+            }
+        }
+        return {};
+    }
+
+    /**
+     * The version of a dependency the server would find, or null when it
+     * cannot find it.
+     *
+     * Node looks in the backend folder before it looks in the project root,
+     * so both places are checked, in that order.
+     */
+    dependencyVersion(cwd, name) {
+        const places = [
+            path.join(cwd, 'backend', 'node_modules', name, 'package.json'),
+            path.join(cwd, 'node_modules', name, 'package.json'),
+        ];
+        for (const place of places) {
+            if (!this.existsSync(place)) continue;
+            try {
+                return JSON.parse(fs.readFileSync(place, 'utf8')).version;
+            } catch (e) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * The dependencies the server cannot start without.
+     */
+    missingDependencies(cwd) {
+        const missing = [];
+        for (const [name, range] of Object.entries(this.projectDependencies(cwd))) {
+            const version = this.dependencyVersion(cwd, name);
+            if (!version || !satisfies(version, range)) missing.push(name);
+        }
+        return missing;
+    }
+
+    /**
+     * Remove the dependency folder the project used to keep.
+     *
+     * The project keeps its dependencies in the root now. The folder in the
+     * backend is left behind by the update, and node looks there first, so
+     * the service would keep running on the versions it had before.
+     */
+    removeOldModuleFolder(cwd) {
+        const oldFolder = path.join(cwd, 'backend', 'node_modules');
+        const oldPackage = path.join(cwd, 'backend', 'package.json');
+        if (!this.existsSync(oldFolder) || this.existsSync(oldPackage)) return;
+        try {
+            fs.rmSync(oldFolder, { recursive: true, force: true });
+            log.debug('[update] removed the dependency folder the project used to keep');
+        } catch (e) {
+            console.warn('[update] could not remove the old dependency folder:', e.message);
+        }
     }
 
     // ---- Running the update ----------------------------------------------------------
@@ -241,6 +385,21 @@ class Updater {
         } catch (e) {
             console.error('[update] git pull failed:', e.message);
             throw e;
+        }
+
+        // The dependencies live at the root of the project now, so they have to
+        // be installed before the new code can start.
+        const installed = await this.installDependencies(cwd);
+        if (installed) {
+            this.removeOldModuleFolder(cwd);
+        } else {
+            // The install did not run. The service can still start when the
+            // dependencies it needs are already on the machine.
+            const missing = this.missingDependencies(cwd);
+            if (missing.length > 0) {
+                throw new Error(`Dependencies are missing after the update: ${missing.join(', ')}. ` + 'The service was not restarted.');
+            }
+            console.warn('[update] dependencies were not installed, but the service can start with the ones it has');
         }
 
         log.debug('[update] restarting systemd service');

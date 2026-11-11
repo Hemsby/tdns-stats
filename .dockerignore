@@ -3,3 +3,5 @@ node_modules
 config.yml
 docs
 .git
+backend/tests
+frontend/tests
