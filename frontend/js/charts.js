@@ -15,19 +15,20 @@ const Charts = (() => {
 
     // Map dataset labels to CSS variable names so chart colors follow the UI theme
     const DATASET_COLORS = {
-        'Total':          { borderVar: '--accent-blue',  bgVar: '--accent-blue-bg' },
-        'No Error':       { borderVar: '--accent-green', bgVar: '--accent-green-bg' },
-        'Blocked':        { borderVar: '--accent-red',   bgVar: '--accent-red-bg' },
-        'Cached':         { borderVar: '--accent-teal',  bgVar: '--accent-teal-bg' },
-        'Recursive':      { borderVar: '--accent-pur',   bgVar: '--accent-pur-bg' },
-        'Authoritative':  { borderVar: '--accent-yel',   bgVar: '--accent-yel-bg' },
-        'NX Domain':      { borderVar: '--accent-ora',   bgVar: '--accent-ora-bg' },
-        'Server Failure': { borderVar: '--accent-red',   bgVar: '--accent-red-bg' },
-        'Dropped':        { borderVar: '--accent-slate' },
-        'Clients':        { borderVar: '--accent-pur',   bgVar: '--accent-pur-bg' },
-        'Refused':        { borderVar: '--accent-slate' },
+        Total: { borderVar: '--accent-blue', bgVar: '--accent-blue-bg' },
+        'No Error': { borderVar: '--accent-green', bgVar: '--accent-green-bg' },
+        Blocked: { borderVar: '--accent-red', bgVar: '--accent-red-bg' },
+        Cached: { borderVar: '--accent-teal', bgVar: '--accent-teal-bg' },
+        Recursive: { borderVar: '--accent-pur', bgVar: '--accent-pur-bg' },
+        Authoritative: { borderVar: '--accent-yel', bgVar: '--accent-yel-bg' },
+        'NX Domain': { borderVar: '--accent-ora', bgVar: '--accent-ora-bg' },
+        'Server Failure': { borderVar: '--accent-red', bgVar: '--accent-red-bg' },
+        Dropped: { borderVar: '--accent-slate' },
+        Clients: { borderVar: '--accent-pur', bgVar: '--accent-pur-bg' },
+        Refused: { borderVar: '--accent-slate' },
     };
 
+    // ---- Colours ---------------------------------------------------------------------
     function cssVar(name) {
         try {
             return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || null;
@@ -46,9 +47,9 @@ const Charts = (() => {
             return `rgba(${r}, ${g}, ${b}, ${alpha})`;
         }
         if (h.length === 6) {
-            const r = parseInt(h.slice(0,2), 16);
-            const g = parseInt(h.slice(2,4), 16);
-            const b = parseInt(h.slice(4,6), 16);
+            const r = parseInt(h.slice(0, 2), 16);
+            const g = parseInt(h.slice(2, 4), 16);
+            const b = parseInt(h.slice(4, 6), 16);
             return `rgba(${r}, ${g}, ${b}, ${alpha})`;
         }
         return null;
@@ -73,6 +74,51 @@ const Charts = (() => {
 
     const OVERVIEW_DATASETS = ['Total', 'Blocked', 'Cached', 'Recursive'];
 
+    // The chart takes its colours from the stylesheet, so they have to be
+    // resolved again whenever the theme changes.
+    function themeColors() {
+        const text = cssVar('--text');
+        const muted = cssVar('--text-muted');
+        const dim = cssVar('--text-dim');
+        return {
+            legend: muted || '#94a3b8',
+            tick: dim || '#475569',
+            grid: hexToRgba(dim, 0.12) || 'rgba(34,211,238,.06)',
+            tooltipBg: cssVar('--bg-card') || '#0b1222',
+            tooltipBorder: hexToRgba(cssVar('--accent-blue'), 0.2) || 'rgba(34,211,238,.2)',
+            title: text || '#e2e8f0',
+            body: muted || '#94a3b8',
+        };
+    }
+
+    function applyThemeColors() {
+        if (!chart) return;
+        const c = themeColors();
+        const options = chart.options;
+        options.plugins.legend.labels.color = c.legend;
+        options.plugins.tooltip.backgroundColor = c.tooltipBg;
+        options.plugins.tooltip.borderColor = c.tooltipBorder;
+        options.plugins.tooltip.titleColor = c.title;
+        options.plugins.tooltip.bodyColor = c.body;
+        options.scales.x.ticks.color = c.tick;
+        options.scales.y.ticks.color = c.tick;
+        options.scales.y1.ticks.color = c.tick;
+        options.scales.x.grid.color = c.grid;
+        options.scales.y.grid.color = c.grid;
+
+        // The dataset colours come from the stylesheet as well.
+        for (const ds of chart.data.datasets) {
+            const entry = ds.label === RTT_LABEL ? { borderVar: '--accent-pink' } : DATASET_COLORS[ds.label];
+            if (!entry) continue;
+            const resolved = resolveColor(entry);
+            ds.borderColor = resolved.border;
+            ds.backgroundColor = resolved.bg;
+        }
+
+        chart.update('none');
+    }
+
+    // ---- The chart -------------------------------------------------------------------
     function setPersistCallback(callback) {
         persistCallback = callback;
     }
@@ -81,6 +127,7 @@ const Charts = (() => {
         const canvas = document.getElementById('mainChart');
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
+        const colors = themeColors();
 
         chart = new Chart(ctx, {
             type: 'line',
@@ -94,9 +141,12 @@ const Charts = (() => {
                     legend: {
                         position: 'bottom',
                         labels: {
-                            color: '#94a3b8', boxWidth: 12, padding: 16, font: { size: 11 }
+                            color: colors.legend,
+                            boxWidth: 12,
+                            padding: 16,
+                            font: { size: 11 },
                         },
-                        onClick: (e, legendItem, legend) => {
+                        onClick: (e, legendItem, _legend) => {
                             const index = legendItem.datasetIndex;
                             const dataset = chart.data.datasets[index];
                             const meta = chart.getDatasetMeta(index);
@@ -123,14 +173,14 @@ const Charts = (() => {
                             }
 
                             chart.update('none');
-                        }
+                        },
                     },
                     tooltip: {
-                        backgroundColor: '#0b1222',
-                        borderColor: 'rgba(34,211,238,.2)',
+                        backgroundColor: colors.tooltipBg,
+                        borderColor: colors.tooltipBorder,
                         borderWidth: 1,
-                        titleColor: '#e2e8f0',
-                        bodyColor: '#94a3b8',
+                        titleColor: colors.title,
+                        bodyColor: colors.body,
                         callbacks: {
                             label: ctx => {
                                 const v = ctx.parsed.y;
@@ -138,29 +188,29 @@ const Charts = (() => {
                                     return ` ${ctx.dataset.label}: ${v == null ? 'n/a' : v + ' ms'}`;
                                 }
                                 return ` ${ctx.dataset.label}: ${v}`;
-                            }
-                        }
-                    }
+                            },
+                        },
+                    },
                 },
                 scales: {
                     x: {
-                        ticks: { color: '#475569', font: { size: 10 }, maxTicksLimit: 12 },
-                        grid: { color: 'rgba(34,211,238,.06)' }
+                        ticks: { color: colors.tick, font: { size: 10 }, maxTicksLimit: 12 },
+                        grid: { color: colors.grid },
                     },
                     y: {
-                        ticks: { color: '#475569', font: { size: 10 } },
-                        grid: { color: 'rgba(34,211,238,.06)' },
-                        beginAtZero: true
+                        ticks: { color: colors.tick, font: { size: 10 } },
+                        grid: { color: colors.grid },
+                        beginAtZero: true,
                     },
                     y1: {
                         position: 'right',
                         display: false,
                         beginAtZero: true,
-                        ticks: { color: '#475569', font: { size: 10 }, callback: v => v + ' ms' },
-                        grid: { drawOnChartArea: false }
-                    }
-                }
-            }
+                        ticks: { color: colors.tick, font: { size: 10 }, callback: v => v + ' ms' },
+                        grid: { drawOnChartArea: false },
+                    },
+                },
+            },
         });
     }
 
@@ -173,6 +223,30 @@ const Charts = (() => {
         updateFromData(chartData, datasetMode, opts);
     }
 
+    // ---- Chart data ------------------------------------------------------------------
+    /**
+     * The labels a view shows.
+     *
+     * The overview shows the four headline counters and the all view shows
+     * every counter the server sends.
+     */
+    function allowedDatasets(datasetMode) {
+        return datasetMode === 'all' ? Object.keys(DATASET_COLORS) : OVERVIEW_DATASETS;
+    }
+
+    /**
+     * The mean RTT for each label of the chart.
+     *
+     * The overlay lines up with the raw labels, so a minute the server did not
+     * report has no value rather than the value of the minute before it.
+     */
+    function rttForLabels(labels, rttSeries) {
+        if (!Array.isArray(rttSeries) || !rttSeries.length) return { data: [], hasRtt: false };
+        const byMinute = new Map(rttSeries.map(p => [p.t, p.mean]));
+        const data = labels.map(l => (byMinute.has(l) ? byMinute.get(l) : null));
+        return { data, hasRtt: data.some(v => v != null) };
+    }
+
     function formatLabels(labels, fmt, tzOffset) {
         if (!fmt || !labels?.length) return labels;
         const utc = !tzOffset && !/HH|mm/.test(fmt);
@@ -181,7 +255,7 @@ const Charts = (() => {
             const d = new Date(l);
             if (isNaN(d.getTime())) return l;
             const pad = n => String(n).padStart(2, '0');
-            const part = n => utc ? d['getUTC' + n]() : d['get' + n]();
+            const part = n => (utc ? d['getUTC' + n]() : d['get' + n]());
             return fmt
                 .replace(/yyyy|YYYY/g, part('FullYear'))
                 .replace(/dd|DD/g, pad(part('Date')))
@@ -225,8 +299,7 @@ const Charts = (() => {
 
         lastView = datasetMode;
 
-        const showAll = datasetMode === 'all';
-        const allowed = new Set(showAll ? Object.keys(DATASET_COLORS) : OVERVIEW_DATASETS);
+        const allowed = new Set(allowedDatasets(datasetMode));
 
         const datasets = (chartData.datasets || [])
             .filter(ds => allowed.has(ds.label))
@@ -234,47 +307,43 @@ const Charts = (() => {
                 const entry = DATASET_COLORS[ds.label] || { border: '#8b949e', bg: 'rgba(139,148,158,.08)' };
                 const c = resolveColor(entry);
                 return {
-                    label:            ds.label,
-                    data:             ds.data,
-                    borderColor:      c.border,
-                    backgroundColor:  c.bg,
-                    borderWidth:      1.5,
-                    pointRadius:      0,
+                    label: ds.label,
+                    data: ds.data,
+                    borderColor: c.border,
+                    backgroundColor: c.bg,
+                    borderWidth: 1.5,
+                    pointRadius: 0,
                     pointHoverRadius: 4,
-                    fill:             false,
-                    tension:          0.3,
+                    fill: false,
+                    tension: 0.3,
                 };
             });
 
         // Mean recursive RTT overlay, aligned to the raw (pre-format) ISO labels.
         const rttSeries = opts?.rttSeries;
-        let hasRtt = false;
-        if (Array.isArray(rttSeries) && rttSeries.length) {
-            const byMinute = new Map(rttSeries.map(p => [p.t, p.mean]));
-            const rttData = chartData.labels.map(l => (byMinute.has(l) ? byMinute.get(l) : null));
-            hasRtt = rttData.some(v => v != null);
-            if (hasRtt) {
-                const c = resolveColor({ borderVar: '--accent-pink' });
-                datasets.push({
-                    label:            RTT_LABEL,
-                    hidden:           rttHidden,
-                    data:             rttData,
-                    yAxisID:          'y1',
-                    borderColor:      c.border,
-                    backgroundColor:  c.bg,
-                    borderWidth:      1.75,
-                    borderDash:       [5, 3],
-                    pointRadius:      0,
-                    pointHoverRadius: 4,
-                    fill:             false,
-                    tension:          0.3,
-                    spanGaps:         true,
-                });
-            }
+        const rtt = rttForLabels(chartData.labels, rttSeries);
+        let hasRtt = rtt.hasRtt;
+        if (hasRtt) {
+            const c = resolveColor({ borderVar: '--accent-pink' });
+            datasets.push({
+                label: RTT_LABEL,
+                hidden: rttHidden,
+                data: rtt.data,
+                yAxisID: 'y1',
+                borderColor: c.border,
+                backgroundColor: c.bg,
+                borderWidth: 1.75,
+                borderDash: [5, 3],
+                pointRadius: 0,
+                pointHoverRadius: 4,
+                fill: false,
+                tension: 0.3,
+                spanGaps: true,
+            });
         }
         chart.options.scales.y1.display = hasRtt;
 
-        chart.data.labels   = formatLabels(chartData.labels, chartData.labelFormat, chartData.tzOffset);
+        chart.data.labels = formatLabels(chartData.labels, chartData.labelFormat, chartData.tzOffset);
         chart.data.datasets = datasets;
 
         // Restore hidden label state after update. The RTT overlay is never in the
@@ -302,5 +371,19 @@ const Charts = (() => {
         window.loadChartHiddenState = loadFn;
     }
 
-    return { init, update, updateFromData, setPersistCallback, setLoadCallback };
+    return {
+        init,
+        update,
+        updateFromData,
+        setPersistCallback,
+        setLoadCallback,
+        applyThemeColors,
+        formatLabels,
+        DATASET_COLORS,
+        allowedDatasets,
+        rttForLabels,
+        RTT_LABEL,
+    };
 })();
+
+export { Charts };

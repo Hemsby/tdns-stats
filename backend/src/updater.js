@@ -9,17 +9,45 @@ const log = require('./log');
 const execAsync = promisify(exec);
 
 class Updater {
-    constructor(projectRoot) {
+    constructor(projectRoot, execFn, existsFn) {
         this.projectRoot = projectRoot;
+        this.execAsync = execFn || execAsync;
+        // The filesystem is a dependency too, so a test can say which paths
+        // exist without the answer depending on the machine it runs on.
+        this.existsSync = existsFn || fs.existsSync;
         this.deploymentType = null;
         this.capable = false;
     }
 
+    // ---- Running commands ------------------------------------------------------------
+    /**
+     * Run a command and give back what it printed.
+     *
+     * The shell is always /bin/sh, so a command behaves the same however the
+     * updater was started.
+     */
+    async sh(command, options = {}) {
+        const { stdout } = await this.execAsync(command, { shell: '/bin/sh', ...options });
+        return String(stdout).trim();
+    }
+
+    /**
+     * Run a command and write what it did to the debug log.
+     *
+     * An update that goes wrong is followed after the fact, so the output and
+     * the errors of every step are kept.
+     */
+    async runLogged(label, command, options = {}) {
+        const { stdout, stderr } = await this.execAsync(command, { shell: '/bin/sh', ...options });
+        if (stderr) log.debug(`[update] ${label} stderr:`, stderr);
+        log.debug(`[update] ${label}:`, String(stdout).trim());
+        return stdout;
+    }
+
+    // ---- Deployment detection --------------------------------------------------------
     async detectCapability() {
         const type = await this.detectDeploymentMethod();
-        this.capable = type === 'docker'
-            ? fs.existsSync('/app/host-project/docker-compose.yml')
-            : type === 'systemd';
+        this.capable = type === 'docker' ? this.existsSync('/app/host-project/docker-compose.yml') : type === 'systemd';
     }
 
     async detectDeploymentMethod() {
@@ -31,25 +59,21 @@ class Updater {
             return this.deploymentType;
         }
 
-        if (fs.existsSync('/.dockerenv')) {
+        if (this.existsSync('/.dockerenv')) {
             this.deploymentType = 'docker';
             return this.deploymentType;
         }
 
-        const configPaths = [
-            '/etc/tdns-stats/config.yml',
-            ...(this.projectRoot ? [path.join(this.projectRoot, 'config.yml')] : [])
-        ];
+        const configPaths = ['/etc/tdns-stats/config.yml', ...(this.projectRoot ? [path.join(this.projectRoot, 'config.yml')] : [])];
 
-        if (configPaths.some(p => fs.existsSync(p))) {
+        if (configPaths.some(p => this.existsSync(p))) {
             try {
-                const result = await execAsync('systemctl is-active tdns-stats 2>/dev/null', { shell: '/bin/sh' });
-                if (result.stdout.trim() === 'active') {
+                const state = await this.sh('systemctl is-active tdns-stats 2>/dev/null');
+                if (state === 'active') {
                     this.deploymentType = 'systemd';
                     return this.deploymentType;
                 }
-            } catch (e) {
-            }
+            } catch (e) {}
             this.deploymentType = 'docker';
             return this.deploymentType;
         }
@@ -58,6 +82,7 @@ class Updater {
         return null;
     }
 
+    // ---- Running the update ----------------------------------------------------------
     async executeUpdate() {
         const deploymentType = await this.detectDeploymentMethod();
 
@@ -73,17 +98,15 @@ class Updater {
 
     async getDockerComposeCommand() {
         try {
-            await execAsync('command -v docker >/dev/null 2>&1', { shell: '/bin/sh' });
-            await execAsync('docker compose version >/dev/null 2>&1', { shell: '/bin/sh' });
+            await this.sh('command -v docker >/dev/null 2>&1');
+            await this.sh('docker compose version >/dev/null 2>&1');
             return 'docker compose';
-        } catch (e) {
-        }
+        } catch (e) {}
 
         try {
-            await execAsync('command -v docker-compose >/dev/null 2>&1', { shell: '/bin/sh' });
+            await this.sh('command -v docker-compose >/dev/null 2>&1');
             return 'docker-compose';
-        } catch (e) {
-        }
+        } catch (e) {}
 
         throw new Error('No docker compose command available in container');
     }
@@ -94,11 +117,10 @@ class Updater {
 
     async getHostMountSource(containerId, destination) {
         try {
-            const { stdout } = await execAsync(
+            const stdout = await this.sh(
                 `docker inspect --format='{{range .Mounts}}{{if eq .Destination "${destination}"}}{{.Source}}{{end}}{{end}}' ${containerId}`,
-                { shell: '/bin/sh' }
             );
-            return String(stdout).trim() || null;
+            return stdout || null;
         } catch (e) {
             return null;
         }
@@ -118,23 +140,20 @@ class Updater {
         }
 
         try {
-            const { stdout } = await execAsync(
-                "find / -maxdepth 5 -type f -name 'docker-compose.yml' 2>/dev/null | sort | head -n 20",
-                { shell: '/bin/sh' }
-            );
-            const paths = String(stdout).trim().split('\n').filter(Boolean);
+            const paths = (await this.sh("find / -maxdepth 5 -type f -name 'docker-compose.yml' 2>/dev/null | sort | head -n 20"))
+                .split('\n')
+                .filter(Boolean);
             if (paths.length > 0) {
                 const composeFile = paths[0];
                 const hostProject = path.dirname(composeFile);
                 return { hostProject, composeFile };
             }
-        } catch (e) {
-        }
+        } catch (e) {}
 
         const checked = candidates.map(p => path.join(p, 'docker-compose.yml')).join(', ');
         throw new Error(
             `Docker compose file not found in any known mount path. Checked: ${checked}. ` +
-            `Set HOST_PROJECT_PATH or TDNS_STATS_HOST_PROJECT_PATH to the mounted host project path.`
+                'Set HOST_PROJECT_PATH or TDNS_STATS_HOST_PROJECT_PATH to the mounted host project path.',
         );
     }
 
@@ -158,17 +177,8 @@ class Updater {
             }
 
             try {
-                const { stdout: fetchStdout, stderr: fetchStderr } = await execAsync(
-                    'git fetch origin', { cwd, shell: '/bin/sh' }
-                );
-                if (fetchStderr) log.debug('[update] git fetch stderr:', fetchStderr);
-                log.debug('[update] fetched updates:', fetchStdout);
-
-                const { stdout: resetStdout, stderr: resetStderr } = await execAsync(
-                    'git reset --hard origin/master', { cwd, shell: '/bin/sh' }
-                );
-                if (resetStderr) log.debug('[update] git reset stderr:', resetStderr);
-                log.debug('[update] reset host project to origin/master:', resetStdout);
+                await this.runLogged('fetched updates', 'git fetch origin', { cwd });
+                await this.runLogged('reset host project to origin/master', 'git reset --hard origin/master', { cwd });
             } catch (e) {
                 console.warn('[update] failed to update host git repository, continuing with compose rebuild:', e.message);
             }
@@ -184,11 +194,7 @@ class Updater {
         }
 
         try {
-            const { stdout: pullStdout, stderr: pullStderr } = await execAsync(
-                `${composeCmd} -p tdns-stats -f ${composeFile} pull`, { cwd, shell: '/bin/sh' }
-            );
-            if (pullStderr) log.debug('[update] docker compose pull stderr:', pullStderr);
-            log.debug('[update] pull complete:', pullStdout);
+            await this.runLogged('pull complete', `${composeCmd} -p tdns-stats -f ${composeFile} pull`, { cwd });
         } catch (e) {
             console.error('[update] docker compose pull failed:', e.message);
             throw e;
@@ -198,36 +204,26 @@ class Updater {
         let helperImage = null;
         let helperHostSource = null;
         try {
-            const { stdout: containerIdOut } = await execAsync('hostname', { shell: '/bin/sh' });
-            const containerId = containerIdOut.trim();
-            const { stdout: imageName } = await execAsync(
-                `docker inspect --format='{{.Config.Image}}' ${containerId}`, { shell: '/bin/sh' }
-            );
-            helperImage = imageName.trim();
+            const containerId = await this.sh('hostname');
+            helperImage = await this.sh(`docker inspect --format='{{.Config.Image}}' ${containerId}`);
             helperHostSource = await this.getHostMountSource(containerId, hostProject);
-        } catch (e) {
-        }
+        } catch (e) {}
 
-        const extraMount = (helperHostSource && helperHostSource !== hostProject)
-            ? `-v ${helperHostSource}:${helperHostSource}`
-            : '';
+        const extraMount = helperHostSource && helperHostSource !== hostProject ? `-v ${helperHostSource}:${helperHostSource}` : '';
 
-        const helperCmd = helperImage && helperHostSource
-            ? `docker run --rm -d \
+        const helperCmd =
+            helperImage && helperHostSource
+                ? `docker run --rm -d \
                 -v /var/run/docker.sock:/var/run/docker.sock \
                 -v ${helperHostSource}:${hostProject} \
                 ${extraMount} \
                 -w ${hostProject} \
                 ${helperImage} \
                 sh -c '${composeCmd} -p tdns-stats -f ${composeFile} up -d --build'`
-            : `${composeCmd} -p tdns-stats -f ${composeFile} up -d --build`;
+                : `${composeCmd} -p tdns-stats -f ${composeFile} up -d --build`;
 
         try {
-            const { stdout: helperStdout, stderr: helperStderr } = await execAsync(
-                helperCmd, { cwd, shell: '/bin/sh' }
-            );
-            if (helperStderr) log.debug('[update] helper command stderr:', helperStderr);
-            log.debug('[update] update triggered:', helperStdout.trim() || 'helper started');
+            await this.runLogged('update triggered', helperCmd, { cwd });
         } catch (e) {
             console.error('[update] failed to trigger helper restart:', e.message);
             throw e;
@@ -241,18 +237,14 @@ class Updater {
         // from the remote one (a moved tag) makes a plain tag fetch fail, so force it and never
         // let a tag problem block the update itself.
         try {
-            await execAsync('git fetch --tags --force origin', { cwd, shell: '/bin/sh' });
+            await this.sh('git fetch --tags --force origin', { cwd });
         } catch (e) {
             console.warn('[update] tag fetch failed, continuing with update:', e.message);
         }
 
         log.debug('[update] executing git pull');
         try {
-            const { stdout: pullStdout, stderr: pullStderr } = await execAsync(
-                'git pull origin master', { cwd, shell: '/bin/sh' }
-            );
-            if (pullStderr) log.debug('[update] git pull stderr:', pullStderr);
-            log.debug('[update] git pull complete:', pullStdout);
+            await this.runLogged('git pull complete', 'git pull origin master', { cwd });
         } catch (e) {
             console.error('[update] git pull failed:', e.message);
             throw e;
@@ -260,11 +252,7 @@ class Updater {
 
         log.debug('[update] restarting systemd service');
         try {
-            const { stdout: restartStdout, stderr: restartStderr } = await execAsync(
-                'systemctl restart tdns-stats', { shell: '/bin/sh' }
-            );
-            if (restartStderr) log.debug('[update] systemctl stderr:', restartStderr);
-            log.debug('[update] service restart triggered:', restartStdout);
+            await this.runLogged('service restart triggered', 'systemctl restart tdns-stats');
         } catch (e) {
             console.error('[update] systemctl restart failed:', e.message);
             throw e;

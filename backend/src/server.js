@@ -1,42 +1,83 @@
 'use strict';
 
-const express   = require('express');
-const helmet    = require('helmet');
-const http      = require('http');
-const https     = require('https');
-const path      = require('path');
-const fs        = require('fs');
-const crypto    = require('crypto');
-const yaml      = require('js-yaml');
-const fetch     = require('node-fetch');
-const Poller    = require('./poller');
-const Updater   = require('./updater');
-const log       = require('./log');
-const { listQueryLogApps, discoverQueryLogsApp, getCacheMaxEntries, getSettings, listCache, resolveBlockedDomain, listsFromBlockedResolve, listsForDomain, summarizeBlockedLog, redactListUrl } = require('./technitium');
+const express = require('express');
+const helmet = require('helmet');
+const http = require('http');
+const https = require('https');
+const path = require('path');
+const fs = require('fs');
+const crypto = require('crypto');
+const yaml = require('js-yaml');
+const fetch = require('node-fetch');
+const Poller = require('./poller');
+const Updater = require('./updater');
+const log = require('./log');
+const { listQueryLogApps, discoverQueryLogsApp, getCacheMaxEntries, getSettings, listCache } = require('./technitium');
+const {
+    resolveBlockedDomain,
+    listsFromBlockedResolve,
+    listsForDomain,
+    summarizeBlockedLog,
+    redactListUrl,
+    isBlockedName,
+} = require('./blocklists');
 
-const PACKAGE = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf8'));
+// ---- Version and config ----------------------------------------------------------
+// The package file sits at the root of the project. The second path is the
+// layout the project used to have, so an install that has not been updated
+// yet still finds its version instead of refusing to start.
+function readPackage() {
+    const paths = [path.join(__dirname, '../../package.json'), path.join(__dirname, '../package.json')];
+    for (const p of paths) {
+        try {
+            return JSON.parse(fs.readFileSync(p, 'utf8'));
+        } catch (_) {
+            // Try the next one.
+        }
+    }
+    return { version: '0.0.0' };
+}
+
+const PACKAGE = readPackage();
 const VERSION = PACKAGE.version;
 const STARTED_AT = new Date().toISOString();
 const CLUSTER_KEY = '__cluster';
 
-const CONFIG_PATHS = [
-    '/etc/tdns-stats/config.yml',
-    path.join(__dirname, '../../config.yml')
-];
+const CONFIG_PATHS = ['/etc/tdns-stats/config.yml', path.join(__dirname, '../../config.yml')];
 
-function semverGreater(v1, v2) {
-    const parse = (v) => {
-        const parts = v.split('.').map(p => parseInt(p, 10) || 0);
-        return { major: parts[0], minor: parts[1], patch: parts[2] };
-    };
-    const a = parse(v1);
-    const b = parse(v2);
-    if (a.major !== b.major) return a.major > b.major;
-    if (a.minor !== b.minor) return a.minor > b.minor;
-    return a.patch > b.patch;
+// `--config <path>` names the config file to read. Without it, the search
+// order in CONFIG_PATHS decides. Both `--config path` and `--config=path` work.
+function configPathFromArgv(argv) {
+    const index = argv.indexOf('--config');
+    if (index !== -1) {
+        const value = argv[index + 1];
+        if (!value || value.startsWith('--')) throw new Error('--config needs a path to a config file.');
+        return value;
+    }
+    const inline = argv.find(arg => arg.startsWith('--config='));
+    if (inline !== undefined) {
+        const value = inline.slice('--config='.length);
+        if (!value) throw new Error('--config needs a path to a config file.');
+        return value;
+    }
+    return null;
 }
 
-function loadConfig() {
+function semverGreater(v1, v2) {
+    const parts = v => v.split('.').map(p => parseInt(p, 10) || 0);
+    const [a, b] = [parts(v1), parts(v2)];
+    for (let i = 0; i < 3; i++) {
+        if (a[i] !== b[i]) return a[i] > b[i];
+    }
+    return false;
+}
+
+function loadConfig(argv = process.argv) {
+    const given = configPathFromArgv(argv);
+    if (given) {
+        if (!fs.existsSync(given)) throw new Error(`Config file not found: ${given}`);
+        return yaml.load(fs.readFileSync(given, 'utf8'));
+    }
     for (const p of CONFIG_PATHS) {
         if (fs.existsSync(p)) {
             return yaml.load(fs.readFileSync(p, 'utf8'));
@@ -45,28 +86,40 @@ function loadConfig() {
     throw new Error('No config.yml found. Copy config.example.yml to config.yml and fill it in.');
 }
 
-const config  = loadConfig();
-log.configure(config.debug);
-const servers = (config.servers || []).map(s => ({
-    name:              s.name,
-    url:               s.url.replace(/\/$/, ''),
-    token:             s.token,
-    ignoreSsl:         !!s.ignoreSsl,
-    queryLogsAppName:  s.queryLogsApp || null,
-    queryLogsApp:      null,
-    queryLogsLookupFailed: false,
-    color:            s.color || null,
-}));
+// The config file is read on first use rather than on import, so requiring this
+// module (from a test, or from tooling) does not need a config.yml on disk.
+let config = null;
+let servers = null;
 
-if (servers.length === 0) throw new Error('No servers defined in config.yml');
+function setConfig(cfg) {
+    const list = (cfg.servers || []).map(s => ({
+        name: s.name,
+        url: s.url.replace(/\/$/, ''),
+        token: s.token,
+        ignoreSsl: !!s.ignoreSsl,
+        queryLogsAppName: s.queryLogsApp || null,
+        queryLogsApp: null,
+        queryLogsLookupFailed: false,
+        color: s.color || null,
+    }));
+    if (list.length === 0) throw new Error('No servers defined in config.yml');
+    config = cfg;
+    servers = list;
+    log.configure(cfg.debug);
+    return config;
+}
 
-const PORT = config.port || 3000;
+function getConfig() {
+    if (!config) setConfig(loadConfig());
+    return config;
+}
 
 const clients = new Set();
 const sessions = new Set();
 const SESSION_COOKIE = 'tdns-stats_session';
 const SESSION_SECRET = crypto.randomBytes(32).toString('hex');
 
+// ---- Login sessions --------------------------------------------------------------
 function parseCookies(req) {
     const raw = req.headers.cookie;
     if (!raw) return {};
@@ -99,6 +152,7 @@ function verifySession(value) {
     return token;
 }
 
+// ---- Cache and block list lookups ------------------------------------------------
 function normalizeDomain(value) {
     return String(value || '')
         .trim()
@@ -189,7 +243,11 @@ function getBlockedLookupTarget(serverName, state) {
 function broadcast(msg) {
     const data = `data: ${JSON.stringify(msg)}\n\n`;
     for (const res of Array.from(clients)) {
-        try { res.write(data); } catch (_) { clients.delete(res); }
+        try {
+            res.write(data);
+        } catch (_) {
+            clients.delete(res);
+        }
     }
 }
 
@@ -197,6 +255,7 @@ function broadcastViewerCount() {
     broadcast({ type: 'viewer-count', data: { count: clients.size } });
 }
 
+// ---- Apps on the servers ---------------------------------------------------------
 // How often to retry app discovery for servers that don't have a queryLogsApp
 // yet. Technitium (or its query log app) can still be starting up when
 // tdns-stats does, and that one-shot lookup at boot never got a second try.
@@ -206,10 +265,7 @@ const APP_DISCOVERY_RETRY_MS = 60000;
 let appDiscoveryTimer = null;
 
 async function discoverServerApps(s) {
-    const [app, cacheMax] = await Promise.allSettled([
-        discoverQueryLogsApp(s, s.queryLogsAppName),
-        getCacheMaxEntries(s)
-    ]);
+    const [app, cacheMax] = await Promise.allSettled([discoverQueryLogsApp(s, s.queryLogsAppName), getCacheMaxEntries(s)]);
     s.cacheMaxEntries = cacheMax.status === 'fulfilled' ? cacheMax.value : 0;
 
     if (app.status === 'fulfilled' && app.value) {
@@ -231,16 +287,16 @@ async function discoverServerApps(s) {
     }
 
     if (app.status === 'rejected') {
-        console.warn(`[discovery] ${s.name}: queryLogsApp "${s.queryLogsAppName}" lookup failed: ${app.reason?.message || app.reason}. Will retry.`);
+        console.warn(
+            `[discovery] ${s.name}: queryLogsApp "${s.queryLogsAppName}" lookup failed: ${app.reason?.message || app.reason}. Will retry.`,
+        );
         return;
     }
 
     // The apps/list call itself succeeded but no app matched. Safe to ask
     // again for the list of what IS installed, since that endpoint just worked.
     const available = await listQueryLogApps(s).catch(() => []);
-    const hint = available.length
-        ? `Available apps: ${available.map(n => `"${n}"`).join(', ')}`
-        : 'No query log apps found on this server';
+    const hint = available.length ? `Available apps: ${available.map(n => `"${n}"`).join(', ')}` : 'No query log apps found on this server';
     console.warn(`[discovery] ${s.name}: queryLogsApp "${s.queryLogsAppName}" not found. ${hint}`);
 }
 
@@ -257,37 +313,28 @@ function scheduleAppDiscoveryRetry() {
     }, APP_DISCOVERY_RETRY_MS);
 }
 
-async function start() {
-    // Discover query logs app for each server in parallel
-    await Promise.allSettled(servers.map(s => discoverServerApps(s)));
-
-    if (servers.some(s => s.queryLogsAppName && !s.queryLogsApp)) {
-        scheduleAppDiscoveryRetry();
-    }
-
-    const poller = new Poller(servers, broadcast, config);
-    poller.start();
-
-    const updater = new Updater(path.join(__dirname, '../..'));
-    await updater.detectCapability();
-
+// ---- API routes ------------------------------------------------------------------
+function createApp(poller, updater) {
+    const cfg = getConfig();
     const app = express();
 
-    app.use(helmet({
-        contentSecurityPolicy: {
-            useDefaults: false,
-            directives: {
-                defaultSrc:    ["'self'"],
-                scriptSrc:     ["'self'", "cdn.jsdelivr.net"],
-                styleSrc:      ["'self'", "'unsafe-inline'", "cdn.jsdelivr.net", "fonts.googleapis.com"],
-                fontSrc:       ["'self'", "fonts.gstatic.com", "cdn.jsdelivr.net"],
-                imgSrc:        ["'self'", "data:"],
-                connectSrc:    ["'self'", "cdn.jsdelivr.net"],
-                objectSrc:     ["'none'"],
-                frameAncestors:["'self'"]
-            }
-        }
-    }));
+    app.use(
+        helmet({
+            contentSecurityPolicy: {
+                useDefaults: false,
+                directives: {
+                    defaultSrc: ["'self'"],
+                    scriptSrc: ["'self'", 'cdn.jsdelivr.net'],
+                    styleSrc: ["'self'", "'unsafe-inline'", 'cdn.jsdelivr.net', 'fonts.googleapis.com'],
+                    fontSrc: ["'self'", 'fonts.gstatic.com', 'cdn.jsdelivr.net'],
+                    imgSrc: ["'self'", 'data:'],
+                    connectSrc: ["'self'", 'cdn.jsdelivr.net'],
+                    objectSrc: ["'none'"],
+                    frameAncestors: ["'self'"],
+                },
+            },
+        }),
+    );
 
     app.use(express.static(path.join(__dirname, '../../frontend')));
 
@@ -318,9 +365,9 @@ async function start() {
         }
 
         req.setTimeout(0);
-        res.setHeader('Content-Type',  'text/event-stream');
+        res.setHeader('Content-Type', 'text/event-stream');
         res.setHeader('Cache-Control', 'no-cache');
-        res.setHeader('Connection',    'keep-alive');
+        res.setHeader('Connection', 'keep-alive');
         res.setHeader('X-Accel-Buffering', 'no');
         res.flushHeaders();
 
@@ -345,7 +392,7 @@ async function start() {
             ping = null;
         };
 
-        res.on('error', (err) => {
+        res.on('error', err => {
             console.warn('[stream] response error:', err.message);
             cleanup();
         });
@@ -384,9 +431,9 @@ async function start() {
         }
 
         ping = setInterval(() => {
-            try { 
-                res.write(`data: ${JSON.stringify({ type: 'ping' })}\n\n`); 
-            } catch (_) { 
+            try {
+                res.write(`data: ${JSON.stringify({ type: 'ping' })}\n\n`);
+            } catch (_) {
                 cleanup();
             }
         }, 20000);
@@ -394,12 +441,8 @@ async function start() {
         req.on('close', cleanup);
     });
 
-    app.get('/api/servers', (req, res) => {
-        res.json(servers.map(s => ({ name: s.name, url: s.url })));
-    });
-
     app.get('/api/config', (req, res) => {
-        const fallback = config.serverColors || ['blue', 'green', 'ora', 'pur', 'teal', 'yel'];
+        const fallback = cfg.serverColors || ['blue', 'green', 'ora', 'pur', 'teal', 'yel'];
         const serverColors = {};
         const cacheMaxEntries = {};
         servers.forEach((s, i) => {
@@ -407,7 +450,7 @@ async function start() {
             cacheMaxEntries[s.name] = s.cacheMaxEntries || 0;
         });
         res.json({
-            maxEntries: config.feed?.maxEntries || 200,
+            maxEntries: cfg.feed?.maxEntries || 200,
             serverColors,
             cacheMaxEntries,
         });
@@ -425,14 +468,18 @@ async function start() {
         const rawDomain = String(req.query.domain || '').trim();
         const domain = normalizeDomain(req.query.domain);
         const serverName = String(req.query.server || 'all');
-        const blockedLookup = String(req.query.blocked || '').toLowerCase() === '1' || String(req.query.blocked || '').toLowerCase() === 'true';
+        const blockedLookup =
+            String(req.query.blocked || '').toLowerCase() === '1' || String(req.query.blocked || '').toLowerCase() === 'true';
         const skipCacheListing = blockedLookup && String(req.query.cache || '') === '0';
         if (!rawDomain) return res.status(400).json({ error: 'Domain is required' });
-        if (rawDomain.startsWith('.') || rawDomain.endsWith('.')) return res.status(400).json({ error: 'Domain cannot start or end with a dot' });
+        if (rawDomain.startsWith('.') || rawDomain.endsWith('.'))
+            return res.status(400).json({ error: 'Domain cannot start or end with a dot' });
         if (rawDomain.includes('..')) return res.status(400).json({ error: 'Domain cannot contain consecutive dots' });
         if (rawDomain.length > 253) return res.status(400).json({ error: 'Domain too long (max 253 characters)' });
-        if (!/^[a-z0-9]([a-z0-9\-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9\-]*[a-z0-9])?)+$/.test(domain)) return res.status(400).json({ error: 'Invalid domain format' });
-        if (domain.split('.').some(label => label.length > 63)) return res.status(400).json({ error: 'Domain label too long (max 63 characters)' });
+        if (!/^[a-z0-9]([a-z0-9\-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9\-]*[a-z0-9])?)+$/.test(domain))
+            return res.status(400).json({ error: 'Invalid domain format' });
+        if (domain.split('.').some(label => label.length > 63))
+            return res.status(400).json({ error: 'Domain label too long (max 63 characters)' });
 
         const state = poller.getState();
         const cluster = state.nodes?.__cluster;
@@ -440,32 +487,32 @@ async function start() {
         if (!targets || !targets.length) return res.status(404).json({ error: 'Unknown server' });
 
         // The Top Stats popover only needs the blocked summary, so it skips the per-node cache listing.
-        const results = skipCacheListing ? [] : await Promise.all(targets.map(async server => {
-            try {
-                const data = await listCache(server, domain);
-                const node = state.nodes?.[server.name] || {};
-                return {
-                    server: server.displayName || server.name,
-                    domain: server.domain || node.dnsServerDomain || server.name,
-                    url: server.url,
-                    ok: true,
-                    ...summarizeCache(data),
-                };
-            } catch (e) {
-                return {
-                    server: server.displayName || server.name,
-                    domain: server.domain || state.nodes?.[server.name]?.dnsServerDomain || server.name,
-                    url: server.url,
-                    ok: false,
-                    cached: false,
-                    zoneCount: 0,
-                    recordCount: 0,
-                    zones: [],
-                    records: [],
-                    error: e.message,
-                };
-            }
-        }));
+        const results = skipCacheListing
+            ? []
+            : await Promise.all(
+                  targets.map(async server => {
+                      const target = {
+                          server: server.displayName || server.name,
+                          domain: server.domain || state.nodes?.[server.name]?.dnsServerDomain || server.name,
+                          url: server.url,
+                      };
+                      try {
+                          const data = await listCache(server, domain);
+                          return { ...target, ok: true, ...summarizeCache(data) };
+                      } catch (e) {
+                          return {
+                              ...target,
+                              ok: false,
+                              cached: false,
+                              zoneCount: 0,
+                              recordCount: 0,
+                              zones: [],
+                              records: [],
+                              error: e.message,
+                          };
+                      }
+                  }),
+              );
 
         let blockedSummary = null;
         if (blockedLookup) {
@@ -478,9 +525,8 @@ async function start() {
                         resolveBlockedDomain(blockedTarget, domain),
                         getSettings(blockedTarget).catch(() => null),
                     ]);
-                    const txtBlockingReport = typeof settings?.allowTxtBlockingReport === 'boolean'
-                        ? settings.allowTxtBlockingReport
-                        : null;
+                    const txtBlockingReport =
+                        typeof settings?.allowTxtBlockingReport === 'boolean' ? settings.allowTxtBlockingReport : null;
                     let lists = listsFromBlockedResolve(data, domain);
                     let reportError = null;
                     // A and AAAA already carry the report on some servers. Ask once,
@@ -490,17 +536,13 @@ async function start() {
                         if (!found.ok) reportError = 'The TXT blocking report could not be read.';
                         else lists = Array.isArray(found.lists) ? found.lists : [];
                     }
-                    const isBlocked = Boolean(
-                        lists.length ||
-                        (Array.isArray(data.records) && data.records.length > 0) ||
-                        data.source ||
-                        data.group ||
-                        (data.parsed && Object.keys(data.parsed).length > 0) ||
-                        data.extraText
-                    );
-                    blockedSummary = {
+                    const isBlocked = isBlockedName(data, lists);
+                    const target = {
                         server: blockedTarget.displayName || blockedTarget.name,
                         domain: blockedTarget.domain || blockedTarget.name,
+                    };
+                    blockedSummary = {
+                        ...target,
                         ok: true,
                         blocked: isBlocked,
                         txtBlockingReport,
@@ -549,7 +591,9 @@ async function start() {
         try {
             const data = await summarizeBlockedLog(targets);
             if (data.ok) {
-                console.log(`[block-list-stats] ${data.blockedQueries} blocked, ${data.lookups} lookups, ${data.skippedLoopback} loopback skipped`);
+                console.log(
+                    `[block-list-stats] ${data.blockedQueries} blocked, ${data.lookups} lookups, ${data.skippedLoopback} loopback skipped`,
+                );
             }
             res.json(data);
         } catch (_) {
@@ -580,7 +624,7 @@ async function start() {
         try {
             const response = await fetch('https://api.github.com/repos/Hemsby/tdns-stats/releases/latest', {
                 timeout: 5000,
-                headers: { 'User-Agent': 'tdns-stats' }
+                headers: { 'User-Agent': 'tdns-stats' },
             });
 
             let latestVersion = null;
@@ -616,7 +660,7 @@ async function start() {
                     currentVersion: VERSION,
                     latestVersion,
                     updateAvailable,
-                }
+                },
             });
         } catch (e) {
             console.error('[update] error checking for updates:', e.message);
@@ -629,7 +673,7 @@ async function start() {
         try {
             broadcast({
                 type: 'update-status',
-                data: { status: 'updating' }
+                data: { status: 'updating' },
             });
 
             res.json({ status: 'update_started' });
@@ -641,7 +685,7 @@ async function start() {
                     console.error('[update] update failed:', e.message);
                     broadcast({
                         type: 'update-status',
-                        data: { status: null, error: e.message }
+                        data: { status: null, error: e.message },
                     });
                 }
             }, 100);
@@ -651,7 +695,30 @@ async function start() {
         }
     });
 
-    const tlsCfg = config.https;
+    return app;
+}
+
+// ---- Starting the server ---------------------------------------------------------
+async function start() {
+    const cfg = getConfig();
+
+    // Discover query logs app for each server in parallel
+    await Promise.allSettled(servers.map(s => discoverServerApps(s)));
+
+    if (servers.some(s => s.queryLogsAppName && !s.queryLogsApp)) {
+        scheduleAppDiscoveryRetry();
+    }
+
+    const poller = new Poller(servers, broadcast, cfg);
+    poller.start();
+
+    const updater = new Updater(path.join(__dirname, '../..'));
+    await updater.detectCapability();
+
+    const app = createApp(poller, updater);
+
+    const PORT = cfg.port || 3000;
+    const tlsCfg = cfg.https;
     if (tlsCfg?.pem || (tlsCfg?.cert && tlsCfg?.key)) {
         let tlsOpts;
         try {
@@ -661,7 +728,7 @@ async function start() {
             } else {
                 tlsOpts = {
                     cert: fs.readFileSync(tlsCfg.cert),
-                    key:  fs.readFileSync(tlsCfg.key),
+                    key: fs.readFileSync(tlsCfg.key),
                 };
             }
         } catch (e) {
@@ -679,21 +746,26 @@ async function start() {
     }
 
     // Memory telemetry: log hourly so leaks can be distinguished from normal heap growth.
-    setInterval(() => {
-        const mem = process.memoryUsage();
-        const handles = process._getActiveHandles ? process._getActiveHandles() : [];
-        const handleCounts = handles.reduce((acc, h) => {
-            const name = h?.constructor?.name || 'Unknown';
-            acc[name] = (acc[name] || 0) + 1;
-            return acc;
-        }, {});
-        log.debug('[memory] rss=%s heapUsed=%s external=%s arrayBuffers=%s handles=%j',
-            formatBytes(mem.rss),
-            formatBytes(mem.heapUsed),
-            formatBytes(mem.external),
-            formatBytes(mem.arrayBuffers || 0),
-            handleCounts);
-    }, 60 * 60 * 1000).unref();
+    setInterval(
+        () => {
+            const mem = process.memoryUsage();
+            const handles = process._getActiveHandles ? process._getActiveHandles() : [];
+            const handleCounts = handles.reduce((acc, h) => {
+                const name = h?.constructor?.name || 'Unknown';
+                acc[name] = (acc[name] || 0) + 1;
+                return acc;
+            }, {});
+            log.debug(
+                '[memory] rss=%s heapUsed=%s external=%s arrayBuffers=%s handles=%j',
+                formatBytes(mem.rss),
+                formatBytes(mem.heapUsed),
+                formatBytes(mem.external),
+                formatBytes(mem.arrayBuffers || 0),
+                handleCounts,
+            );
+        },
+        60 * 60 * 1000,
+    ).unref();
 }
 
 function formatBytes(b) {
@@ -702,4 +774,34 @@ function formatBytes(b) {
     return b + ' B';
 }
 
-start().catch(err => { console.error('[startup] startup error:', err); process.exit(1); });
+if (require.main === module) {
+    start().catch(err => {
+        console.error('[startup] startup error:', err);
+        process.exit(1);
+    });
+}
+
+// Module-level mutable state, grouped so a test can reset it in one call instead
+// of reaching into individual variables.
+function __resetState() {
+    clients.clear();
+    sessions.clear();
+    if (appDiscoveryTimer) {
+        clearInterval(appDiscoveryTimer);
+        appDiscoveryTimer = null;
+    }
+}
+
+module.exports = {
+    start,
+    createApp,
+    getConfig,
+    setConfig,
+    loadConfig,
+    configPathFromArgv,
+    __resetState,
+    // The session helpers, exported so they can be tested without a server.
+    parseCookies,
+    signSession,
+    verifySession,
+};

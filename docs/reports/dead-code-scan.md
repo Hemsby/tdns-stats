@@ -1,7 +1,8 @@
 # Dead Code Scan
 
 Static analysis of the `tdns-stats` repository. The CSS/HTML items below were confirmed and
-subsequently removed on 2026-11-09; the route was intentionally deferred. Each finding lists
+subsequently removed on 2026-11-09; the `/api/servers` route was deferred then and removed
+later during the Phase B backend cleanup. Each finding lists
 the exact location and the evidence that proves it was unreferenced. Removals were verified in
 a live headless-browser run: 0 computed/layout differences and byte-identical screenshots
 against the pre-change stylesheet.
@@ -21,8 +22,8 @@ export*, not dead code, and is listed separately below.
 
 ### 1. `GET /api/servers` route is never called
 
-- **Location:** `backend/src/server.js:397-399`
-- **What:** Returns `{ name, url }` for every configured server.
+- **Location:** `backend/src/server.js` (route handler; removed)
+- **What:** Returned `{ name, url }` for every configured server.
 - **Why it is dead:** A repository-wide search for `api/servers` finds only the route
   definition. The frontend fetches every other API it uses (`/api/session`, `/api/stream`,
   `/api/config`, `/api/watch-server`, `/api/cache/search`, `/api/block-list-stats`,
@@ -32,7 +33,8 @@ export*, not dead code, and is listed separately below.
 - **Caveat:** if an out-of-repo consumer calls this endpoint, it is not dead. Within this
   repository it is unreachable.
 - **Safe to remove:** yes (repo-internal).
-- **Status:** retained (deferred) — still present in `server.js`.
+- **Status:** removed — the route handler was deleted from `server.js`; server metadata is
+  still served through `/api/config`, so no client lost a capability.
 
 ### 2. Unused CSS rules
 
@@ -118,7 +120,7 @@ return-object entry at `:414` was unused (`Selection.clearAll(...)` is never cal
 
 | # | Finding | Type | Status | Removed on |
 | --- | --- | --- | --- | --- |
-| 1 | `GET /api/servers` route | Unreachable endpoint | **Remaining (deferred)** | — |
+| 1 | `GET /api/servers` route | Unreachable endpoint | **Removed** | 2026-11-11 |
 | 2 | 4 unused CSS rule blocks | Never-applied styles | **Removed** | 2026-11-09 |
 | 3 | `--accent-pink-bg` custom property | Never-consumed definition | Retained for consistency | — |
 | 4 | `id="mainTabs"` attribute | Unused attribute | **Removed** | 2026-11-09 |

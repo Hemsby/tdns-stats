@@ -1,29 +1,58 @@
 'use strict';
 
+import { Log } from './log.js';
+import { esc, normDomain, normClient } from './helpers.js';
+import { Selection } from './selection.js';
+
 const Feed = (() => {
     let MAX_ENTRIES = 200;
     const entries = [];
     const seenByServer = {};
 
-    let renderTimer  = null;
-    let lastFilter   = 'all';
-    let lastBlocked  = false;
-    let colorMap     = {};
-    let paused       = false;
+    let renderTimer = null;
+    let lastFilter = 'all';
+    let lastBlocked = false;
+    let colorMap = {};
+    let paused = false;
     let serverDisplayMap = {};
     let serverStatus = {}; // serverName -> { queryLogsApp: string|null, queryLogsAppName: string|null }
-    let selectionFilters = { domains: new Set(), blocked: new Set(), clients: new Set() };
-    const textCtx = document.createElement('canvas').getContext('2d');
-    textCtx.font = '600 11px "Chakra Petch", system-ui, sans-serif';
+    // Created on first use so this module can be imported outside a browser.
+    let textCtx = null;
+    function getTextCtx() {
+        if (!textCtx) {
+            textCtx = document.createElement('canvas').getContext('2d');
+            textCtx.font = '600 11px "Chakra Petch", system-ui, sans-serif';
+        }
+        return textCtx;
+    }
 
+    // ---- Feed setup ------------------------------------------------------------------
     function init(maxEntries) {
         if (maxEntries > 0) MAX_ENTRIES = maxEntries;
     }
 
-    function setServerDisplayMap(map) { serverDisplayMap = map; }
+    // The feed owns its list, so it answers the clicks on the names and the
+    // client addresses itself.
+    function bindFeedClicks(list) {
+        if (list.dataset.ready === 'true') return;
+        list.dataset.ready = 'true';
+        list.addEventListener('click', e => {
+            if (Selection.isClickSuppressed()) return;
+            const cell = e.target.closest('.feed-domain, .feed-client');
+            if (!cell || !cell.dataset.filterKind) return;
 
-    function setSelectionFilters(filters) {
-        selectionFilters = filters || { domains: new Set(), blocked: new Set(), clients: new Set() };
+            // A drag that ends on a cell should select text, not change filters.
+            const selection = window.getSelection();
+            if (selection && !selection.isCollapsed && (cell.contains(selection.anchorNode) || cell.contains(selection.focusNode))) return;
+
+            Selection.applyValue(cell.dataset.filterKind, cell.dataset.filterValue, {
+                toggle: e.ctrlKey || e.metaKey,
+            });
+        });
+    }
+
+    function setServerDisplayMap(map) {
+        serverDisplayMap = map;
     }
 
     // Lets the "no data" message distinguish a genuinely quiet feed from a
@@ -58,6 +87,7 @@ const Feed = (() => {
         render(lastFilter, lastBlocked);
     }
 
+    // ---- Feed rows -------------------------------------------------------------------
     function add(serverName, newEntries, cursorReset) {
         if (cursorReset) {
             Log.debug(`[feed] ${serverName}: feed cursor reset`);
@@ -90,12 +120,12 @@ const Feed = (() => {
         deduped.sort((a, b) => b._time - a._time || b.rowNumber - a.rowNumber);
 
         const merged = [];
-        let i = 0, j = 0;
+        let i = 0,
+            j = 0;
         while (i < entries.length && j < deduped.length) {
             const e = entries[i];
             const d = deduped[j];
-            if (d._time > e._time ||
-                (d._time === e._time && d._server === e._server && d.rowNumber > e.rowNumber)) {
+            if (d._time > e._time || (d._time === e._time && d._server === e._server && d.rowNumber > e.rowNumber)) {
                 merged.push(d);
                 j++;
             } else {
@@ -124,24 +154,25 @@ const Feed = (() => {
     }
 
     function hasSelection() {
-        return selectionFilters.domains.size > 0 ||
-            selectionFilters.blocked.size > 0 ||
-            selectionFilters.clients.size > 0;
+        const filters = Selection.getFilters();
+        return filters.domains.size > 0 || filters.blocked.size > 0 || filters.clients.size > 0;
     }
 
     function matchesSelection(e) {
         if (!hasSelection()) return true;
 
+        const filters = Selection.getFilters();
         const qname = normDomain(e.qname);
-        const domainSelected = selectionFilters.domains.has(qname) || selectionFilters.blocked.has(qname);
-        if ((selectionFilters.domains.size || selectionFilters.blocked.size) && !domainSelected) return false;
+        const domainSelected = filters.domains.has(qname) || filters.blocked.has(qname);
+        if ((filters.domains.size || filters.blocked.size) && !domainSelected) return false;
 
-        if (selectionFilters.clients.size && !selectionFilters.clients.has(normClient(e.clientIpAddress))) return false;
+        if (filters.clients.size && !filters.clients.has(normClient(e.clientIpAddress))) return false;
         return true;
     }
 
+    // ---- Filters ---------------------------------------------------------------------
     function scheduleRender(serverFilter, filters) {
-        lastFilter  = serverFilter;
+        lastFilter = serverFilter;
         lastBlocked = filters;
         if (paused || renderTimer) return;
         renderTimer = setTimeout(() => {
@@ -150,31 +181,39 @@ const Feed = (() => {
         }, 250);
     }
 
-    function render(serverFilter, filters) {
-        lastFilter  = serverFilter;
-        lastBlocked = filters;
-
-        const list = document.getElementById('feedList');
-        if (!list) return;
-
-        const filtered = entries.filter(e => {
+    // The rows the feed shows for the current server filter and type filter.
+    function filterEntries(serverFilter, filters) {
+        return entries.filter(e => {
             if (serverFilter !== 'all' && e._server !== serverFilter) return false;
             if (filters.size > 0) {
                 // Determine what this entry "is" based on our priority logic
                 let entryType = e.responseType;
                 const rcode = (e.rcode || '').toLowerCase().replace(/\s+/g, '');
-                
+
                 if (entryType !== 'Blocked') {
-                    if (rcode === 'nxdomain')         entryType = 'NxDomain';
+                    if (rcode === 'nxdomain') entryType = 'NxDomain';
                     else if (rcode === 'serverfailure') entryType = 'ServerFailure';
-                    else if (rcode === 'refused')       entryType = 'Refused';
+                    else if (rcode === 'refused') entryType = 'Refused';
                 }
-                
+
                 if (!filters.has(entryType)) return false;
             }
             if (!matchesSelection(e)) return false;
             return true;
         });
+    }
+
+    // ---- Rendering -------------------------------------------------------------------
+    function render(serverFilter, filters) {
+        lastFilter = serverFilter;
+        lastBlocked = filters;
+
+        const list = document.getElementById('feedList');
+        if (!list) return;
+
+        bindFeedClicks(list);
+
+        const filtered = filterEntries(serverFilter, filters);
 
         if (filtered.length === 0) {
             list.innerHTML = noDataMessage(serverFilter, hasSelection());
@@ -187,45 +226,78 @@ const Feed = (() => {
         for (let i = 0; i < max; i++) {
             const e = filtered[i];
             const srvName = serverDisplayMap[e._server] || e._server;
-            const w = Math.ceil(textCtx.measureText(srvName).width + srvName.length * 0.2) + 8;
+            const w = Math.ceil(getTextCtx().measureText(srvName).width + srvName.length * 0.2) + 8;
             if (w > maxSrvW) maxSrvW = w;
 
             let badgeText = e.responseType || 'Unknown';
             const rcode = (e.rcode || '').toLowerCase().replace(/\s+/g, '');
             if (e.responseType !== 'Blocked') {
-                if (rcode === 'nxdomain')         badgeText = 'NX Domain';
+                if (rcode === 'nxdomain') badgeText = 'NX Domain';
                 else if (rcode === 'serverfailure') badgeText = 'ServFail';
-                else if (rcode === 'refused')       badgeText = 'Refused';
+                else if (rcode === 'refused') badgeText = 'Refused';
             }
-
 
             const row = document.createElement('div');
             row.className = 'feed-row ' + rowClass(e);
 
-            const ts    = formatTime(e.timestamp);
-            const srvCls  = colorMap[e._server] ? ' ' + colorMap[e._server] : '';
-            const badgeCls  = badgeText.toLowerCase().replace(/\s+/g, '');
+            const ts = formatTime(e.timestamp);
+            const srvCls = colorMap[e._server] ? ' ' + colorMap[e._server] : '';
+            const badgeCls = badgeText.toLowerCase().replace(/\s+/g, '');
 
-            const rttVal  = e.responseRtt;
-            const rtt     = fmtMs(rttVal, e.responseType);
-            const latCls  = getLatClass(rttVal);
+            const rttVal = e.responseRtt;
+            const rtt = fmtMs(rttVal, e.responseType);
+            const latCls = getLatClass(rttVal);
 
             const clientValue = normClient(e.clientIpAddress);
             const domainValue = normDomain(e.qname);
             const domainKind = e.responseType === 'Blocked' ? 'blocked' : 'domains';
-            const domainSelected = selectionFilters.domains.has(domainValue) ||
-                selectionFilters.blocked.has(domainValue);
-            const clientSelected = selectionFilters.clients.has(clientValue);
+            const filters = Selection.getFilters();
+            const domainSelected = filters.domains.has(domainValue) || filters.blocked.has(domainValue);
+            const clientSelected = filters.clients.has(clientValue);
 
             row.innerHTML =
-                '<span class="feed-time">'   + esc(ts)                  + '</span>' +
-                '<span class="feed-server' + srvCls + '" title="' + esc(e._server) + '">' + esc(srvName) + '</span>' +
-                '<span class="feed-client" data-filter-kind="clients" data-filter-value="' + esc(clientValue) + '" title="' + esc(e.clientIpAddress + ' - ' + (clientSelected ? 'Click to remove filter' : 'Click to filter')) + '">' + esc(e.clientIpAddress) + '</span>' +
-                '<span class="feed-proto">'  + esc(e.protocol || '')     + '</span>' +
-                '<span class="feed-qtype">'  + esc(e.qtype || '')        + '</span>' +
-                '<span class="feed-domain" data-filter-kind="' + domainKind + '" data-filter-value="' + esc(domainValue) + '" title="' + esc(e.qname + ' - ' + (domainSelected ? 'Click to remove filter' : 'Click to filter')) + '">' + esc(e.qname) + '</span>' +
-                '<span class="feed-latencytype"><span class="feed-latency ' + latCls + '">' + esc(rtt)  + '</span>' +
-                '<span class="feed-type '   + badgeCls + '">'            + esc(badgeText) + '</span></span>';
+                '<span class="feed-time">' +
+                esc(ts) +
+                '</span>' +
+                '<span class="feed-server' +
+                srvCls +
+                '" title="' +
+                esc(e._server) +
+                '">' +
+                esc(srvName) +
+                '</span>' +
+                '<span class="feed-client" data-filter-kind="clients" data-filter-value="' +
+                esc(clientValue) +
+                '" title="' +
+                esc(e.clientIpAddress + ' - ' + (clientSelected ? 'Click to remove filter' : 'Click to filter')) +
+                '">' +
+                esc(e.clientIpAddress) +
+                '</span>' +
+                '<span class="feed-proto">' +
+                esc(e.protocol || '') +
+                '</span>' +
+                '<span class="feed-qtype">' +
+                esc(e.qtype || '') +
+                '</span>' +
+                '<span class="feed-domain" data-filter-kind="' +
+                domainKind +
+                '" data-filter-value="' +
+                esc(domainValue) +
+                '" title="' +
+                esc(e.qname + ' - ' + (domainSelected ? 'Click to remove filter' : 'Click to filter')) +
+                '">' +
+                esc(e.qname) +
+                '</span>' +
+                '<span class="feed-latencytype"><span class="feed-latency ' +
+                latCls +
+                '">' +
+                esc(rtt) +
+                '</span>' +
+                '<span class="feed-type ' +
+                badgeCls +
+                '">' +
+                esc(badgeText) +
+                '</span></span>';
 
             frag.appendChild(row);
         }
@@ -235,17 +307,9 @@ const Feed = (() => {
         list.replaceChildren(frag);
     }
 
-    function normDomain(value) {
-        return String(value == null ? '' : value).trim().toLowerCase().replace(/\.$/, '');
-    }
-
-    function normClient(value) {
-        return String(value == null ? '' : value).trim().toLowerCase();
-    }
-
     function getLatClass(n) {
         if (n == null || n <= 0) return '';
-        if (n <= 20)  return 'lat-low';
+        if (n <= 20) return 'lat-low';
         if (n <= 100) return 'lat-mid';
         return 'lat-high';
     }
@@ -258,23 +322,23 @@ const Feed = (() => {
         }
 
         if (n == null || n === undefined || !Number.isFinite(n)) return '';
-        if (n === 0)   return '0.0ms';
+        if (n === 0) return '0.0ms';
         if (n >= 1000) return (n / 1000).toFixed(2) + 's';
         return n.toFixed(1) + 'ms';
     }
 
     function rowClass(e) {
         if (!e) return '';
-        
+
         // 1. Priority: Response Type 'Blocked' is always Red
         if (e.responseType === 'Blocked') return 'blocked';
-        
+
         // 2. Secondary: Check RCODE for NXDOMAIN, Server Failure, or Refused
         const rcode = (e.rcode || '').toLowerCase().replace(/\s+/g, '');
-        if (rcode === 'nxdomain')      return 'nxdomain';
+        if (rcode === 'nxdomain') return 'nxdomain';
         if (rcode === 'serverfailure') return 'servfail';
-        if (rcode === 'refused')       return 'refused';
-        
+        if (rcode === 'refused') return 'refused';
+
         return '';
     }
 
@@ -284,14 +348,17 @@ const Feed = (() => {
         return d.toLocaleTimeString('en-GB', { hour12: false });
     }
 
-    function esc(str) {
-        if (!str) return '';
-        return String(str)
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;');
-    }
-
-    return { init, add, scheduleRender, render, setColors, setPaused, setServerDisplayMap, setServerStatus, setSelectionFilters };
+    return {
+        init,
+        add,
+        scheduleRender,
+        render,
+        filterEntries,
+        setColors,
+        setPaused,
+        setServerDisplayMap,
+        setServerStatus,
+    };
 })();
+
+export { Feed };

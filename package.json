@@ -1,0 +1,30 @@
+{
+    "name": "tdns-stats",
+    "version": "2.6.1",
+    "private": true,
+    "description": "Technitium DNS Server Statistics Dashboard",
+    "license": "MIT",
+    "main": "backend/src/server.js",
+    "scripts": {
+        "start": "node backend/src/server.js",
+        "test": "npm run test:production && npm run test:mock",
+        "test:production": "node --test --test-timeout=30000 backend/tests/*.test.js frontend/tests/",
+        "test:mock": "node --test --test-timeout=30000 backend/tests/mock/*.test.js",
+        "lint": "eslint .",
+        "lint:fix": "eslint . --fix",
+        "format": "prettier --write .",
+        "format:check": "prettier --check ."
+    },
+    "dependencies": {
+        "express": "^4.18.2",
+        "helmet": "^7.1.0",
+        "js-yaml": "^4.1.0",
+        "node-fetch": "^2.7.0"
+    },
+    "devDependencies": {
+        "eslint": "^9.39.5",
+        "eslint-config-prettier": "^10.1.8",
+        "globals": "^14.0.0",
+        "prettier": "^3.9.10"
+    }
+}

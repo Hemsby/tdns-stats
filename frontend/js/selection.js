@@ -1,5 +1,7 @@
 'use strict';
 
+import { esc, normClient, normDomain } from './helpers.js';
+
 const Selection = (() => {
     const state = {
         tab: 'domains',
@@ -32,6 +34,7 @@ const Selection = (() => {
     let pressAction = null;
     let suppressClickUntil = 0;
 
+    // ---- The selection ---------------------------------------------------------------
     function init(opts) {
         onChange = opts && typeof opts.onChange === 'function' ? opts.onChange : null;
         bind();
@@ -62,11 +65,24 @@ const Selection = (() => {
         topPresence = {};
         for (const tab of Object.keys(state.selected)) {
             const names = values[tab];
-            topPresence[tab] = names
-                ? new Set(Array.from(names, name => normalize(tab, name)).filter(Boolean))
-                : null;
+            topPresence[tab] = names ? new Set(Array.from(names, name => normalize(tab, name)).filter(Boolean)) : null;
         }
         renderCount();
+    }
+
+    // ---- Mouse and touch -------------------------------------------------------------
+    /**
+     * The names a shift-click selects.
+     *
+     * A shift-click picks the rows from the anchor to the row that was clicked,
+     * whichever way round they are. Without an anchor there is no range, and
+     * the click is an ordinary one.
+     */
+    function rangeSelection(names, anchorIndex, index) {
+        if (anchorIndex === -1) return null;
+        const start = Math.min(anchorIndex, index);
+        const end = Math.max(anchorIndex, index);
+        return names.slice(start, end + 1);
     }
 
     function bind() {
@@ -78,11 +94,6 @@ const Selection = (() => {
             content.addEventListener('click', handleRowClick);
             content.addEventListener('keydown', handleRowKeydown);
             bindLongPress(content);
-        }
-
-        const feed = document.getElementById('feedList');
-        if (feed) {
-            feed.addEventListener('click', handleFeedClick);
         }
 
         const bar = document.getElementById('feedSelectionBar');
@@ -103,21 +114,6 @@ const Selection = (() => {
         applyRow(row, {
             toggle: e.ctrlKey || e.metaKey,
             range: e.shiftKey,
-        });
-    }
-
-    function handleFeedClick(e) {
-        if (isClickSuppressed()) return;
-        const cell = e.target.closest('.feed-domain, .feed-client');
-        if (!cell || !cell.dataset.filterKind) return;
-
-        // A drag that ends on a cell should select text, not change filters.
-        const selection = window.getSelection();
-        if (selection && !selection.isCollapsed &&
-            (cell.contains(selection.anchorNode) || cell.contains(selection.focusNode))) return;
-
-        applyValue(cell.dataset.filterKind, cell.dataset.filterValue, {
-            toggle: e.ctrlKey || e.metaKey,
         });
     }
 
@@ -142,8 +138,7 @@ const Selection = (() => {
 
         container.addEventListener('pointermove', e => {
             if (!pressStart) return;
-            if (Math.abs(e.clientX - pressStart.x) > MOVE_TOLERANCE ||
-                Math.abs(e.clientY - pressStart.y) > MOVE_TOLERANCE) {
+            if (Math.abs(e.clientX - pressStart.x) > MOVE_TOLERANCE || Math.abs(e.clientY - pressStart.y) > MOVE_TOLERANCE) {
                 cancelLongPress();
             }
         });
@@ -171,6 +166,7 @@ const Selection = (() => {
         pressAction = null;
     }
 
+    // ---- Keyboard --------------------------------------------------------------------
     function handleRowKeydown(e) {
         if (e.key === 'Escape') {
             if (hasSelection()) {
@@ -236,16 +232,13 @@ const Selection = (() => {
             const selected = state.selected[tab];
             const rows = Array.from(row.parentElement.querySelectorAll('.top-row'));
             const index = rows.indexOf(row);
-            const anchorIndex = state.anchor[tab]
-                ? rows.findIndex(r => normalize(tab, r.dataset.name) === state.anchor[tab])
-                : -1;
+            const anchorIndex = state.anchor[tab] ? rows.findIndex(r => normalize(tab, r.dataset.name) === state.anchor[tab]) : -1;
 
             if (anchorIndex !== -1) {
-                const start = Math.min(anchorIndex, index);
-                const end = Math.max(anchorIndex, index);
+                const names = rows.map(r => normalize(tab, r.dataset.name));
+                const range = rangeSelection(names, anchorIndex, index);
                 if (!action.toggle) selected.clear();
-                for (let i = start; i <= end; i++) {
-                    const rangeName = normalize(tab, rows[i].dataset.name);
+                for (const rangeName of range) {
                     if (rangeName) selected.add(rangeName);
                 }
                 commit();
@@ -265,8 +258,7 @@ const Selection = (() => {
         // The feed treats Domain and Blocked as one domain filter, so a value
         // held by either set counts as selected and a click removes it from
         // whichever set holds it.
-        const holders = (tab === 'clients' ? [tab] : ['domains', 'blocked'])
-            .filter(t => state.selected[t].has(name));
+        const holders = (tab === 'clients' ? [tab] : ['domains', 'blocked']).filter(t => state.selected[t].has(name));
 
         if (holders.length) {
             for (const t of holders) state.selected[t].delete(name);
@@ -279,15 +271,25 @@ const Selection = (() => {
         commit();
     }
 
+    // ---- Counters and bars -----------------------------------------------------------
+    /**
+     * The row the focus moves to.
+     *
+     * The arrow keys move one row, Home and End go to the first and the last,
+     * and the focus never leaves the list.
+     */
+    function nextFocusIndex(index, count, key) {
+        if (key === 'ArrowDown') return Math.min(index + 1, count - 1);
+        if (key === 'ArrowUp') return Math.max(index - 1, 0);
+        if (key === 'Home') return 0;
+        if (key === 'End') return count - 1;
+        return index;
+    }
+
     function moveFocus(row, key) {
         const rows = Array.from(row.parentElement.querySelectorAll('.top-row'));
         const index = rows.indexOf(row);
-        let next = index;
-
-        if (key === 'ArrowDown') next = Math.min(index + 1, rows.length - 1);
-        else if (key === 'ArrowUp') next = Math.max(index - 1, 0);
-        else if (key === 'Home') next = 0;
-        else if (key === 'End') next = rows.length - 1;
+        const next = nextFocusIndex(index, rows.length, key);
 
         if (rows[next]) rows[next].focus();
     }
@@ -299,38 +301,12 @@ const Selection = (() => {
     }
 
     function hasSelection() {
-        return state.selected.domains.size > 0 ||
-            state.selected.blocked.size > 0 ||
-            state.selected.clients.size > 0;
+        return state.selected.domains.size > 0 || state.selected.blocked.size > 0 || state.selected.clients.size > 0;
     }
 
     function commit() {
         renderUI();
-        applyToRows();
         if (onChange) onChange(getFilters());
-    }
-
-    function applyToRows() {
-        const content = document.getElementById('topContent');
-        if (!content) return;
-
-        const tab = state.tab;
-        const selected = state.selected[tab];
-        const rows = Array.from(content.querySelectorAll('.top-row'));
-        const flags = rows.map(row => selected.has(normalize(tab, row.dataset.name)));
-
-        rows.forEach((row, i) => {
-            const isSelected = flags[i];
-            row.classList.toggle('selected', isSelected);
-            row.classList.toggle('sel-first', isSelected && !flags[i - 1]);
-            row.classList.toggle('sel-last', isSelected && !flags[i + 1]);
-            row.setAttribute('aria-selected', isSelected ? 'true' : 'false');
-            const sub = row.querySelector('.top-sub');
-            const value = sub
-                ? row.dataset.name + ' (' + sub.textContent.trim() + ')'
-                : row.dataset.name;
-            row.title = value + ' - ' + (isSelected ? 'Click to remove filter' : 'Click to filter');
-        });
     }
 
     function renderUI() {
@@ -338,22 +314,31 @@ const Selection = (() => {
         renderBar();
     }
 
-    function selectedCount() {
-        if (!topPresence) {
-            return state.selected.domains.size +
-                state.selected.blocked.size +
-                state.selected.clients.size;
+    /**
+     * How many names are selected.
+     *
+     * When the top lists are on screen, only the names that are in them are
+     * counted: a name that is selected but no longer on the list is not part of
+     * what the feed is filtering.
+     */
+    function countSelected(selected, presence) {
+        if (!presence) {
+            return selected.domains.size + selected.blocked.size + selected.clients.size;
         }
 
         let count = 0;
-        for (const tab of Object.keys(state.selected)) {
-            const present = topPresence[tab];
+        for (const tab of Object.keys(selected)) {
+            const present = presence[tab];
             if (!present) continue;
-            for (const name of state.selected[tab]) {
+            for (const name of selected[tab]) {
                 if (present.has(name)) count++;
             }
         }
         return count;
+    }
+
+    function selectedCount() {
+        return countSelected(state.selected, topPresence);
     }
 
     function renderCount() {
@@ -382,34 +367,46 @@ const Selection = (() => {
             return;
         }
 
-        bar.innerHTML = '<span class="feed-selection-label">Filtering</span>' +
-            '<div class="feed-selection-chips">' + chips.join('') + '</div>' +
+        bar.innerHTML =
+            '<span class="feed-selection-label">Filtering</span>' +
+            '<div class="feed-selection-chips">' +
+            chips.join('') +
+            '</div>' +
             '<button type="button" class="feed-selection-clear" title="Clear all filters">Clear All</button>';
     }
 
     function chipHtml(tab, name) {
-        return '<button type="button" class="filter-chip" data-tab="' + tab +
-            '" data-name="' + esc(name) + '" title="Remove this filter">' +
-            '<span class="filter-chip-label">' + TAB_LABELS[tab] + '</span>' +
+        return (
+            '<button type="button" class="filter-chip" data-tab="' +
+            tab +
+            '" data-name="' +
+            esc(name) +
+            '" title="Remove this filter">' +
+            '<span class="filter-chip-label">' +
+            TAB_LABELS[tab] +
+            '</span>' +
             esc(name) +
             '<span class="filter-chip-x" aria-hidden="true">&times;</span>' +
-            '</button>';
+            '</button>'
+        );
     }
 
     function normalize(tab, value) {
-        const str = String(value == null ? '' : value).trim().toLowerCase();
-        if (tab === 'clients') return str;
-        return str.replace(/\.$/, '');
+        return tab === 'clients' ? normClient(value) : normDomain(value);
     }
 
-    function esc(str) {
-        if (!str) return '';
-        return String(str)
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;');
-    }
-
-    return { init, setTab, setTopPresence, applyToRows, getFilters };
+    return {
+        init,
+        setTab,
+        setTopPresence,
+        applyValue,
+        clearAll,
+        getFilters,
+        isClickSuppressed,
+        rangeSelection,
+        nextFocusIndex,
+        countSelected,
+    };
 })();
+
+export { Selection };

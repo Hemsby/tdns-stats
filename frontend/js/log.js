@@ -18,14 +18,24 @@ const Log = (() => {
     }
 
     function enable() {
-        try { localStorage.setItem(KEY, '1'); } catch (e) {}
+        try {
+            localStorage.setItem(KEY, '1');
+        } catch (e) {}
         console.info('[log] debug logging enabled');
     }
 
     function disable() {
-        try { localStorage.removeItem(KEY); } catch (e) {}
+        try {
+            localStorage.removeItem(KEY);
+        } catch (e) {}
         console.info('[log] debug logging disabled');
     }
 
     return { debug, enable, disable, isEnabled };
 })();
+
+// Kept on the window so the debug switch stays reachable from the browser
+// console (Log.enable()), the same way it was before this file became a module.
+if (typeof window !== 'undefined') window.Log = Log;
+
+export { Log };

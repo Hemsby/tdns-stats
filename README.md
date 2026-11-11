@@ -41,9 +41,7 @@ cd tdns-stats
 ### 2. Install dependencies
 
 ```bash
-cd backend
 npm install
-cd ..
 ```
 
 ### 3. Configure
@@ -146,6 +144,13 @@ WantedBy=multi-user.target
 **Important:** Use `Restart=always` (not `on-failure`) to enable the auto-update feature. When updates are triggered, the service exits gracefully and systemd automatically restarts it with the latest code.
 
 Ensure `config.example.yml` is copied to `/etc/tdns-stats/config.yml` (you **must** create this directory if it doesn't exist) and edited with your server details.
+
+The dependencies are installed once, from the project root:
+
+```bash
+cd /opt/tdns-stats
+npm install
+```
 
 Then enable and start the service:
 

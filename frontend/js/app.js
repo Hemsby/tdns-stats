@@ -1,34 +1,129 @@
 'use strict';
 
-const CLUSTER_KEY = '__cluster';
-const FOLLOW_CHART_KEY = '__follow_chart';
-const TOP_BLOCKLIST_ICON = '<svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor" aria-hidden="true"><path d="M8 1.5 2.5 3.4v4.2c0 3.1 2.2 5.8 5.5 7 3.3-1.2 5.5-3.9 5.5-7V3.4L8 1.5z"/></svg>';
+import { Log } from './log.js';
+import { Feed } from './feed.js';
+import { Selection } from './selection.js';
+import { Charts } from './charts.js';
+import { Blocklists } from './blocklists.js';
+import {
+    esc,
+    fmtNum,
+    fmtPct,
+    fmtMs,
+    fmtMsBare,
+    relativeTime,
+    safeUrl,
+    normClient,
+    normDomain,
+    CLUSTER_KEY,
+    FOLLOW_CHART_KEY,
+} from './helpers.js';
+
+const TOP_BLOCKLIST_ICON =
+    '<svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor" aria-hidden="true"><path d="M8 1.5 2.5 3.4v4.2c0 3.1 2.2 5.8 5.5 7 3.3-1.2 5.5-3.9 5.5-7V3.4L8 1.5z"/></svg>';
+
+// ---- Message state ---------------------------------------------------------------
+// The decisions the messages from the server make, kept apart from the drawing
+// so they can be read (and checked) on their own.
+
+/**
+ * The servers a stats message names, without the cluster.
+ *
+ * The cluster is not a server of its own: it is the aggregate of the servers
+ * that run one, so it is left out of the list of servers.
+ */
+function serverNamesOf(nodes) {
+    return Object.keys(nodes || {}).filter(name => name !== CLUSTER_KEY);
+}
+
+/**
+ * Whether the stats say the dashboard is showing a cluster.
+ */
+function isClusterState(nodes) {
+    return !!(nodes && nodes[CLUSTER_KEY]);
+}
+
+/**
+ * The tab the dashboard opens on: the cluster when there is one, the first
+ * server otherwise.
+ */
+function defaultTabFor(names, isCluster) {
+    return isCluster ? CLUSTER_KEY : names[0] || null;
+}
+
+/**
+ * Whether a tab shows every server at once rather than one of them.
+ */
+function isAggregateTab(tab) {
+    return tab === CLUSTER_KEY || tab === 'all';
+}
+
+/**
+ * The server the top lists show: the one they were told to follow, or the
+ * server the chart is showing.
+ */
+function effectiveTopServer(topServer, chartServer) {
+    return topServer === FOLLOW_CHART_KEY ? chartServer : topServer;
+}
+
+/**
+ * What each server says about the query log app it logs with.
+ *
+ * The feed shows this: a server that was reached but whose query log app was
+ * never found is not the same as a server that is quiet.
+ */
+function queryLogStatusOf(nodes) {
+    const status = {};
+    for (const name of serverNamesOf(nodes)) {
+        const node = nodes[name] || {};
+        status[name] = {
+            queryLogsApp: node.queryLogsApp || null,
+            queryLogsAppName: node.queryLogsAppName || null,
+            queryLogsLookupFailed: !!node.queryLogsLookupFailed,
+        };
+    }
+    return status;
+}
+
+/**
+ * The key the data of a range is kept under.
+ */
+function rangeCacheKey(server, range) {
+    return server + ':' + range;
+}
+
+/**
+ * The number of people looking at the dashboard.
+ */
+function viewerCount(data) {
+    return Math.max(0, Number(data?.count) || 0);
+}
 
 const App = (() => {
     const state = {
-        nodes:         {},
-        top:           {},
-        perf:          {},
-        rttSeries:     {}, // mean recursive RTT history per server + __cluster, for the chart overlay
-        rttOverlay:    false,
-        rangeCache:    {}, // keyed by "server:type" for non-LiveHour fetches
-        serverNames:   [],
+        nodes: {},
+        top: {},
+        perf: {},
+        rttSeries: {}, // mean recursive RTT history per server + __cluster, for the chart overlay
+        rttOverlay: false,
+        rangeCache: {}, // keyed by "server:type" for non-LiveHour fetches
+        serverNames: [],
         serverColorMap: {},
-        colorMap:      {},
-        activeTab:     null,
-        chartServer:   null,
-        topServer:     null,
-        topTab:        'domains',
-        feedServer:    'all',
-        feedFilters:   new Set(),
-        feedPaused:    false,
+        colorMap: {},
+        activeTab: null,
+        chartServer: null,
+        topServer: null,
+        topTab: 'domains',
+        feedServer: 'all',
+        feedFilters: new Set(),
+        feedPaused: false,
         lastFeedEvent: null,
-        timeRange:     'LastHour',
-        connected:     false,
+        timeRange: 'LastHour',
+        connected: false,
         dashboardViewers: 0,
-        lastUpdated:   null,
-        isCluster:     false,
-        updateStatus:   null,
+        lastUpdated: null,
+        isCluster: false,
+        updateStatus: null,
         updaterEnabled: false,
         domainSearchServer: 'all',
         blockedLookup: false,
@@ -37,7 +132,7 @@ const App = (() => {
 
     let es = null;
 
-    // ---- SSE ----------------------------------------------------------------
+    // ---- Event stream ----------------------------------------------------------------
     let reconnectTimer = null;
     let connectTimeout = null;
     let stalenessTimer = null;
@@ -46,9 +141,7 @@ const App = (() => {
     let lastMessageAt = 0;
 
     function updateInProgress() {
-        return state.updateStatus === 'updating' ||
-            state.updateStatus === 'restarting' ||
-            state.updateStatus === 'reconnecting';
+        return state.updateStatus === 'updating' || state.updateStatus === 'restarting' || state.updateStatus === 'reconnecting';
     }
 
     function clearReconnectTimer() {
@@ -76,7 +169,7 @@ const App = (() => {
 
     function reconnectWithCountdown(delayMs) {
         clearReconnectTimer();
-        
+
         currentReconnectDelay = delayMs;
         let secondsLeft = Math.ceil(delayMs / 1000);
 
@@ -134,7 +227,7 @@ const App = (() => {
 
         stalenessTimer = setInterval(() => {
             if (updateInProgress()) return;
-            
+
             if (Date.now() - lastMessageAt > 60000) {
                 Log.debug('[stream] connection stale (60s), restarting...');
                 setConnDot('error');
@@ -156,7 +249,7 @@ const App = (() => {
             watchServer(state.chartServer);
         };
 
-        es.onerror = (err) => {
+        es.onerror = err => {
             console.error('[stream] stream error:', err);
             clearConnectionTimers();
             state.connected = false;
@@ -172,7 +265,11 @@ const App = (() => {
         es.onmessage = evt => {
             lastMessageAt = Date.now();
             let msg;
-            try { msg = JSON.parse(evt.data); } catch (_) { return; }
+            try {
+                msg = JSON.parse(evt.data);
+            } catch (_) {
+                return;
+            }
             handleMessage(msg);
         };
     }
@@ -182,27 +279,19 @@ const App = (() => {
             state.nodes = msg.data;
             state.lastUpdated = new Date();
 
-            const names = Object.keys(state.nodes).filter(k => k !== CLUSTER_KEY);
-            const queryLogStatus = {};
-            names.forEach(name => {
-                queryLogStatus[name] = {
-                    queryLogsApp:     state.nodes[name].queryLogsApp     || null,
-                    queryLogsAppName: state.nodes[name].queryLogsAppName || null,
-                    queryLogsLookupFailed: !!state.nodes[name].queryLogsLookupFailed,
-                };
-            });
-            Feed.setServerStatus(queryLogStatus);
+            const names = serverNamesOf(state.nodes);
+            Feed.setServerStatus(queryLogStatusOf(state.nodes));
             const wasCluster = state.isCluster;
-            state.isCluster = !!state.nodes[CLUSTER_KEY];
+            state.isCluster = isClusterState(state.nodes);
 
             if (names.length > 0 && (state.serverNames.join(',') !== names.join(',') || wasCluster !== state.isCluster)) {
                 state.serverNames = names;
                 updateServerDisplay();
-                const defaultTab = state.isCluster ? CLUSTER_KEY : names[0];
+                const defaultTab = defaultTabFor(names, state.isCluster);
                 if (!state.activeTab) state.activeTab = defaultTab;
-                const chartFallback = state.isCluster ? CLUSTER_KEY : names[0];
+                const chartFallback = defaultTabFor(names, state.isCluster);
                 if (!state.chartServer) state.chartServer = chartFallback;
-                const isAggregate = state.activeTab === CLUSTER_KEY || state.activeTab === 'all';
+                const isAggregate = isAggregateTab(state.activeTab);
                 if (!state.topServer) {
                     state.topServer = isAggregate ? FOLLOW_CHART_KEY : state.activeTab;
                 }
@@ -226,18 +315,15 @@ const App = (() => {
             if (state.timeRange === 'LastHour') {
                 Charts.update(state.nodes, state.chartServer, getDatasetMode(), buildChartOpts());
             }
-
         } else if (msg.type === 'feed') {
             state.lastFeedEvent = Date.now();
             setFeedStall(false);
             Feed.add(msg.server, msg.data, !!msg.cursorReset);
             Feed.scheduleRender(state.feedServer, state.feedFilters);
-
         } else if (msg.type === 'top') {
             state.top[msg.server] = msg.data;
-            const effectiveTop = state.topServer === FOLLOW_CHART_KEY ? state.chartServer : state.topServer;
+            const effectiveTop = effectiveTopServer(state.topServer, state.chartServer);
             if (msg.server === effectiveTop && state.timeRange === 'LastHour') renderTopLists();
-
         } else if (msg.type === 'perf') {
             state.perf[msg.server] = msg.data;
             if (state.activeTab === msg.server) {
@@ -253,10 +339,10 @@ const App = (() => {
         } else if (msg.type === 'update-status') {
             handleUpdateStatus(msg.data);
         } else if (msg.type === 'viewer-count') {
-            state.dashboardViewers = Math.max(0, Number(msg.data?.count) || 0);
+            state.dashboardViewers = viewerCount(msg.data);
             renderDashboardViewers();
         } else if (msg.type === 'range-dashboard') {
-            const key = msg.server + ':' + msg.range;
+            const key = rangeCacheKey(msg.server, msg.range);
             state.rangeCache[key] = msg.data;
             if (state.timeRange === msg.range && state.chartServer === msg.server) {
                 hideRangeLoading();
@@ -268,17 +354,18 @@ const App = (() => {
                 renderClusterCards();
             }
         } else if (msg.type === 'range-top') {
-            state.rangeCache[msg.server + ':' + msg.range + ':TopDomains']        = { topDomains:        msg.data.domains || [] };
-            state.rangeCache[msg.server + ':' + msg.range + ':TopBlockedDomains'] = { topBlockedDomains: msg.data.blocked || [] };
-            state.rangeCache[msg.server + ':' + msg.range + ':TopClients']        = { topClients:        msg.data.clients || [] };
-            const effectiveTop = state.topServer === FOLLOW_CHART_KEY ? state.chartServer : state.topServer;
+            const prefix = rangeCacheKey(msg.server, msg.range) + ':';
+            state.rangeCache[prefix + 'TopDomains'] = { topDomains: msg.data.domains || [] };
+            state.rangeCache[prefix + 'TopBlockedDomains'] = { topBlockedDomains: msg.data.blocked || [] };
+            state.rangeCache[prefix + 'TopClients'] = { topClients: msg.data.clients || [] };
+            const effectiveTop = effectiveTopServer(state.topServer, state.chartServer);
             if (state.timeRange === msg.range && msg.server === effectiveTop) {
                 refreshTopLists();
             }
         }
     }
 
-    // ---- Server UI (tabs + selects) -----------------------------------------
+    // ---- Server UI (tabs + selects) --------------------------------------------------
     function buildServerUI() {
         state.colorMap = buildColorMap();
         Feed.setColors(state.colorMap);
@@ -304,7 +391,7 @@ const App = (() => {
         syncCustomSelect(id);
     }
 
-    // ---- Custom dropdown for <select> elements ----
+    // ---- Custom dropdown for <select> elements ---------------------------------------
     function initCustomSelect(id) {
         const sel = getElement(id);
         if (!sel || sel.dataset._cs) return;
@@ -323,7 +410,8 @@ const App = (() => {
 
         const arrow = document.createElement('span');
         arrow.className = 'custom-select-arrow';
-        arrow.innerHTML = '<svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M3.5 5 L8 10 L12.5 5 L13.9 6.4 L8 11.7 L2.1 6.4 Z"/></svg>';
+        arrow.innerHTML =
+            '<svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M3.5 5 L8 10 L12.5 5 L13.9 6.4 L8 11.7 L2.1 6.4 Z"/></svg>';
 
         trigger.appendChild(valueSpan);
         trigger.appendChild(arrow);
@@ -462,16 +550,16 @@ const App = (() => {
 
         if (key === CLUSTER_KEY) {
             state.chartServer = CLUSTER_KEY;
-            state.topServer   = FOLLOW_CHART_KEY;
-            state.feedServer  = 'all';
+            state.topServer = FOLLOW_CHART_KEY;
+            state.feedServer = 'all';
         } else if (key === 'all') {
             state.chartServer = state.serverNames[0] || null;
-            state.topServer   = FOLLOW_CHART_KEY;
-            state.feedServer  = 'all';
+            state.topServer = FOLLOW_CHART_KEY;
+            state.feedServer = 'all';
         } else {
             state.chartServer = key;
-            state.topServer   = key;
-            state.feedServer  = key;
+            state.topServer = key;
+            state.feedServer = key;
         }
 
         document.querySelectorAll('.stab').forEach(b => b.classList.toggle('active', b.dataset.key === key));
@@ -538,19 +626,15 @@ const App = (() => {
 
     function buildDomainSearchSelect() {
         const preferred = state.domainSearchServer || 'all';
-        const options = state.isCluster
-            ? [{ value: CLUSTER_KEY, label: 'Cluster (all nodes)' }]
-            : [{ value: 'all', label: 'All servers' }];
+        const options = state.isCluster ? [{ value: CLUSTER_KEY, label: 'Cluster (all nodes)' }] : [{ value: 'all', label: 'All servers' }];
 
         for (const n of state.serverNames) options.push({ value: n, label: n });
 
-        const selected = options.some(o => o.value === preferred)
-            ? preferred
-            : options[0]?.value || 'all';
+        const selected = options.some(o => o.value === preferred) ? preferred : options[0]?.value || 'all';
 
         populateSelect('domainSearchServerSelect', options, selected);
         state.domainSearchServer = selected;
-        updateBlockListScope();
+        Blocklists.updateScope();
 
         const sel = document.getElementById('domainSearchServerSelect');
         if (sel) sel.hidden = state.serverNames.length <= 1;
@@ -571,18 +655,30 @@ const App = (() => {
     function updateSelDot(selectId, key) {
         const dot = document.getElementById(selectId + 'Dot');
         if (!dot) return;
-        const effectiveKey = (selectId === 'topServerSelect' && key === FOLLOW_CHART_KEY) ? state.chartServer : key;
+        const effectiveKey = selectId === 'topServerSelect' && key === FOLLOW_CHART_KEY ? state.chartServer : key;
         const color = serverColor(effectiveKey);
         dot.className = 'sel-dot' + (color ? ' ' + color : '');
     }
 
     function syncSelects() {
         const cs = document.getElementById('chartServerSelect');
-        if (cs) { cs.value = state.chartServer || ''; updateSelDot('chartServerSelect', state.chartServer); syncCustomSelect('chartServerSelect'); }
+        if (cs) {
+            cs.value = state.chartServer || '';
+            updateSelDot('chartServerSelect', state.chartServer);
+            syncCustomSelect('chartServerSelect');
+        }
         const ts = document.getElementById('topServerSelect');
-        if (ts) { ts.value = state.topServer || ''; updateSelDot('topServerSelect', state.topServer); syncCustomSelect('topServerSelect'); }
+        if (ts) {
+            ts.value = state.topServer || '';
+            updateSelDot('topServerSelect', state.topServer);
+            syncCustomSelect('topServerSelect');
+        }
         const fs = document.getElementById('feedServerSelect');
-        if (fs) { fs.value = state.feedServer; updateSelDot('feedServerSelect', state.feedServer); syncCustomSelect('feedServerSelect'); }
+        if (fs) {
+            fs.value = state.feedServer;
+            updateSelDot('feedServerSelect', state.feedServer);
+            syncCustomSelect('feedServerSelect');
+        }
     }
 
     function toggleServerSelects() {
@@ -616,26 +712,29 @@ const App = (() => {
 
         const el = id => document.getElementById(id);
 
-        el('timeRangeSelect') && (el('timeRangeSelect').onchange = e => {
-            state.timeRange = e.target.value;
-            updateChartHeading();
-            refreshChart();
-            refreshTopLists();
-            renderClusterCards();
-        });
-        el('chartServerSelect') && (el('chartServerSelect').onchange = e => {
-            state.chartServer = e.target.value;
-            updateSelDot('chartServerSelect', state.chartServer);
-            watchServer(state.chartServer);
-            refreshChart();
-            if (state.topServer === FOLLOW_CHART_KEY) {
-                updateSelDot('topServerSelect', state.topServer);
+        el('timeRangeSelect') &&
+            (el('timeRangeSelect').onchange = e => {
+                state.timeRange = e.target.value;
+                updateChartHeading();
+                refreshChart();
                 refreshTopLists();
-            }
-        });
-        el('chartDatasetSelect') && (el('chartDatasetSelect').onchange = () => {
-            refreshChart();
-        });
+                renderClusterCards();
+            });
+        el('chartServerSelect') &&
+            (el('chartServerSelect').onchange = e => {
+                state.chartServer = e.target.value;
+                updateSelDot('chartServerSelect', state.chartServer);
+                watchServer(state.chartServer);
+                refreshChart();
+                if (state.topServer === FOLLOW_CHART_KEY) {
+                    updateSelDot('topServerSelect', state.topServer);
+                    refreshTopLists();
+                }
+            });
+        el('chartDatasetSelect') &&
+            (el('chartDatasetSelect').onchange = () => {
+                refreshChart();
+            });
         const rttToggle = el('chartRttToggle');
         if (rttToggle) {
             state.rttOverlay = localStorage.getItem('tdns-chart-rtt') === '1';
@@ -647,23 +746,26 @@ const App = (() => {
             };
         }
 
-        el('topServerSelect') && (el('topServerSelect').onchange = e => {
-            state.topServer = e.target.value;
-            updateSelDot('topServerSelect', state.topServer);
-            refreshTopLists();
-        });
-        el('feedServerSelect') && (el('feedServerSelect').onchange = e => {
-            state.feedServer = e.target.value;
-            updateSelDot('feedServerSelect', state.feedServer);
-            const fp = el('feedPanel');
-            if (fp) fp.dataset.tabType = state.feedServer === 'all' ? 'aggregate' : 'single';
-            loadAndApplyFeedFilters();
-            Feed.render(state.feedServer, state.feedFilters);
-        });
-        el('domainSearchServerSelect') && (el('domainSearchServerSelect').onchange = e => {
-            state.domainSearchServer = e.target.value;
-            updateBlockListScope();
-        });
+        el('topServerSelect') &&
+            (el('topServerSelect').onchange = e => {
+                state.topServer = e.target.value;
+                updateSelDot('topServerSelect', state.topServer);
+                refreshTopLists();
+            });
+        el('feedServerSelect') &&
+            (el('feedServerSelect').onchange = e => {
+                state.feedServer = e.target.value;
+                updateSelDot('feedServerSelect', state.feedServer);
+                const fp = el('feedPanel');
+                if (fp) fp.dataset.tabType = state.feedServer === 'all' ? 'aggregate' : 'single';
+                loadAndApplyFeedFilters();
+                Feed.render(state.feedServer, state.feedFilters);
+            });
+        el('domainSearchServerSelect') &&
+            (el('domainSearchServerSelect').onchange = e => {
+                state.domainSearchServer = e.target.value;
+                Blocklists.updateScope();
+            });
         loadAndApplyFeedFilters();
 
         const feedFilterBtn = el('feedFilterBtn');
@@ -689,29 +791,39 @@ const App = (() => {
                 Feed.render(state.feedServer, state.feedFilters);
             });
         });
-        el('feedFilterAll') && el('feedFilterAll').addEventListener('click', () => {
-            document.querySelectorAll('.feed-filter-check').forEach(cb => { cb.checked = true; state.feedFilters.add(cb.value); });
-            saveFeedFilters(state.feedServer, state.feedFilters);
-            Feed.render(state.feedServer, state.feedFilters);
-        });
-        el('feedFilterNone') && el('feedFilterNone').addEventListener('click', () => {
-            state.feedFilters.clear();
-            document.querySelectorAll('.feed-filter-check').forEach(cb => { cb.checked = false; });
-            saveFeedFilters(state.feedServer, state.feedFilters);
-            Feed.render(state.feedServer, state.feedFilters);
-        });
+        el('feedFilterAll') &&
+            el('feedFilterAll').addEventListener('click', () => {
+                document.querySelectorAll('.feed-filter-check').forEach(cb => {
+                    cb.checked = true;
+                    state.feedFilters.add(cb.value);
+                });
+                saveFeedFilters(state.feedServer, state.feedFilters);
+                Feed.render(state.feedServer, state.feedFilters);
+            });
+        el('feedFilterNone') &&
+            el('feedFilterNone').addEventListener('click', () => {
+                state.feedFilters.clear();
+                document.querySelectorAll('.feed-filter-check').forEach(cb => {
+                    cb.checked = false;
+                });
+                saveFeedFilters(state.feedServer, state.feedFilters);
+                Feed.render(state.feedServer, state.feedFilters);
+            });
 
-        const ICON_PAUSE = '<svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M5.5 3.5A1.5 1.5 0 017 5v6a1.5 1.5 0 01-3 0V5a1.5 1.5 0 011.5-1.5zm5 0A1.5 1.5 0 0112 5v6a1.5 1.5 0 01-3 0V5a1.5 1.5 0 011.5-1.5z"/></svg>';
-        const ICON_PLAY  = '<svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M10.804 8L5 4.633v6.734L10.804 8zm.792-.696a.802.802 0 010 1.392l-6.363 3.692C4.713 12.69 4 12.345 4 11.692V4.308c0-.653.713-.998 1.233-.696l6.363 3.692z"/></svg>';
+        const ICON_PAUSE =
+            '<svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M5.5 3.5A1.5 1.5 0 017 5v6a1.5 1.5 0 01-3 0V5a1.5 1.5 0 011.5-1.5zm5 0A1.5 1.5 0 0112 5v6a1.5 1.5 0 01-3 0V5a1.5 1.5 0 011.5-1.5z"/></svg>';
+        const ICON_PLAY =
+            '<svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M10.804 8L5 4.633v6.734L10.804 8zm.792-.696a.802.802 0 010 1.392l-6.363 3.692C4.713 12.69 4 12.345 4 11.692V4.308c0-.653.713-.998 1.233-.696l6.363 3.692z"/></svg>';
 
-        el('feedPauseBtn') && el('feedPauseBtn').addEventListener('click', () => {
-            state.feedPaused = !state.feedPaused;
-            Feed.setPaused(state.feedPaused);
-            const btn = el('feedPauseBtn');
-            btn.classList.toggle('paused', state.feedPaused);
-            btn.innerHTML = state.feedPaused ? ICON_PLAY : ICON_PAUSE;
-            btn.title = state.feedPaused ? 'Resume live feed' : 'Pause live feed';
-        });
+        el('feedPauseBtn') &&
+            el('feedPauseBtn').addEventListener('click', () => {
+                state.feedPaused = !state.feedPaused;
+                Feed.setPaused(state.feedPaused);
+                const btn = el('feedPauseBtn');
+                btn.classList.toggle('paused', state.feedPaused);
+                btn.innerHTML = state.feedPaused ? ICON_PLAY : ICON_PAUSE;
+                btn.title = state.feedPaused ? 'Resume live feed' : 'Pause live feed';
+            });
         document.querySelectorAll('.tab-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 state.topTab = btn.dataset.tab;
@@ -751,157 +863,21 @@ const App = (() => {
         const checkbox = document.getElementById('blockedResultCheckbox');
 
         if (input) input.value = '';
-        if (checkbox) { checkbox.checked = false; state.blockedLookup = false; }
-        if (summary) { summary.className = 'domain-search-summary no-data'; summary.textContent = 'Enter a domain to inspect DNS cache.'; }
+        if (checkbox) {
+            checkbox.checked = false;
+            state.blockedLookup = false;
+        }
+        if (summary) {
+            summary.className = 'domain-search-summary no-data';
+            summary.textContent = 'Enter a domain to inspect DNS cache.';
+        }
         if (results) results.innerHTML = '';
         if (blockedSection) blockedSection.innerHTML = '';
         // optionally reset server select to 'all'
-        if (serverSel) { serverSel.value = state.domainSearchServer || 'all'; syncCustomSelect('domainSearchServerSelect'); }
-    }
-
-    let topBlockListPopover = null;
-    let topBlockListPopoverButton = null;
-    let topBlockListPopoverTimer = null;
-
-    function clearTopPopoverTimer() {
-        if (topBlockListPopoverTimer) clearTimeout(topBlockListPopoverTimer);
-        topBlockListPopoverTimer = null;
-    }
-
-    function closeTopBlockListPopover() {
-        clearTopPopoverTimer();
-        if (topBlockListPopoverButton) {
-            topBlockListPopoverButton.removeEventListener('mouseleave', scheduleCloseTopBlockListPopover);
-            topBlockListPopoverButton.classList.remove('top-row-action-open');
-            topBlockListPopoverButton = null;
+        if (serverSel) {
+            serverSel.value = state.domainSearchServer || 'all';
+            syncCustomSelect('domainSearchServerSelect');
         }
-        if (!topBlockListPopover) return;
-        topBlockListPopover.remove();
-        topBlockListPopover = null;
-        document.removeEventListener('pointerdown', handleTopPopoverDismiss, true);
-        document.removeEventListener('keydown', handleTopPopoverDismiss, true);
-        window.removeEventListener('resize', closeTopBlockListPopover);
-        window.removeEventListener('scroll', handleTopPopoverScroll, true);
-    }
-
-    function scheduleCloseTopBlockListPopover() {
-        clearTopPopoverTimer();
-        topBlockListPopoverTimer = setTimeout(closeTopBlockListPopover, 220);
-    }
-
-    function handleTopPopoverScroll(e) {
-        if (topBlockListPopover?.contains(e.target)) return;
-        closeTopBlockListPopover();
-    }
-
-    function handleTopPopoverDismiss(e) {
-        if (e.type === 'keydown') {
-            if (e.key !== 'Escape') return;
-            e.preventDefault();
-            e.stopPropagation();
-        } else if (topBlockListPopover?.contains(e.target) || e.target.closest?.('.top-row-action')) {
-            return;
-        }
-        closeTopBlockListPopover();
-    }
-
-    function positionTopBlockListPopover(button, el) {
-        const rect = button.getBoundingClientRect();
-        const pad = 8;
-        const width = el.offsetWidth;
-        const height = el.offsetHeight;
-        const left = Math.max(pad, Math.min(rect.right - width, window.innerWidth - width - pad));
-        let top = rect.bottom + 6;
-        if (top + height > window.innerHeight - pad) top = Math.max(pad, rect.top - height - 6);
-        el.style.left = Math.round(left) + 'px';
-        el.style.top = Math.round(top) + 'px';
-    }
-
-    async function showBlockListsFromTop(button, domain) {
-        const name = String(domain || '').trim();
-        if (!name) return;
-
-        if (topBlockListPopover) {
-            const same = topBlockListPopover.dataset.domain === name;
-            closeTopBlockListPopover();
-            if (same) return;
-        }
-
-        const effectiveServer = state.topServer === FOLLOW_CHART_KEY ? state.chartServer : state.topServer;
-        const sel = document.getElementById('domainSearchServerSelect');
-        const allowed = sel ? Array.from(sel.options).map(option => option.value) : [];
-        let target = effectiveServer || 'all';
-        if (allowed.length && !allowed.includes(target)) target = state.isCluster ? CLUSTER_KEY : 'all';
-
-        const el = document.createElement('div');
-        el.className = 'block-list-popover';
-        el.dataset.domain = name;
-        el.setAttribute('role', 'dialog');
-        el.setAttribute('aria-label', 'Blocklists for ' + name);
-        el.style.visibility = 'hidden';
-        document.body.appendChild(el);
-        topBlockListPopover = el;
-        topBlockListPopoverButton = button;
-        button.classList.add('top-row-action-open');
-        const setContent = html => {
-            el.style.visibility = 'hidden';
-            el.innerHTML = html;
-            const title = el.querySelector('.block-list-popover-title');
-            if (title) {
-                const needed = title.scrollWidth + 26;
-                el.style.width = Math.min(needed, window.innerWidth - 16) + 'px';
-            } else {
-                el.style.width = '';
-            }
-            positionTopBlockListPopover(button, el);
-            el.style.visibility = '';
-        };
-        document.addEventListener('pointerdown', handleTopPopoverDismiss, true);
-        document.addEventListener('keydown', handleTopPopoverDismiss, true);
-        window.addEventListener('resize', closeTopBlockListPopover);
-        window.addEventListener('scroll', handleTopPopoverScroll, true);
-        if (window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
-            button.addEventListener('mouseleave', scheduleCloseTopBlockListPopover);
-            el.addEventListener('mouseenter', clearTopPopoverTimer);
-            el.addEventListener('mouseleave', scheduleCloseTopBlockListPopover);
-        }
-
-        try {
-            const url = '/api/cache/search?domain=' + encodeURIComponent(name) + '&server=' + encodeURIComponent(target) + '&blocked=1&cache=0';
-            const res = await fetch(url, { cache: 'no-store' });
-            const data = await res.json();
-            if (!res.ok) throw new Error('Lookup failed.');
-            if (topBlockListPopover !== el) return;
-
-            const summary = data.blockedSummary;
-            const lists = Array.isArray(summary?.lists) ? summary.lists : [];
-            const names = [...new Set(lists.map(list => String(list.name || '').trim()).filter(Boolean))];
-            if (!summary || !summary.ok) {
-                setContent('<div class="block-list-popover-title">Lookup failed.</div>');
-            } else if (!names.length) {
-                setContent('<div class="block-list-popover-title">No block list reported.</div>');
-            } else {
-                setContent('<div class="block-list-popover-title">Appears on the following blocklist(s):</div>' +
-                    '<div class="block-list-popover-names">' + names.map(listName => '<div class="block-list-popover-name">- ' + esc(listName) + '</div>').join('') + '</div>');
-            }
-        } catch {
-            if (topBlockListPopover !== el) return;
-            setContent('<div class="block-list-popover-title">Lookup failed.</div>');
-        }
-    }
-
-    function initTopBlockListActions() {
-        const content = document.getElementById('topContent');
-        if (!content || content.dataset.ready === 'true') return;
-        content.dataset.ready = 'true';
-        content.addEventListener('click', e => {
-            const btn = e.target.closest('.top-row-action');
-            if (!btn) return;
-            e.preventDefault();
-            e.stopPropagation();
-            const row = btn.closest('.top-row');
-            showBlockListsFromTop(btn, btn.dataset.name || row?.dataset.name || '');
-        });
     }
 
     async function searchDomainCache() {
@@ -937,7 +913,7 @@ const App = (() => {
         if (btn) btn.disabled = true;
 
         try {
-            const url = '/api/cache/search?domain=' + encodeURIComponent(domain) + '&server=' + encodeURIComponent(state.domainSearchServer) + '&blocked=' + (state.blockedLookup ? '1' : '0');
+            const url = `/api/cache/search?domain=${encodeURIComponent(domain)}&server=${encodeURIComponent(state.domainSearchServer)}&blocked=${state.blockedLookup ? '1' : '0'}`;
             const res = await fetch(url, { cache: 'no-store' });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Cache search failed');
@@ -960,33 +936,20 @@ const App = (() => {
         const cachedServers = selectedServers.filter(r => r.cached).map(r => r.server);
         const serverCountText = data.searchedAllNodes
             ? cachedServers.length + ' of ' + selectedServers.length + ' servers'
-            : (cachedServers.length ? '1 server' : '0 servers');
+            : cachedServers.length
+              ? '1 server'
+              : '0 servers';
 
         const summaryClass = cachedServers.length ? 'domain-search-hit' : 'domain-search-miss';
         summary.className = 'domain-search-summary ' + summaryClass;
         summary.textContent = data.domain + ' is cached on ' + serverCountText + '.';
 
         if (blockedSection) {
-            blockedSection.innerHTML = data.blockedLookup && data.blockedSummary
-                ? renderBlockedLookupSummary(data.blockedSummary, data.domain)
-                : '';
+            blockedSection.innerHTML =
+                data.blockedLookup && data.blockedSummary ? Blocklists.blockedSummary(data.blockedSummary, data.domain) : '';
         }
 
-        results.innerHTML =
-            '<div class="domain-search-result-details">' +
-                '<div class="domain-search-target">' +
-                    '<div>' +
-                        '<div class="domain-search-title">' + esc(data.domain) + '</div>' +
-                        '<div class="domain-search-meta">' + serverCountText + '</div>' +
-                    '</div>' +
-                    '<div class="domain-server-list">' +
-                        cachedServers.map(server => '<span class="domain-server-pill">' + esc(server) + '</span>').join('') +
-                    '</div>' +
-                '</div>' +
-                '<div class="domain-search-node-list">' +
-                    selectedServers.map(renderDomainCacheNode).join('') +
-                '</div>' +
-            '</div>';
+        results.innerHTML = `<div class="domain-search-result-details"><div class="domain-search-target"><div><div class="domain-search-title">${esc(data.domain)}</div><div class="domain-search-meta">${serverCountText}</div></div><div class="domain-server-list">${cachedServers.map(server => `<span class="domain-server-pill">${esc(server)}</span>`).join('')}</div></div><div class="domain-search-node-list">${selectedServers.map(renderDomainCacheNode).join('')}</div></div>`;
     }
 
     function renderDomainCacheNode(node) {
@@ -994,157 +957,36 @@ const App = (() => {
         const statusBadgeClass = !node.ok
             ? 'neutral'
             : node.blockedLookup
-                ? node.cached ? 'danger' : 'success'
-                : node.cached ? 'success' : 'danger';
+              ? node.cached
+                  ? 'danger'
+                  : 'success'
+              : node.cached
+                ? 'success'
+                : 'danger';
         const statusText = !node.ok
             ? 'Error'
             : node.blockedLookup
-                ? node.cached ? 'Blocked' : 'Not blocked'
-                : node.cached ? 'Cached' : 'Not cached';
+              ? node.cached
+                  ? 'Blocked'
+                  : 'Not blocked'
+              : node.cached
+                ? 'Cached'
+                : 'Not cached';
         const allRecords = collectCacheRecords(node);
         const records = allRecords.filter(r => !isDnssecRecordType(r.record));
-        
+
         let body;
         if (!node.ok) {
             body = '<div class="domain-cache-empty">' + esc(node.error || 'Unable to search this node') + '</div>';
         } else if (records.length > 0) {
-            body = '<div class="domain-cache-table-wrap"><table class="domain-cache-table"><thead><tr><th>Type</th><th>Answer</th><th>TTL</th><th>Status</th></tr></thead><tbody>' +
-                    records.map(renderDomainCacheRecord).join('') +
-                    '</tbody></table></div>';
+            body = `<div class="domain-cache-table-wrap"><table class="domain-cache-table"><thead><tr><th>Type</th><th>Answer</th><th>TTL</th><th>Status</th></tr></thead><tbody>${records.map(renderDomainCacheRecord).join('')}</tbody></table></div>`;
         } else if (allRecords.length > 0) {
             body = '<div class="domain-cache-empty">Only DNSSEC records cached for this domain on this node.</div>';
         } else {
             body = '<div class="domain-cache-empty">Domain not cached on this node.</div>';
         }
 
-        return '<article class="domain-cache-node ' + statusClass + '">' +
-            '<div class="domain-cache-node-head">' +
-            '<div class="domain-search-node-title"><span class="srv-card-name">' + esc(node.server) + '</span>' +
-            (node.domain && node.domain !== node.server ? '<span class="node-domain">' + esc(node.domain) + '</span>' : '') +
-            '</div>' +
-            '<span class="status-badge ' + statusBadgeClass + '">' + statusText + '</span>' +
-            '</div>' +
-            body +
-            '</article>';
-    }
-
-    function formatBlockedSource(value) {
-        const normalized = String(value || '').trim().toLowerCase();
-        if (!normalized) return value;
-        return normalized === 'block-list-zone' ? 'URL Blocklist'
-            : normalized === 'blocked-zone' ? 'Local Blocked Zone'
-            : normalized === 'advanced-blocking-app' ? 'Advanced Blocking App'
-            : value;
-    }
-
-    function renderBlockedLookupSummary(node, queryDomain) {
-        const parsedEntries = Array.isArray(node.blockedMeta?.entries) && node.blockedMeta.entries.length
-            ? node.blockedMeta.entries
-            : node.blockedMeta?.parsed ? [node.blockedMeta.parsed] : [];
-        const labelMap = {
-            source: 'Source',
-            group: 'Group',
-            blockreason: 'Reason',
-            reason: 'Reason',
-        };
-        const skipKeys = new Set(['domain', 'raw', 'blocklisturl', 'blocklist', 'block list']);
-
-        const splitValues = value => {
-            if (typeof value !== 'string') return [String(value)];
-            const parts = value.split(/[,;]\s*/).map(v => v.trim()).filter(Boolean);
-            return parts.length ? parts : [value];
-        };
-
-        const detailMap = new Map();
-        parsedEntries.forEach(entry => {
-            for (const [key, value] of Object.entries(entry || {})) {
-                if (!value) continue;
-                const normalized = key.toLowerCase();
-                if (skipKeys.has(normalized) || !labelMap[normalized]) continue;
-
-                const label = labelMap[normalized];
-                const displayValue = normalized === 'source' ? formatBlockedSource(value) : value;
-                const values = splitValues(displayValue).map(v => esc(v));
-
-                const group = detailMap.get(label) || { label, values: [] };
-                values.forEach(v => {
-                    if (!group.values.includes(v)) group.values.push(v);
-                });
-                detailMap.set(label, group);
-            }
-        });
-
-        const details = [];
-        detailMap.forEach(({ label, values }) => {
-            if (!values.length) return;
-            details.push({ label, value: values[0] });
-            values.slice(1).forEach(value => details.push({ label: '', value }));
-        });
-
-        const fromAdvancedBlocking = parsedEntries.some(entry => String(entry?.source || '').trim().toLowerCase() === 'advanced-blocking-app');
-        if (fromAdvancedBlocking) {
-            details.push({ label: 'Note', value: 'The Advanced Blocking App reports only the first matching list, so this name may be on more lists.' });
-        }
-
-        const lists = Array.isArray(node.lists) ? node.lists : [];
-        const asked = String(queryDomain || '').replace(/\.+$/, '').toLowerCase();
-        const listHtml = lists.map(list => {
-            const url = list.url ? '<div class="blocked-list-url">' + esc(list.url) + '</div>' : '';
-            const matched = String(list.matchedDomain || '').replace(/\.+$/, '').toLowerCase();
-            const match = list.matchedDomain && matched !== asked
-                ? '<div class="blocked-list-match">Matched ' + esc(list.matchedDomain) + '</div>'
-                : '';
-            return '<div class="blocked-list-item"><div class="blocked-list-name">' + esc(list.name || 'Block list') + '</div>' + url + match + '</div>';
-        }).join('');
-
-        const hasBlockedMeta = node.blocked || lists.length || (node.blockedMeta && (
-            (Array.isArray(node.blockedMeta.entries) && node.blockedMeta.entries.length > 0) ||
-            (node.blockedMeta.parsed && Object.keys(node.blockedMeta.parsed).length > 0) ||
-            node.blockedMeta.source || node.blockedMeta.group
-        ));
-        const statusBadge = node.ok
-            ? hasBlockedMeta
-                ? '<span class="status-badge danger">Blocked</span>'
-                : '<span class="status-badge success">Not blocked</span>'
-            : '<span class="status-badge neutral">Lookup failed</span>';
-
-        let note = '';
-        if (!node.ok) {
-            note = '<div class="blocked-list-note">' + esc(node.error || 'Lookup failed') + '</div>';
-        } else if (node.reportError) {
-            note = '<div class="blocked-list-note">' + esc(node.reportError) + '</div>';
-        } else if (lists.length) {
-            // The Note row above already covers Advanced Blocking results, and manual
-            // entries have no overlap to explain. Only built-in URL lists get this line.
-            const hasUrlList = lists.some(list => String(list.source || '').trim().toLowerCase() === 'block-list-zone');
-            if (hasUrlList && !fromAdvancedBlocking) {
-                note = '<div class="blocked-list-note">Every built-in block list that matched is shown.</div>';
-            }
-        } else if (hasBlockedMeta) {
-            note = '<div class="blocked-list-note">' + (node.txtBlockingReport === false
-                ? 'Allow TXT Blocking Report is off, so built-in block lists cannot be reported.'
-                : 'No block list was reported. The Advanced Blocking app only names the first matching list, and a manual block may have no list URL.') + '</div>';
-        } else {
-            note = '<div class="blocked-list-note">' + (node.txtBlockingReport === true
-                ? 'No block list reported. The name is not blocked.'
-                : node.txtBlockingReport === false
-                    ? 'Allow TXT Blocking Report is off, so built-in block lists cannot be reported. This name may still be blocked.'
-                    : 'No block list reported. The name is not blocked, or Allow TXT Blocking Report is off.') + '</div>';
-        }
-
-        const detailHtml = details.length
-            ? details.map(item => '<div class="blocked-lookup-meta-row"><span class="blocked-lookup-meta-label">' + (item.label ? esc(item.label + ':') : '&nbsp;') + '</span><span class="blocked-lookup-meta-value">' + item.value + '</span></div>').join('')
-            : '';
-
-        return '<article class="blocked-lookup-card">' +
-            '<div class="blocked-lookup-card-header">' +
-                '<div class="blocked-lookup-card-title">' + esc(node.server) + '</div>' +
-                '<div>' + statusBadge + '</div>' +
-            '</div>' +
-            (listHtml ? '<div class="blocked-list">' + listHtml + '</div>' : '') +
-            (detailHtml ? '<div class="blocked-lookup-card-meta">' + detailHtml + '</div>' : '') +
-            note +
-        '</article>';
+        return `<article class="domain-cache-node ${statusClass}"><div class="domain-cache-node-head"><div class="domain-search-node-title"><span class="srv-card-name">${esc(node.server)}</span>${node.domain && node.domain !== node.server ? `<span class="node-domain">${esc(node.domain)}</span>` : ''}</div><span class="status-badge ${statusBadgeClass}">${statusText}</span></div>${body}</article>`;
     }
 
     function collectCacheRecords(node) {
@@ -1165,12 +1007,7 @@ const App = (() => {
         const status = getSecurityStatus(r);
         const lastUsed = getRecordLastUsed(r);
 
-        return '<tr>' +
-            '<td>' + esc(type) + '</td>' +
-            '<td>' + esc(answer) + (lastUsed ? '<div class="record-meta">' + esc(lastUsed) + '</div>' : '') + '</td>' +
-            '<td>' + esc(ttl) + '</td>' +
-            '<td>' + esc(status) + '</td>' +
-            '</tr>';
+        return `<tr><td>${esc(type)}</td><td>${esc(answer)}${lastUsed ? `<div class="record-meta">${esc(lastUsed)}</div>` : ''}</td><td>${esc(ttl)}</td><td>${esc(status)}</td></tr>`;
     }
 
     function recordValue(record) {
@@ -1195,7 +1032,18 @@ const App = (() => {
     }
 
     function getSecurityStatus(record) {
-        const raw = String(record.dnsSecStatus || record.dnssecStatus || record.validationStatus || record.securityStatus || record.security || record.secure || record.status || '').trim().toLowerCase();
+        const raw = String(
+            record.dnsSecStatus ||
+                record.dnssecStatus ||
+                record.validationStatus ||
+                record.securityStatus ||
+                record.security ||
+                record.secure ||
+                record.status ||
+                '',
+        )
+            .trim()
+            .toLowerCase();
         if (!raw) return 'Unknown';
         if (raw.includes('insecure') || raw.includes('bogus') || raw.includes('failed')) return 'Insecure';
         if (raw.includes('disabled') || raw.includes('not supported')) return 'Disabled';
@@ -1204,7 +1052,15 @@ const App = (() => {
     }
 
     function getRecordLastUsed(record) {
-        const last = record.lastUsedOn || record.lastUsedValue || record.lastUsed || record.lastAccessed || record.lastSeen || record.lastUsedAt || record.lastSeenAt || record.lastQuery;
+        const last =
+            record.lastUsedOn ||
+            record.lastUsedValue ||
+            record.lastUsed ||
+            record.lastAccessed ||
+            record.lastSeen ||
+            record.lastUsedAt ||
+            record.lastSeenAt ||
+            record.lastQuery;
         if (!last) return '';
         if (typeof last === 'number') return 'Last used: ' + last;
         const date = new Date(last);
@@ -1217,7 +1073,7 @@ const App = (() => {
         return sel ? sel.value : 'overview';
     }
 
-    // ---- Render cards / cluster view ----------------------------------------
+    // ---- Render cards / cluster view -------------------------------------------------
     function isCardServerVisible(serverKey) {
         if (state.activeTab === CLUSTER_KEY || state.activeTab === 'all') {
             return serverKey === CLUSTER_KEY || state.serverNames.includes(serverKey);
@@ -1269,63 +1125,26 @@ const App = (() => {
     }
 
     function buildAggregateCard(cluster) {
+        const card = document.createElement('div');
+        card.className = 'srv-card';
+
+        const header = cardHeader('Cluster', esc(cluster.clusterDomain || ''));
+        const role = '<div class="srv-card-role"><span class="node-badge primary">Cluster</span></div>';
+
         let st;
         if (state.timeRange === 'LastHour') {
             st = cluster.stats?.stats || {};
         } else {
             const cached = state.rangeCache[CLUSTER_KEY + ':' + state.timeRange];
             if (!cached) {
-                const card = document.createElement('div');
-                card.className = 'srv-card';
-                card.innerHTML =
-                    '<div class="srv-card-header">' +
-                    '<span class="srv-card-name">Cluster</span>' +
-                    '<span class="card-badge">' + esc(cluster.clusterDomain || '') + '</span>' +
-                    '</div>' +
-                    '<div class="srv-card-role"><span class="node-badge primary">Cluster</span></div>' +
-                    '<div class="srv-card-loading">Loading…</div>';
+                card.innerHTML = header + role + '<div class="srv-card-loading">Loading…</div>';
                 return card;
             }
             st = cached.stats || {};
         }
-        const total   = st.totalQueries      || 0;
-        const blocked = st.totalBlocked      || 0;
-        const cached  = st.totalCached       || 0;
-        const noerr   = st.totalNoError      || 0;
-        const nx      = st.totalNxDomain     || 0;
-        const fail    = st.totalServerFailure|| 0;
-        const clients = st.totalClients      || 0;
-        const recursive = st.totalRecursive  || 0;
-        const auth    = st.totalAuthoritative|| 0;
-        const refused = st.totalRefused      || 0;
-        const dropped = st.totalDropped      || 0;
-        const pct     = total > 0 ? Math.round(blocked / total * 100) : 0;
 
-        const card = document.createElement('div');
-        card.className = 'srv-card';
-        card.innerHTML =
-            '<div class="srv-card-header">' +
-            '<span class="srv-card-name">Cluster</span>' +
-            '<span class="card-badge">' + esc(cluster.clusterDomain || '') + '</span>' +
-            '</div>' +
-            '<div class="srv-card-role"><span class="node-badge primary">Cluster</span></div>' +
-            '<div class="srv-stats-grid">' +
-            statMini('Total',   fmtNum(total),   'blue') +
-            statMini('No Error', fmtNum(noerr),   'green') +
-            statMini('Failures', fmtNum(fail),    'red') +
-            statMini('NXDOMAIN', fmtNum(nx),     'ora') +
-            statMini('Refused',  fmtNum(refused), 'slate') +
-            statMini('Authoritative', fmtNum(auth), 'yel') +
-            statMini('Recursive', fmtNum(recursive), 'pur') +
-            statMini('Cached',   fmtNum(cached),  'teal') +
-            statMini('Blocked',  fmtNum(blocked), 'red') +
-            statMini('Dropped',  fmtNum(dropped), 'slate') +
-            statMini('Clients',  fmtNum(clients), 'pur') +
-            '</div>' +
-            '<div class="srv-card-footer">' +
-            '<span class="blocked-pct">' + pct + '% blocked</span>' +
-            '<div class="blocked-bar"><div class="blocked-bar-fill" style="width:' + Math.min(pct, 100) + '%"></div></div>' +
-            '</div>';
+        const stats = cardStats(st);
+        card.innerHTML = header + role + '<div class="srv-stats-grid">' + stats.grid + '</div>' + cardFooter(stats.pct);
         return card;
     }
 
@@ -1333,35 +1152,24 @@ const App = (() => {
         const wrap = document.createElement('div');
         wrap.className = 'node-table-wrap card';
 
-        let rows = nodes.map(n => {
-            const stateClass = n.state === 'Self' || n.state === 'Connected' ? 'node-online' : 'node-offline';
-            const typeBadge  = n.type === 'Primary' ? '<span class="node-badge primary">Primary</span>' : '<span class="node-badge secondary">Secondary</span>';
-            const ip         = (n.ipAddresses || []).join(', ');
-            const url        = n.url || 'http://' + (n.name || n.ipAddresses?.[0] || '') + ':5380';
-            const upSince    = n.upSince    ? relativeTime(n.upSince)    : '';
-            const lastSeen   = n.lastSeen   ? relativeTime(n.lastSeen)   : (n.state === 'Self' ? 'self' : '');
-            const lastSynced = n.configLastSynced && !n.configLastSynced.startsWith('0001-') ? relativeTime(n.configLastSynced) : '';
+        let rows = nodes
+            .map(n => {
+                const stateClass = n.state === 'Self' || n.state === 'Connected' ? 'node-online' : 'node-offline';
+                const typeBadge =
+                    n.type === 'Primary'
+                        ? '<span class="node-badge primary">Primary</span>'
+                        : '<span class="node-badge secondary">Secondary</span>';
+                const ip = (n.ipAddresses || []).join(', ');
+                const url = n.url || 'http://' + (n.name || n.ipAddresses?.[0] || '') + ':5380';
+                const upSince = n.upSince ? relativeTime(n.upSince) : '';
+                const lastSeen = n.lastSeen ? relativeTime(n.lastSeen) : n.state === 'Self' ? 'self' : '';
+                const lastSynced = n.configLastSynced && !n.configLastSynced.startsWith('0001-') ? relativeTime(n.configLastSynced) : '';
 
-            return '<tr class="node-row">' +
-                '<td><span class="node-dot ' + stateClass + '"></span> <span class="node-name" title="' + esc(n.name) + '">' + esc(n.name) + '</span></td>' +
-                '<td class="node-role">' + typeBadge + '</td>' +
-                '<td class="node-url"><a href="' + esc(safeUrl(url)) + '" target="_blank">' + esc(url) + '</a></td>' +
-                '<td class="node-ip"><span class="node-ip-text" title="' + esc(ip) + '">' + esc(ip) + '</span></td>' +
-                '<td class="node-time node-uptime">up ' + esc(upSince) + '</td>' +
-                '<td class="node-time node-lastseen">' + esc(lastSeen) + '</td>' +
-                '<td class="node-time node-lastsynced">' + (lastSynced ? 'synced ' + esc(lastSynced) : '') + '</td>' +
-                '<td class="node-state-cell"><span class="node-state ' + stateClass + '">' + esc(n.state) + '</span></td>' +
-                '</tr>';
-        }).join('');
+                return `<tr class="node-row"><td><span class="node-dot ${stateClass}"></span> <span class="node-name" title="${esc(n.name)}">${esc(n.name)}</span></td><td class="node-role">${typeBadge}</td><td class="node-url"><a href="${esc(safeUrl(url))}" target="_blank">${esc(url)}</a></td><td class="node-ip"><span class="node-ip-text" title="${esc(ip)}">${esc(ip)}</span></td><td class="node-time node-uptime">up ${esc(upSince)}</td><td class="node-time node-lastseen">${esc(lastSeen)}</td><td class="node-time node-lastsynced">${lastSynced ? `synced ${esc(lastSynced)}` : ''}</td><td class="node-state-cell"><span class="node-state ${stateClass}">${esc(n.state)}</span></td></tr>`;
+            })
+            .join('');
 
-        wrap.innerHTML =
-            '<div class="card-header"><h2 class="card-title">Cluster Nodes' +
-            (clusterDomain ? ' <span class="node-domain">' + esc(clusterDomain) + '</span>' : '') + '</h2></div>' +
-            '<div class="node-table-scroll"><table class="node-table">' +
-            '<thead><tr><th>Node</th><th class="node-role">Role</th><th class="node-url">URL</th><th class="node-ip">IP</th>' +
-            '<th class="node-uptime">Uptime</th><th class="node-lastseen">Last Seen</th><th class="node-lastsynced">Last Synced</th><th class="node-state-cell">State</th></tr></thead>' +
-            '<tbody>' + rows + '</tbody>' +
-            '</table></div>';
+        wrap.innerHTML = `<div class="card-header"><h2 class="card-title">Cluster Nodes${clusterDomain ? ` <span class="node-domain">${esc(clusterDomain)}</span>` : ''}</h2></div><div class="node-table-scroll"><table class="node-table"><thead><tr><th>Node</th><th class="node-role">Role</th><th class="node-url">URL</th><th class="node-ip">IP</th><th class="node-uptime">Uptime</th><th class="node-lastseen">Last Seen</th><th class="node-lastsynced">Last Synced</th><th class="node-state-cell">State</th></tr></thead><tbody>${rows}</tbody></table></div>`;
         return wrap;
     }
 
@@ -1370,11 +1178,7 @@ const App = (() => {
         card.className = 'srv-card' + (node?.error ? ' offline' : '');
 
         if (!node || node.error) {
-            card.innerHTML =
-                '<div class="srv-card-header">' +
-                '<span class="srv-card-name">' + esc(name) + '</span>' +
-                '<span class="card-badge" style="color:var(--accent-red)">offline</span>' +
-                '</div>';
+            card.innerHTML = cardHeader(name, 'offline', 'color:var(--accent-red)');
             return card;
         }
 
@@ -1384,66 +1188,59 @@ const App = (() => {
         } else {
             const rangeEntry = state.rangeCache[name + ':' + state.timeRange];
             if (!rangeEntry) {
-                card.innerHTML =
-                    '<div class="srv-card-header">' +
-                    '<span class="srv-card-name">' + esc(node.dnsServerDomain || name) + '</span>' +
-                    '<span class="card-badge">Loading…</span>' +
-                    '</div>';
+                card.innerHTML = cardHeader(node.dnsServerDomain || name, 'Loading…');
                 return card;
             }
             st = rangeEntry.stats || {};
         }
-        const total   = st.totalQueries      || 0;
-        const blocked = st.totalBlocked      || 0;
-        const cached  = st.totalCached       || 0;
-        const noerr   = st.totalNoError      || 0;
-        const nx      = st.totalNxDomain     || 0;
-        const fail    = st.totalServerFailure|| 0;
-        const clients = st.totalClients      || 0;
-        const recursive = st.totalRecursive  || 0;
-        const auth    = st.totalAuthoritative|| 0;
-        const refused = st.totalRefused      || 0;
-        const dropped = st.totalDropped      || 0;
-        const pct     = total > 0 ? Math.round(blocked / total * 100) : 0;
 
         if (!role && node.clusterInitialized === false) role = 'Standalone';
         const badgeClass = role === 'Primary' ? 'primary' : role === 'Secondary' ? 'secondary' : 'standalone';
-        const roleBadge = role
-            ? '<span class="node-badge ' + badgeClass + '">' + esc(role) + '</span>'
-            : '';
+        const roleBadge = role ? '<span class="node-badge ' + badgeClass + '">' + esc(role) + '</span>' : '';
 
-        card.innerHTML =
-            '<div class="srv-card-header">' +
-            '<span class="srv-card-name">' + esc(node.dnsServerDomain || name) + '</span>' +
-            '<span class="card-badge">v' + esc(node.version) + '</span>' +
-            '</div>' +
-            (roleBadge ? '<div class="srv-card-role">' + roleBadge + '</div>' : '') +
-            '<div class="srv-stats-grid">' +
-            statMini('Total',   fmtNum(total), 'blue') +
-            statMini('No Error', fmtNum(noerr), 'green') +
-            statMini('Failures', fmtNum(fail), 'red') +
-            statMini('NXDOMAIN', fmtNum(nx), 'ora') +
-            statMini('Refused',  fmtNum(refused), 'slate') +
-            statMini('Authoritative', fmtNum(auth), 'yel') +
-            statMini('Recursive', fmtNum(recursive), 'pur') +
-            statMini('Cached',   fmtNum(cached),  'teal') +
-            statMini('Blocked',  fmtNum(blocked), 'red') +
-            statMini('Dropped',  fmtNum(dropped), 'slate') +
-            statMini('Clients',  fmtNum(clients), 'pur') +
-            '</div>' +
-            '<div class="srv-card-footer">' +
-            '<span class="blocked-pct">' + pct + '% blocked</span>' +
-            '<div class="blocked-bar"><div class="blocked-bar-fill" style="width:' + Math.min(pct, 100) + '%"></div></div>' +
-            '</div>';
+        const stats = cardStats(st);
+        card.innerHTML = `${cardHeader(node.dnsServerDomain || name, 'v' + esc(node.version))}${roleBadge ? `<div class="srv-card-role">${roleBadge}</div>` : ''}<div class="srv-stats-grid">${stats.grid}</div>${cardFooter(stats.pct)}`;
         return card;
     }
 
-    function statMini(label, value, colorClass) {
-        return '<div class="stat-mini"><span class="stat-mini-label">' + esc(label) +
-               '</span><span class="stat-mini-value ' + colorClass + '">' + esc(value) + '</span></div>';
+    // ---- Card parts ------------------------------------------------------------------
+    // The cluster card, the server cards and the performance card all start with
+    // the same header, so it is built once.
+    function cardHeader(name, badge, badgeStyle) {
+        return `<div class="srv-card-header"><span class="srv-card-name">${esc(name)}</span><span class="card-badge"${badgeStyle ? ` style="${badgeStyle}"` : ''}>${badge}</span></div>`;
     }
 
-    // ---- Server display name map -------------------------------------------
+    // The eleven counters every stat card shows, and the blocked share of them.
+    function cardStats(st) {
+        const total = st.totalQueries || 0;
+        const blocked = st.totalBlocked || 0;
+        return {
+            pct: total > 0 ? Math.round((blocked / total) * 100) : 0,
+            grid: [
+                statMini('Total', fmtNum(total), 'blue'),
+                statMini('No Error', fmtNum(st.totalNoError || 0), 'green'),
+                statMini('Failures', fmtNum(st.totalServerFailure || 0), 'red'),
+                statMini('NXDOMAIN', fmtNum(st.totalNxDomain || 0), 'ora'),
+                statMini('Refused', fmtNum(st.totalRefused || 0), 'slate'),
+                statMini('Authoritative', fmtNum(st.totalAuthoritative || 0), 'yel'),
+                statMini('Recursive', fmtNum(st.totalRecursive || 0), 'pur'),
+                statMini('Cached', fmtNum(st.totalCached || 0), 'teal'),
+                statMini('Blocked', fmtNum(blocked), 'red'),
+                statMini('Dropped', fmtNum(st.totalDropped || 0), 'slate'),
+                statMini('Clients', fmtNum(st.totalClients || 0), 'pur'),
+            ].join(''),
+        };
+    }
+
+    function cardFooter(pct) {
+        return `<div class="srv-card-footer"><span class="blocked-pct">${pct}% blocked</span><div class="blocked-bar"><div class="blocked-bar-fill" style="width:${Math.min(pct, 100)}%"></div></div></div>`;
+    }
+
+    function statMini(label, value, colorClass) {
+        return `<div class="stat-mini"><span class="stat-mini-label">${esc(label)}</span><span class="stat-mini-value ${colorClass}">${esc(value)}</span></div>`;
+    }
+
+    // ---- Server display name map -----------------------------------------------------
     function getServerDisplayMap() {
         const names = state.serverNames;
         if (names.length < 2) return {};
@@ -1471,7 +1268,7 @@ const App = (() => {
         Feed.setServerDisplayMap(map);
     }
 
-    // ---- Server indicators --------------------------------------------------
+    // ---- Server indicators -----------------------------------------------------------
     function shortName(fqdn) {
         if (!fqdn) return '';
         const dot = fqdn.indexOf('.');
@@ -1497,13 +1294,14 @@ const App = (() => {
             temp.style.display = 'inline-flex';
             temp.style.flexShrink = '0';
 
-            temp.innerHTML = names.map(name => {
-                const node = state.nodes[name];
-                const ok = node && !node.error;
-                const displayName = isShort ? shortName(name) : name;
-                return '<span class="server-pill ' + (ok ? 'online' : 'offline') + '">' +
-                       '<span class="pill-dot"></span>' + esc(displayName) + '</span>';
-            }).join('');
+            temp.innerHTML = names
+                .map(name => {
+                    const node = state.nodes[name];
+                    const ok = node && !node.error;
+                    const displayName = isShort ? shortName(name) : name;
+                    return `<span class="server-pill ${ok ? 'online' : 'offline'}"><span class="pill-dot"></span>${esc(displayName)}</span>`;
+                })
+                .join('');
 
             document.body.appendChild(temp);
             const width = temp.getBoundingClientRect().width;
@@ -1519,25 +1317,25 @@ const App = (() => {
         if (!el) return;
 
         // Only re-render when server list or online/offline states change
-        const fingerprint = state.serverNames.map(name => {
-            const node = state.nodes[name];
-            return name + ':' + (node && !node.error ? '1' : '0');
-        }).join(',');
+        const fingerprint = state.serverNames
+            .map(name => {
+                const node = state.nodes[name];
+                return name + ':' + (node && !node.error ? '1' : '0');
+            })
+            .join(',');
         if (fingerprint === lastIndicatorFingerprint) return;
         lastIndicatorFingerprint = fingerprint;
 
         if (indicatorObs) indicatorObs.disconnect();
 
         // Render both full and short formats inside the DOM once
-        el.innerHTML = state.serverNames.map(name => {
-            const node = state.nodes[name];
-            const ok = node && !node.error;
-            return '<span class="server-pill ' + (ok ? 'online' : 'offline') + '" title="' + esc(name) + '">' +
-                   '<span class="pill-dot"></span>' +
-                   '<span class="pill-name-full">' + esc(name) + '</span>' +
-                   '<span class="pill-name-short">' + esc(shortName(name)) + '</span>' +
-                   '</span>';
-        }).join('');
+        el.innerHTML = state.serverNames
+            .map(name => {
+                const node = state.nodes[name];
+                const ok = node && !node.error;
+                return `<span class="server-pill ${ok ? 'online' : 'offline'}" title="${esc(name)}"><span class="pill-dot"></span><span class="pill-name-full">${esc(name)}</span><span class="pill-name-short">${esc(shortName(name))}</span></span>`;
+            })
+            .join('');
 
         // Measure natural full width using offscreen clone
         indicatorFullWidth = measureNaturalWidth(state.serverNames, false) || el.scrollWidth;
@@ -1581,7 +1379,7 @@ const App = (() => {
         el.innerHTML = '<span class="pill-dot"></span>' + fmtNum(state.dashboardViewers) + ' ' + viewerLabel;
     }
 
-    // ---- Performance cards --------------------------------------------------
+    // ---- Performance cards -----------------------------------------------------------
     function renderPerfCards() {
         const container = document.getElementById('perfCards');
         if (!container) return;
@@ -1611,70 +1409,30 @@ const App = (() => {
         const totalCached = st.totalCached || 0;
         const totalRecursive = st.totalRecursive || 0;
         const denominator = totalRecursive + totalCached;
-        const statsHitRate = denominator > 0 ? Math.round(totalCached / denominator * 100) : null;
+        const statsHitRate = denominator > 0 ? Math.round((totalCached / denominator) * 100) : null;
 
         const cacheMax = state.cacheMaxEntries?.[name] || 0;
-        const cachePopHtml = cacheMax > 0
-            ? Math.round(cachedEntries / cacheMax * 100) + '%'
-            : fmtNum(cachedEntries);
+        const cachePopHtml = cacheMax > 0 ? Math.round((cachedEntries / cacheMax) * 100) + '%' : fmtNum(cachedEntries);
         const cachePopLabel = cacheMax > 0 ? 'Cache Pop.' : 'Entries';
 
         if (!perf) {
-            card.innerHTML =
-                '<div class="srv-card-header">' +
-                '<span class="srv-card-name">' + esc(node?.dnsServerDomain || name) + '</span>' +
-                '</div>' +
-                '<div class="srv-card-role"><span class="perf-section-label" title="Upstream recursive resolution times only. Cache hits, blocked, and authoritative responses are excluded.">Recursive RTT <span class="perf-section-unit">(ms)</span></span></div>' +
-                '<div class="srv-stats-grid srv-stats-grid--rtt">' +
-                statMini('Median', '--', 'teal') +
-                statMini('Mean',   '--', 'blue') +
-                statMini('P95',    '--', 'yel') +
-                statMini('P99',    '--', 'yel') +
-                statMini('Jitter', '--', 'ora') +
-                '</div>' +
-                '<div class="srv-card-role" style="margin-top:6px"><span class="perf-section-label">Cache</span></div>' +
-                '<div class="srv-stats-grid">' +
-                statMini('Hit Rate',     fmtPct(statsHitRate), 'green') +
-                statMini('Miss Rate',    fmtPct(statsHitRate !== null ? 100 - statsHitRate : null), 'red') +
-                statMini(cachePopLabel,  cachePopHtml,      'teal') +
-                statMini('Impact',       '--',              'pur') +
-                '</div>';
+            card.innerHTML = `<div class="srv-card-header"><span class="srv-card-name">${esc(node?.dnsServerDomain || name)}</span></div><div class="srv-card-role"><span class="perf-section-label" title="Upstream recursive resolution times only. Cache hits, blocked, and authoritative responses are excluded.">Recursive RTT <span class="perf-section-unit">(ms)</span></span></div><div class="srv-stats-grid srv-stats-grid--rtt">${statMini('Median', '--', 'teal')}${statMini('Mean', '--', 'blue')}${statMini('P95', '--', 'yel')}${statMini('P99', '--', 'yel')}${statMini('Jitter', '--', 'ora')}</div><div class="srv-card-role" style="margin-top:6px"><span class="perf-section-label">Cache</span></div><div class="srv-stats-grid">${statMini('Hit Rate', fmtPct(statsHitRate), 'green')}${statMini('Miss Rate', fmtPct(statsHitRate !== null ? 100 - statsHitRate : null), 'red')}${statMini(cachePopLabel, cachePopHtml, 'teal')}${statMini('Impact', '--', 'pur')}</div>`;
             return card;
         }
 
-        const rtt   = perf.rtt   || {};
+        const rtt = perf.rtt || {};
         const hitRate = perf.cache?.hitRate || 0;
         const missRate = 100 - hitRate;
 
-        card.innerHTML =
-            '<div class="srv-card-header">' +
-            '<span class="srv-card-name">' + esc(node?.dnsServerDomain || name) + '</span>' +
-            '</div>' +
-            '<div class="srv-card-role"><span class="perf-section-label" title="Upstream recursive resolution times only. Cache hits, blocked, and authoritative responses are excluded.">Recursive RTT <span class="perf-section-unit">(ms)</span></span></div>' +
-            '<div class="srv-stats-grid srv-stats-grid--rtt">' +
-            statMini('Median',  fmtMsBare(rtt.median), 'teal') +
-            statMini('Mean',    fmtMsBare(rtt.mean),   'blue') +
-            statMini('P95',     fmtMsBare(rtt.p95),    'yel') +
-            statMini('P99',     fmtMsBare(rtt.p99),    'yel') +
-            statMini('Jitter',  fmtMsBare(rtt.jitter), 'ora') +
-            '</div>' +
-            '<div class="srv-card-role" style="margin-top:6px"><span class="perf-section-label">Cache</span></div>' +
-            '<div class="srv-stats-grid">' +
-            statMini('Hit Rate',    fmtPct(hitRate), 'green') +
-            statMini('Miss Rate',   fmtPct(missRate), 'red') +
-            statMini(cachePopLabel, cachePopHtml,                  'teal') +
-            statMini('Impact',      fmtMs(perf.impact),            'pur') +
-            '</div>';
+        card.innerHTML = `<div class="srv-card-header"><span class="srv-card-name">${esc(node?.dnsServerDomain || name)}</span></div><div class="srv-card-role"><span class="perf-section-label" title="Upstream recursive resolution times only. Cache hits, blocked, and authoritative responses are excluded.">Recursive RTT <span class="perf-section-unit">(ms)</span></span></div><div class="srv-stats-grid srv-stats-grid--rtt">${statMini('Median', fmtMsBare(rtt.median), 'teal')}${statMini('Mean', fmtMsBare(rtt.mean), 'blue')}${statMini('P95', fmtMsBare(rtt.p95), 'yel')}${statMini('P99', fmtMsBare(rtt.p99), 'yel')}${statMini('Jitter', fmtMsBare(rtt.jitter), 'ora')}</div><div class="srv-card-role" style="margin-top:6px"><span class="perf-section-label">Cache</span></div><div class="srv-stats-grid">${statMini('Hit Rate', fmtPct(hitRate), 'green')}${statMini('Miss Rate', fmtPct(missRate), 'red')}${statMini(cachePopLabel, cachePopHtml, 'teal')}${statMini('Impact', fmtMs(perf.impact), 'pur')}</div>`;
 
         return card;
     }
 
-    // ---- Top lists ----------------------------------------------------------
+    // ---- Top lists -------------------------------------------------------------------
     function topPresence() {
-        const effective = state.topServer === FOLLOW_CHART_KEY ? state.chartServer : state.topServer;
-        const names = items => (items || [])
-            .map(item => item && item.name)
-            .filter(name => name != null);
+        const effective = effectiveTopServer(state.topServer, state.chartServer);
+        const names = items => (items || []).map(item => item && item.name).filter(name => name != null);
 
         if (state.timeRange === 'LastHour') {
             const top = state.top[effective];
@@ -1701,160 +1459,23 @@ const App = (() => {
 
     function renderTopLists() {
         Selection.setTopPresence(topPresence());
-        const effectiveServer = state.topServer === FOLLOW_CHART_KEY ? state.chartServer : state.topServer;
+        const effectiveServer = effectiveTopServer(state.topServer, state.chartServer);
         const top = state.top[effectiveServer];
-        let items = [], colorClass = 'blue';
+        let items = [],
+            colorClass = 'blue';
         if (top) {
-            if (state.topTab === 'domains') { items = top.domains || []; colorClass = 'blue'; }
-            else if (state.topTab === 'blocked') { items = top.blocked || []; colorClass = 'red'; }
-            else if (state.topTab === 'clients') { items = top.clients || []; colorClass = 'pur'; }
+            if (state.topTab === 'domains') {
+                items = top.domains || [];
+                colorClass = 'blue';
+            } else if (state.topTab === 'blocked') {
+                items = top.blocked || [];
+                colorClass = 'red';
+            } else if (state.topTab === 'clients') {
+                items = top.clients || [];
+                colorClass = 'pur';
+            }
         }
         renderTopListItems(items, colorClass);
-    }
-
-    function blockListScope() {
-        const serverSelect = document.getElementById('domainSearchServerSelect');
-        const server = serverSelect?.value || state.domainSearchServer || 'all';
-        let label;
-        let scope;
-        if (server === CLUSTER_KEY && state.isCluster) {
-            label = 'Cluster';
-            scope = 'the cluster';
-        } else if (server === 'all' || server === CLUSTER_KEY) {
-            label = 'All servers';
-            scope = 'all servers';
-        } else {
-            label = serverSelect?.selectedOptions?.[0]?.text || server;
-            scope = label;
-        }
-        return { server, scope, label, key: server };
-    }
-
-    // Each server (and the cluster) keeps its own last count, so switching the
-    // search selection shows that scope's result, or a blank card if it has none.
-    const blockListResults = new Map();
-    let blockListCounting = null;
-
-    function showBlockListResult() {
-        const el = document.getElementById('blockListTotals');
-        if (!el) return;
-        const { key } = blockListScope();
-        if (blockListCounting === key) {
-            el.innerHTML = '<div class="block-list-empty">Reading the blocked log...</div>';
-            return;
-        }
-        const stored = blockListResults.get(key);
-        if (stored) renderBlockListTotals(stored.data, stored.scope);
-        else el.innerHTML = 'Not counted yet.';
-    }
-
-    function updateBlockListScope() {
-        const pill = document.getElementById('blockListScopePill');
-        if (!pill) return;
-        const { label } = blockListScope();
-        pill.textContent = label;
-        showBlockListResult();
-    }
-
-    function renderBlockListTotals(data, scope) {
-        const el = document.getElementById('blockListTotals');
-        if (!el) return;
-        if (!data) {
-            el.innerHTML = 'Not counted yet.';
-            return;
-        }
-        if (data.error && !data.ok) {
-            el.innerHTML = '<div class="block-list-empty">' + esc(data.error) + '</div>';
-            return;
-        }
-
-        const lists = Array.isArray(data.lists) ? data.lists : [];
-        const extras = [];
-        if (data.unmatched?.hits) extras.push({ name: 'No list reported', hits: data.unmatched.hits, domains: data.unmatched.domains, dim: true });
-        if (data.unresolved?.hits) extras.push({ name: 'Lookup failed', hits: data.unresolved.hits, domains: data.unresolved.domains, dim: true });
-        const max = Math.max(1, ...lists.map(list => list.hits || 0), ...extras.map(list => list.hits || 0));
-
-        function row(list) {
-            const hits = list.hits || 0;
-            const pct = Math.max(hits ? 2 : 0, Math.round((hits / max) * 100));
-            const names = list.domains
-                ? ' · ' + fmtNum(list.domains) + (list.domains === 1 ? ' name' : ' names')
-                : '';
-            const queries = fmtNum(hits) + (hits === 1 ? ' query' : ' queries');
-            const title = list.url ? ' title="' + esc(list.url) + '"' : '';
-            return '<div class="block-list-stat-row' + (list.dim ? ' dim' : '') + '"' + title + '>' +
-                '<div class="block-list-stat-top"><span class="block-list-stat-name">' + esc(list.name || 'Block list') + '</span>' +
-                '<span class="block-list-stat-hits">' + esc(queries + names) + '</span></div>' +
-                '<div class="block-list-stat-bar"><span style="width:' + pct + '%"></span></div></div>';
-        }
-
-        const when = data.updatedAt ? new Date(data.updatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
-        const exact = n => Number(n || 0).toLocaleString();
-        const looked = 'Last hour. This click sent ' + exact(data.lookups) + (data.lookups === 1 ? ' lookup' : ' lookups')
-            + (data.cacheHits ? ' and reused ' + exact(data.cacheHits) + ' cached names.' : '.');
-        const extraNotes = [];
-        if (data.truncated) {
-            const scanned = data.blockedQueries || 0;
-            const pages = data.totalPages > 0
-                ? ' (' + exact(data.pagesFetched) + ' of ' + exact(data.totalPages) + ' pages)'
-                : '';
-            extraNotes.push(scanned
-                ? 'Showing newest ' + exact(scanned) + ' blocked entries' + pages + '.'
-                : 'Showing the newest blocked queries only.');
-        }
-        if (data.limited?.names) {
-            const limit = data.lookupLimit || 0;
-            extraNotes.push('Top ' + exact(limit) + ' names by hits; ' + exact(data.limited.names)
-                + (data.limited.names === 1 ? ' name / ' : ' names / ') + exact(data.limited.hits)
-                + (data.limited.hits === 1 ? ' hit excluded.' : ' hits excluded.'));
-        }
-        const body = lists.length || extras.length
-            ? lists.map(row).join('') + extras.map(row).join('')
-            : '<div class="block-list-empty">No blocked queries in the last hour.</div>';
-
-        el.innerHTML =
-            '<div class="block-list-stats-head"><span>' + fmtNum(data.blockedQueries || 0) + ' blocked queries counted' +
-            (data.skippedLoopback ? ', ' + fmtNum(data.skippedLoopback) + ' skipped from 127.0.0.1 and ::1' : '') + '</span>' +
-            (when ? '<span class="block-list-stats-time">Counted for ' + esc(scope || 'the cluster') + ' at ' + esc(when) + '</span>' : '') + '</div>' +
-            (lists.length || extras.length
-                ? '<div class="block-list-stat-cols"><span>Block list</span><span>Queries · distinct names</span></div>'
-                : '') +
-            body +
-            '<div class="block-list-stats-note">' + esc(looked)
-            + (extraNotes.length ? '<br>' + esc(extraNotes.join(' ')) : '') + '</div>';
-    }
-
-    async function countBlockLists() {
-        const btn = document.getElementById('countBlockListsBtn');
-        const { server, scope, key } = blockListScope();
-        if (btn) btn.disabled = true;
-        blockListCounting = key;
-        showBlockListResult();
-        try {
-            const res = await fetch('/api/block-list-stats?server=' + encodeURIComponent(server), {
-                method: 'POST',
-                cache: 'no-store',
-            });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Count failed');
-            blockListResults.set(key, { data, scope });
-        } catch (e) {
-            blockListResults.set(key, { data: { ok: false, error: e.message || 'Count failed' }, scope });
-        } finally {
-            blockListCounting = null;
-            if (btn) btn.disabled = false;
-            showBlockListResult();
-        }
-    }
-
-    function initBlockListCount() {
-        const btn = document.getElementById('countBlockListsBtn');
-        if (!btn || btn.dataset.ready === 'true') return;
-        btn.dataset.ready = 'true';
-        btn.addEventListener('click', e => {
-            e.preventDefault();
-            countBlockLists();
-        });
     }
 
     function createTopRow() {
@@ -1862,11 +1483,7 @@ const App = (() => {
         row.className = 'top-row';
         row.setAttribute('role', 'option');
         row.tabIndex = 0;
-        row.innerHTML =
-            '<span class="top-rank"></span>' +
-            '<span class="top-name"></span>' +
-            '<div class="top-bar-wrap"><div class="top-bar"><div class="top-bar-fill"></div></div></div>' +
-            '<span class="top-hits"></span>';
+        row.innerHTML = `<span class="top-rank"></span><span class="top-name"></span><div class="top-bar-wrap"><div class="top-bar"><div class="top-bar-fill"></div></div></div><span class="top-hits"></span>`;
         return row;
     }
 
@@ -1917,6 +1534,29 @@ const App = (() => {
         }
     }
 
+    // The top rows belong to this module, so it marks the selected ones.
+    function applySelectionToRows() {
+        const content = document.getElementById('topContent');
+        if (!content) return;
+
+        const tab = state.topTab;
+        const selected = Selection.getFilters()[tab];
+        if (!selected) return;
+        const rows = Array.from(content.querySelectorAll('.top-row'));
+        const flags = rows.map(row => selected.has(tab === 'clients' ? normClient(row.dataset.name) : normDomain(row.dataset.name)));
+
+        rows.forEach((row, i) => {
+            const isSelected = flags[i];
+            row.classList.toggle('selected', isSelected);
+            row.classList.toggle('sel-first', isSelected && !flags[i - 1]);
+            row.classList.toggle('sel-last', isSelected && !flags[i + 1]);
+            row.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+            const sub = row.querySelector('.top-sub');
+            const value = sub ? row.dataset.name + ' (' + sub.textContent.trim() + ')' : row.dataset.name;
+            row.title = value + ' - ' + (isSelected ? 'Click to remove filter' : 'Click to filter');
+        });
+    }
+
     function renderTopListItems(items, colorClass) {
         const container = document.getElementById('topContent');
         if (!container) return;
@@ -1945,13 +1585,15 @@ const App = (() => {
             return row;
         });
 
-        rowsBefore.forEach(row => { if (!desired.includes(row)) row.remove(); });
+        rowsBefore.forEach(row => {
+            if (!desired.includes(row)) row.remove();
+        });
         desired.forEach((row, i) => {
             const current = container.children[i];
             if (current !== row) container.insertBefore(row, current || null);
         });
 
-        Selection.applyToRows();
+        applySelectionToRows();
         container.scrollTop = scrollTop;
 
         if (activeRow && !container.contains(document.activeElement)) {
@@ -1972,14 +1614,14 @@ const App = (() => {
         renderTopListItems(items, colorClass);
     }
 
-    // ---- Range-aware chart / top refresh ------------------------------------
+    // ---- Range-aware chart / top refresh ---------------------------------------------
     function updateChartHeading() {
         const headingMap = {
-            'LastHour':  'Queries per minute',
-            'LastDay':   'Queries per hour',
-            'LastWeek':  'Queries per day',
-            'LastMonth': 'Queries per day',
-            'LastYear':  'Queries per month'
+            LastHour: 'Queries per minute',
+            LastDay: 'Queries per hour',
+            LastWeek: 'Queries per day',
+            LastMonth: 'Queries per day',
+            LastYear: 'Queries per month',
         };
         const heading = document.querySelector('.chart-section .card-title');
         if (heading) {
@@ -2012,9 +1654,7 @@ const App = (() => {
         const enabled = state.timeRange === 'LastHour';
         cb.disabled = !enabled;
         wrap.style.opacity = enabled ? '' : '0.4';
-        wrap.title = enabled
-            ? 'Overlay mean recursive RTT'
-            : 'Recursive RTT overlay is available on the Last Hour range only';
+        wrap.title = enabled ? 'Overlay mean recursive RTT' : 'Recursive RTT overlay is available on the Last Hour range only';
     }
 
     function refreshChart() {
@@ -2037,14 +1677,14 @@ const App = (() => {
 
     function refreshTopLists() {
         Selection.setTopPresence(topPresence());
-        const effectiveServer = state.topServer === FOLLOW_CHART_KEY ? state.chartServer : state.topServer;
+        const effectiveServer = effectiveTopServer(state.topServer, state.chartServer);
         if (state.timeRange === 'LastHour') {
             renderTopLists();
             return;
         }
         const statsTypeMap = { domains: 'TopDomains', blocked: 'TopBlockedDomains', clients: 'TopClients' };
         const statsType = statsTypeMap[state.topTab] || 'TopDomains';
-        const cacheKey = effectiveServer + ':' + state.timeRange + ':' + statsType;
+        const cacheKey = rangeCacheKey(effectiveServer, state.timeRange) + ':' + statsType;
         if (state.rangeCache[cacheKey]) {
             renderTopListsFromData(state.rangeCache[cacheKey], statsType);
             return;
@@ -2052,25 +1692,14 @@ const App = (() => {
         document.getElementById('topContent').innerHTML = '<div class="no-data">Waiting for data…</div>';
     }
 
-    // ---- Helpers ------------------------------------------------------------
-    function relativeTime(isoStr) {
-        const ms = Date.now() - new Date(isoStr).getTime();
-        const s = Math.floor(ms / 1000);
-        if (s < 60)   return s + 's';
-        const m = Math.floor(s / 60);
-        if (m < 60)   return m + 'm';
-        const h = Math.floor(m / 60);
-        if (h < 24)   return h + 'h ' + (m % 60) + 'm';
-        return Math.floor(h / 24) + 'd';
-    }
-
+    // ---- Helpers ---------------------------------------------------------------------
     function setFeedStall(stalled) {
         const el = document.getElementById('feedStallBanner');
         if (!el) return;
         el.hidden = !stalled;
         if (stalled && state.lastFeedEvent) {
             const secs = Math.round((Date.now() - state.lastFeedEvent) / 1000);
-            const age  = secs >= 60 ? Math.floor(secs / 60) + 'm' : secs + 's';
+            const age = secs >= 60 ? Math.floor(secs / 60) + 'm' : secs + 's';
             console.warn('[feed] feed stall: last event ' + age + ' ago');
             el.textContent = 'Feed paused: no data received for ' + age + '. Check tdns-stats console for errors.';
         }
@@ -2088,77 +1717,38 @@ const App = (() => {
         }
     }
 
-    function fmtNum(n) {
-        if (n >= 1000000) return parseFloat((n / 1000000).toFixed(1)) + 'M';
-        if (n >= 1000)    return parseFloat((n / 1000).toFixed(1)) + 'K';
-        return String(n);
-    }
-
-    function fmtPct(n) {
-        if (n == null || n <= 0) return '--';
-        return Number.isInteger(n) ? n + '%' : n.toFixed(1) + '%';
-    }
-
-    function fmtMs(n) {
-        if (n == null) return '--';
-        if (n >= 1000) return parseFloat((n / 1000).toFixed(2)) + 's';
-        return parseFloat(n.toFixed(1)) + 'ms';
-    }
-
-    // Bare millisecond value (no unit) for grids that carry the unit in their header.
-    function fmtMsBare(n) {
-        if (n == null) return '--';
-        return String(parseFloat(n.toFixed(n < 100 ? 1 : 0)));
-    }
-
-    function esc(str) {
-        if (!str) return '';
-        return String(str)
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;');
-    }
-
-    function safeUrl(url) {
-        try {
-            const p = new URL(url);
-            return (p.protocol === 'http:' || p.protocol === 'https:') ? url : '#';
-        } catch (_) { return '#'; }
-    }
-
     const THEME_ICONS = {
-        system: `<svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor"><path d="M0 4s0-2 2-2h12s2 0 2 2v6s0 2-2 2h-4l1 2h1a.5.5 0 010 1H4a.5.5 0 010-1h1l1-2H2s-2 0-2-2zm1.398 0A1 1 0 001 4.5v5.086l.002.051c.014.24.117.48.307.67.19.189.43.293.691.293H14c.261 0 .501-.104.691-.293.19-.19.293-.43.307-.67L15 9.586V4.5a1 1 0 00-1-1H2a1 1 0 00-.602.5z"/></svg>`,
-        light:  `<svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor"><path d="M8 11a3 3 0 100-6 3 3 0 000 6zm0 1a4 4 0 100-8 4 4 0 000 8zm.5-9.5v-1a.5.5 0 00-1 0v1a.5.5 0 001 0zm0 9v1a.5.5 0 01-1 0v-1a.5.5 0 011 0zm-7.5-4.5h-1a.5.5 0 000 1h1a.5.5 0 000-1zm9 0h1a.5.5 0 010 1h-1a.5.5 0 010-1zM3.05 3.757a.5.5 0 00-.707.707l.707.707a.5.5 0 00.707-.707l-.707-.707zm9.193 9.193a.5.5 0 00-.707.707l.707.707a.5.5 0 00.707-.707l-.707-.707zm-9.9 0l-.707.707a.5.5 0 00.707.707l.707-.707a.5.5 0 00-.707-.707zm9.193-9.193l.707-.707a.5.5 0 10-.707-.707l-.707.707a.5.5 0 10.707.707z"/></svg>`,
-        dark:   `<svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor"><path d="M6 .278a.768.768 0 01.08.858 7.208 7.208 0 00-.878 3.46c0 4.021 3.278 7.277 7.318 7.277.527 0 1.04-.055 1.533-.16a.787.787 0 01.81.316.733.733 0 01-.031.893A8.349 8.349 0 018.344 16C3.734 16 0 12.286 0 7.71 0 4.266 2.114 1.312 5.124.06A.752.752 0 016 .278z"/></svg>`,
+        system: '<svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor"><path d="M0 4s0-2 2-2h12s2 0 2 2v6s0 2-2 2h-4l1 2h1a.5.5 0 010 1H4a.5.5 0 010-1h1l1-2H2s-2 0-2-2zm1.398 0A1 1 0 001 4.5v5.086l.002.051c.014.24.117.48.307.67.19.189.43.293.691.293H14c.261 0 .501-.104.691-.293.19-.19.293-.43.307-.67L15 9.586V4.5a1 1 0 00-1-1H2a1 1 0 00-.602.5z"/></svg>',
+        light: '<svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor"><path d="M8 11a3 3 0 100-6 3 3 0 000 6zm0 1a4 4 0 100-8 4 4 0 000 8zm.5-9.5v-1a.5.5 0 00-1 0v1a.5.5 0 001 0zm0 9v1a.5.5 0 01-1 0v-1a.5.5 0 011 0zm-7.5-4.5h-1a.5.5 0 000 1h1a.5.5 0 000-1zm9 0h1a.5.5 0 010 1h-1a.5.5 0 010-1zM3.05 3.757a.5.5 0 00-.707.707l.707.707a.5.5 0 00.707-.707l-.707-.707zm9.193 9.193a.5.5 0 00-.707.707l.707.707a.5.5 0 00.707-.707l-.707-.707zm-9.9 0l-.707.707a.5.5 0 00.707.707l.707-.707a.5.5 0 00-.707-.707zm9.193-9.193l.707-.707a.5.5 0 10-.707-.707l-.707.707a.5.5 0 10.707.707z"/></svg>',
+        dark: '<svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor"><path d="M6 .278a.768.768 0 01.08.858 7.208 7.208 0 00-.878 3.46c0 4.021 3.278 7.277 7.318 7.277.527 0 1.04-.055 1.533-.16a.787.787 0 01.81.316.733.733 0 01-.031.893A8.349 8.349 0 018.344 16C3.734 16 0 12.286 0 7.71 0 4.266 2.114 1.312 5.124.06A.752.752 0 016 .278z"/></svg>',
     };
 
     function applyTheme(theme) {
-        const root = document.documentElement;
-        if (theme === 'dark') {
-            root.setAttribute('data-theme', 'dark');
-        } else if (theme === 'light') {
-            root.setAttribute('data-theme', 'light');
-        } else {
-            root.removeAttribute('data-theme');
-        }
+        TdnsTheme.apply(theme);
         document.querySelectorAll('.theme-btn').forEach(b => b.classList.toggle('active', b.dataset.theme === theme));
         const trigger = document.getElementById('themeTrigger');
         if (trigger) trigger.innerHTML = THEME_ICONS[theme] || THEME_ICONS.system;
+        // The chart colours come from the stylesheet, so they follow the theme
+        // only when they are resolved again.
+        Charts.applyThemeColors();
     }
 
     function initTheme() {
-        const saved = localStorage.getItem('tdns-theme') || 'system';
-        applyTheme(saved);
+        applyTheme(TdnsTheme.saved());
+
+        // Follow the system preference for as long as 'system' is the chosen theme.
+        TdnsTheme.onSystemChange(() => {
+            if (TdnsTheme.saved() === 'system') applyTheme('system');
+        });
 
         const switcher = document.getElementById('themeSwitcher');
-        const trigger  = document.getElementById('themeTrigger');
+        const trigger = document.getElementById('themeTrigger');
         const dropdown = document.getElementById('themeDropdown');
 
         if (!switcher || !trigger || !dropdown) return;
 
         // Toggle dropdown open/close on trigger click
-        trigger.addEventListener('click', (e) => {
+        trigger.addEventListener('click', e => {
             e.stopPropagation();
             switcher.classList.toggle('open');
         });
@@ -2167,34 +1757,34 @@ const App = (() => {
         document.querySelectorAll('.theme-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 const t = btn.dataset.theme;
+                TdnsTheme.save(t);
                 applyTheme(t);
-                localStorage.setItem('tdns-theme', t);
                 switcher.classList.remove('open');
             });
         });
 
         // Close on outside click
-        document.addEventListener('click', (e) => {
+        document.addEventListener('click', e => {
             if (!switcher.contains(e.target)) {
                 switcher.classList.remove('open');
             }
         });
 
         // Close on Escape
-        document.addEventListener('keydown', (e) => {
+        document.addEventListener('keydown', e => {
             if (e.key === 'Escape') switcher.classList.remove('open');
         });
     }
 
-    // ---- Main page tabs (Dashboard / Cache & Blocked) ----------------------
+    // ---- Main page tabs (Dashboard / Cache & Blocked) --------------------------------
     function initMainTabs() {
         const btns = document.querySelectorAll('.main-tab-btn');
-        const dashView      = document.getElementById('dashboardView');
+        const dashView = document.getElementById('dashboardView');
         const cacheBlockedView = document.getElementById('cacheBlockedView');
 
         function setMainTab(tab) {
             const isDash = tab === 'dashboard';
-            dashView.hidden        = !isDash;
+            dashView.hidden = !isDash;
             cacheBlockedView.hidden = isDash;
             btns.forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
             localStorage.setItem('tdns-main-tab', tab);
@@ -2209,7 +1799,7 @@ const App = (() => {
         setMainTab(saved);
     }
 
-    // ---- Chart persistence ---------------------------------------------------
+    // ---- Chart persistence -----------------------------------------------------------
     function getChartStorageKey(viewMode) {
         return 'tdns-chart-hidden-' + viewMode;
     }
@@ -2220,10 +1810,7 @@ const App = (() => {
     }
 
     function saveHiddenChartState(viewMode, hiddenSet) {
-        localStorage.setItem(
-            getChartStorageKey(viewMode),
-            JSON.stringify(Array.from(hiddenSet))
-        );
+        localStorage.setItem(getChartStorageKey(viewMode), JSON.stringify(Array.from(hiddenSet)));
     }
 
     function getFeedFilterStorageKey(server) {
@@ -2239,7 +1826,7 @@ const App = (() => {
         localStorage.setItem(getFeedFilterStorageKey(server), JSON.stringify(Array.from(filterSet)));
     }
 
-    // ---- Update functionality ---------------------------------------------------
+    // ---- Update button ---------------------------------------------------------------
     function handleUpdateStatus(data) {
         state.updateStatus = data.status;
         updateStatusDisplay();
@@ -2271,13 +1858,13 @@ const App = (() => {
 
         statusEl.hidden = false;
         const messages = {
-            'checking': 'Checking...',
-            'checked': 'Up to date',
+            checking: 'Checking...',
+            checked: 'Up to date',
             'update-available': 'Update available',
-            'updating': 'Updating...',
-            'restarting': 'Service is restarting...',
-            'reconnecting': 'Reconnecting...',
-            'done': 'Update complete!'
+            updating: 'Updating...',
+            restarting: 'Service is restarting...',
+            reconnecting: 'Reconnecting...',
+            done: 'Update complete!',
         };
         statusEl.textContent = messages[state.updateStatus] || state.updateStatus;
         statusEl.className = 'update-status';
@@ -2477,10 +2064,10 @@ const App = (() => {
 
         pill.addEventListener('click', showChangelog);
         closeBtn.addEventListener('click', hideChangelog);
-        overlay.addEventListener('click', (e) => {
+        overlay.addEventListener('click', e => {
             if (e.target === overlay) hideChangelog();
         });
-        document.addEventListener('keydown', (e) => {
+        document.addEventListener('keydown', e => {
             if (e.key === 'Escape' && !overlay.hidden) hideChangelog();
         });
     }
@@ -2507,13 +2094,16 @@ const App = (() => {
         Charts.setLoadCallback(loadHiddenChartState);
         Selection.init({
             onChange: () => {
-                Feed.setSelectionFilters(Selection.getFilters());
+                applySelectionToRows();
                 Feed.render(state.feedServer, state.feedFilters);
             },
         });
         Selection.setTab(state.topTab);
-        initTopBlockListActions();
-        initBlockListCount();
+        Blocklists.init({
+            searchServer: () => state.domainSearchServer,
+            isCluster: () => state.isCluster,
+            topServer: () => (state.topServer === FOLLOW_CHART_KEY ? state.chartServer : state.topServer),
+        });
         fetch('/api/config')
             .then(r => r.json())
             .then(cfg => {
@@ -2549,10 +2139,25 @@ const App = (() => {
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'visible') refreshAfterIdle();
         });
-
     }
 
     return { init };
 })();
 
-document.addEventListener('DOMContentLoaded', () => App.init());
+// Guarded so this module can be imported outside a browser (from a test).
+if (typeof document !== 'undefined') {
+    document.addEventListener('DOMContentLoaded', () => App.init());
+}
+
+export {
+    App,
+    // The decisions the messages make, so they can be checked on their own.
+    serverNamesOf,
+    isClusterState,
+    defaultTabFor,
+    isAggregateTab,
+    effectiveTopServer,
+    queryLogStatusOf,
+    rangeCacheKey,
+    viewerCount,
+};
