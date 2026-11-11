@@ -259,6 +259,7 @@ Seams that exist today:
 | `blocklists.js` — caches | `__resetState()` clears them between tests |
 | `server.js` — config | `setConfig(cfg)` injects a config instead of reading the file |
 | `server.js` — app | `createApp(poller, updater)` builds the routes without a listener |
+| `server.js` — HTTP client | `__setFetch(fn)` swaps the transport, so the update check can be answered without a network |
 | `poller.js` — Technitium module | fourth constructor argument replaces it |
 | `updater.js` — shell | second constructor argument replaces `execAsync` |
 | `updater.js` — filesystem | third constructor argument replaces `fs.existsSync`, so the answer does not depend on the machine a test runs on |

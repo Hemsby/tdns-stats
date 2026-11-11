@@ -1,4 +1,3 @@
-# Prose and the configuration samples people copy are left as they are.
 *.md
 docs/
 config.example.yml

@@ -8,7 +8,7 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const yaml = require('js-yaml');
-const fetch = require('node-fetch');
+const nodeFetch = require('node-fetch');
 const Poller = require('./poller');
 const Updater = require('./updater');
 const log = require('./log');
@@ -314,6 +314,14 @@ function scheduleAppDiscoveryRetry() {
 }
 
 // ---- API routes ------------------------------------------------------------------
+
+// The fetch implementation is swappable so a test can answer the update check
+// without a network. Production always uses node-fetch; `__setFetch` is the only
+// way to change it.
+let fetchImpl = nodeFetch;
+function __setFetch(fn) {
+    fetchImpl = fn || nodeFetch;
+}
 function createApp(poller, updater) {
     const cfg = getConfig();
     const app = express();
@@ -622,7 +630,7 @@ function createApp(poller, updater) {
 
     app.get('/api/updates/check', requireToken, async (req, res) => {
         try {
-            const response = await fetch('https://api.github.com/repos/Hemsby/tdns-stats/releases/latest', {
+            const response = await fetchImpl('https://api.github.com/repos/Hemsby/tdns-stats/releases/latest', {
                 timeout: 5000,
                 headers: { 'User-Agent': 'tdns-stats' },
             });
@@ -799,6 +807,7 @@ module.exports = {
     setConfig,
     loadConfig,
     configPathFromArgv,
+    __setFetch,
     __resetState,
     // The session helpers, exported so they can be tested without a server.
     parseCookies,

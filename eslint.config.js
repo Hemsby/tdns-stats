@@ -1,13 +1,8 @@
-// Linting for the whole project.
-//
-// Formatting is Prettier's job, and ESLint only looks for mistakes: the
-// formatting rules are switched off by eslint-config-prettier so the two tools
-// never disagree about the same line.
-//
-
 const globals = require('globals');
-const prettierConfig = require('eslint-config-prettier');
 
+// prettierConfig switches off every lint rule that would argue with
+// Prettier about the layout of a line.
+const prettierConfig = require('eslint-config-prettier');
 const correctness = {
     'no-undef': 'error',
     'no-unused-vars': [
@@ -30,15 +25,12 @@ module.exports = [
         ignores: ['**/node_modules/**', 'backend/node_modules/**', 'frontend/node_modules/**'],
     },
     {
-        // The backend: Node, CommonJS.
         files: ['backend/**/*.js'],
         languageOptions: {
             ecmaVersion: 2022,
             sourceType: 'commonjs',
             globals: globals.node,
         },
-        // prettierConfig switches off every lint rule that would argue with
-        // Prettier about the layout of a line.
         rules: { ...correctness, ...prettierConfig.rules },
     },
     {
@@ -53,7 +45,6 @@ module.exports = [
         rules: { ...correctness, ...prettierConfig.rules },
     },
     {
-        // The frontend: the browser, ES modules.
         files: ['frontend/**/*.js'],
         languageOptions: {
             ecmaVersion: 2022,
@@ -69,8 +60,6 @@ module.exports = [
                 TdnsTheme: 'readonly',
             },
         },
-        // prettierConfig switches off every lint rule that would argue with
-        // Prettier about the layout of a line.
         rules: { ...correctness, ...prettierConfig.rules },
     },
 ];

@@ -3,8 +3,21 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 
 const Updater = require('../src/updater');
+
+/**
+ * A project directory with a compose file in it, like the host project a
+ * container sees at /app/host-project.
+ */
+function tempProject() {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tdns-updater-'));
+    fs.writeFileSync(path.join(dir, 'docker-compose.yml'), 'services:\n  tdns-stats:\n    image: tdns-stats\n');
+    return dir;
+}
 
 /**
  * An updater with a shell that answers from a table.
@@ -128,6 +141,54 @@ test.describe('backend/src/updater.js', () => {
             const mounted = makeUpdater({}, { '/.dockerenv': true, '/app/host-project/docker-compose.yml': true });
             await mounted.updater.detectCapability();
             assert.equal(mounted.updater.capable, true);
+        });
+    });
+
+    test.describe('docker update', () => {
+        test.it('pulls the image and brings the compose project back up', async t => {
+            const project = tempProject();
+            t.after(() => {
+                delete process.env.HOST_PROJECT_PATH;
+                fs.rmSync(project, { recursive: true, force: true });
+            });
+            process.env.HOST_PROJECT_PATH = project;
+
+            const { updater, calls } = makeUpdater();
+
+            await updater.updateDocker();
+
+            const commands = calls.map(c => c.command);
+            const compose = path.join(project, 'docker-compose.yml');
+            const pull = `docker compose -p tdns-stats -f ${compose} pull`;
+            const up = `docker compose -p tdns-stats -f ${compose} up -d --build`;
+
+            assert.ok(commands.includes(pull), 'the image is pulled');
+            assert.ok(commands.includes(up), 'the project is started again');
+
+            // The image is pulled before the project is started again.
+            assert.ok(commands.indexOf(pull) < commands.indexOf(up));
+
+            // The compose commands run in the host project directory.
+            assert.equal(calls.find(c => c.command === pull).options.cwd, project);
+        });
+
+        test.it('does not start the project again when the pull fails', async t => {
+            const project = tempProject();
+            t.after(() => {
+                delete process.env.HOST_PROJECT_PATH;
+                fs.rmSync(project, { recursive: true, force: true });
+            });
+            process.env.HOST_PROJECT_PATH = project;
+
+            const compose = path.join(project, 'docker-compose.yml');
+            const { updater, calls } = makeUpdater({
+                [`docker compose -p tdns-stats -f ${compose} pull`]: new Error('pull failed'),
+            });
+
+            await assert.rejects(() => updater.updateDocker(), /pull failed/);
+
+            const commands = calls.map(c => c.command);
+            assert.ok(!commands.some(c => c.includes('up -d --build')), 'the project is left as it was');
         });
     });
 

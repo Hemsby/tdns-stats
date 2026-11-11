@@ -13,6 +13,25 @@ const { createTechnitiumServer } = require('./helpers/technitium-mock');
 
 const PACKAGE = JSON.parse(fs.readFileSync(path.join(__dirname, '../../package.json'), 'utf8'));
 
+const [MAJOR, MINOR] = PACKAGE.version.split('.').map(Number);
+// A version that is newer than the running one but sorts earlier as text:
+// 2.16.0 is newer than 2.6.1, even though a string compare says otherwise.
+const NEWER_VERSION = `${MAJOR}.${MINOR + 10}.0`;
+const OLDER_VERSION = `${MAJOR}.${MINOR - 1}.0`;
+
+/** The answer GitHub gives for a release. */
+function release(tag, notes = 'What changed.') {
+    return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+            tag_name: tag,
+            html_url: `https://github.com/Hemsby/tdns-stats/releases/tag/${tag}`,
+            body: notes,
+        }),
+    };
+}
+
 /** Give the event stream a moment to deliver what the server sends on connect. */
 const settle = () => new Promise(resolve => setTimeout(resolve, 150));
 
@@ -495,6 +514,93 @@ test.describe('backend/src/server.js', () => {
             const res = await api.post('/api/updates/trigger', { cookie });
 
             assert.equal(res.status, 403);
+        });
+    });
+
+    test.describe('update check route', () => {
+        test.it('reports a release that is newer than the running one', async t => {
+            server.__setFetch(async () => release('v99.0.0', 'What changed.'));
+            t.after(() => server.__setFetch(null));
+
+            const { app } = makeApp();
+            const api = await listen(app);
+            t.after(() => api.close());
+
+            const cookie = await api.cookie();
+            const stream = await openStream(api.port, cookie);
+            t.after(() => stream.req.destroy());
+
+            const res = await api.get('/api/updates/check', { cookie });
+
+            assert.equal(res.status, 200);
+            assert.equal(res.body.currentVersion, PACKAGE.version);
+            assert.equal(res.body.latestVersion, '99.0.0');
+            assert.equal(res.body.updateAvailable, true);
+            assert.equal(res.body.downloadUrl, 'https://github.com/Hemsby/tdns-stats/releases/tag/v99.0.0');
+            assert.equal(res.body.releaseNotes, 'What changed.');
+
+            // The stream carries the answer, which is what puts the update
+            // button on the page.
+            await settle();
+            assert.match(stream.text(), /"status":"checked"/);
+            assert.match(stream.text(), /"updateAvailable":true/);
+        });
+
+        test.it('answers 502 when the release cannot be looked up', async t => {
+            server.__setFetch(async () => {
+                throw new Error('the network is down');
+            });
+            t.after(() => server.__setFetch(null));
+
+            const { app } = makeApp();
+            const api = await listen(app);
+            t.after(() => api.close());
+
+            const cookie = await api.cookie();
+            const res = await api.get('/api/updates/check', { cookie });
+
+            assert.equal(res.status, 502);
+            assert.equal(res.body.error, 'Failed to check updates');
+        });
+    });
+
+    test.describe('release comparison', () => {
+        test.it('calls a newer version newer, however the numbers are written', async t => {
+            server.__setFetch(async () => release(`v${NEWER_VERSION}`));
+            t.after(() => server.__setFetch(null));
+
+            const { app } = makeApp();
+            const api = await listen(app);
+            t.after(() => api.close());
+
+            const cookie = await api.cookie();
+            const res = await api.get('/api/updates/check', { cookie });
+
+            assert.equal(res.body.updateAvailable, true);
+        });
+
+        test.it('does not offer a release that is the same version, an older one, or none at all', async t => {
+            const answers = [release(`v${PACKAGE.version}`), release(`v${OLDER_VERSION}`), { ok: false, status: 404 }];
+            server.__setFetch(async () => answers.shift());
+            t.after(() => server.__setFetch(null));
+
+            const { app } = makeApp();
+            const api = await listen(app);
+            t.after(() => api.close());
+
+            const cookie = await api.cookie();
+
+            const same = await api.get('/api/updates/check', { cookie });
+            const older = await api.get('/api/updates/check', { cookie });
+            const none = await api.get('/api/updates/check', { cookie });
+
+            assert.equal(same.body.updateAvailable, false);
+            assert.equal(older.body.updateAvailable, false);
+
+            // A repository with no releases is not an error, it is no update.
+            assert.equal(none.status, 200);
+            assert.equal(none.body.updateAvailable, false);
+            assert.equal(none.body.currentVersion, PACKAGE.version);
         });
     });
 
