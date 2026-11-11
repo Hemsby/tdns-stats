@@ -45,7 +45,7 @@ test.describe('frontend/js/blocklists.js', () => {
 
             assert.match(html, /HaGeZi Multi LIGHT/);
             assert.match(html, /OISD Big/);
-            assert.equal((html.match(/blocked-list-item/g) || []).length, 2);
+            assert.equal((html.match(/block-list-item/g) || []).length, 2);
             assert.match(html, /status-badge danger">Blocked/);
             assert.match(html, /URL Blocklist/);
 

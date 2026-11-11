@@ -1,6 +1,6 @@
 'use strict';
 
-import { esc, fmtNum, CLUSTER_KEY } from './helpers.js';
+import { escapeHtml, formatNumber, CLUSTER_KEY } from './helpers.js';
 
 /**
  * Everything to do with block lists.
@@ -152,7 +152,7 @@ const Blocklists = (() => {
                 setContent('<div class="block-list-popover-title">No block list reported.</div>');
             } else {
                 setContent(
-                    `<div class="block-list-popover-title">Appears on the following blocklist(s):</div><div class="block-list-popover-names">${names.map(listName => `<div class="block-list-popover-name">- ${esc(listName)}</div>`).join('')}</div>`,
+                    `<div class="block-list-popover-title">Appears on the following blocklist(s):</div><div class="block-list-popover-names">${names.map(listName => `<div class="block-list-popover-name">- ${escapeHtml(listName)}</div>`).join('')}</div>`,
                 );
             }
         } catch {
@@ -224,7 +224,7 @@ const Blocklists = (() => {
 
                 const label = labelMap[normalized];
                 const displayValue = normalized === 'source' ? formatBlockedSource(value) : value;
-                const values = splitValues(displayValue).map(v => esc(v));
+                const values = splitValues(displayValue).map(v => escapeHtml(v));
 
                 const group = detailMap.get(label) || { label, values: [] };
                 values.forEach(v => {
@@ -260,15 +260,15 @@ const Blocklists = (() => {
             .toLowerCase();
         const listHtml = lists
             .map(list => {
-                const url = list.url ? '<div class="blocked-list-url">' + esc(list.url) + '</div>' : '';
+                const url = list.url ? '<div class="block-list-url">' + escapeHtml(list.url) + '</div>' : '';
                 const matched = String(list.matchedDomain || '')
                     .replace(/\.+$/, '')
                     .toLowerCase();
                 const match =
                     list.matchedDomain && matched !== asked
-                        ? '<div class="blocked-list-match">Matched ' + esc(list.matchedDomain) + '</div>'
+                        ? '<div class="block-list-match">Matched ' + escapeHtml(list.matchedDomain) + '</div>'
                         : '';
-                return `<div class="blocked-list-item"><div class="blocked-list-name">${esc(list.name || 'Block list')}</div>${url}${match}</div>`;
+                return `<div class="block-list-item"><div class="block-list-name">${escapeHtml(list.name || 'Block list')}</div>${url}${match}</div>`;
             })
             .join('');
 
@@ -283,9 +283,9 @@ const Blocklists = (() => {
 
         let note = '';
         if (!node.ok) {
-            note = '<div class="blocked-list-note">' + esc(node.error || 'Lookup failed') + '</div>';
+            note = '<div class="block-list-note">' + escapeHtml(node.error || 'Lookup failed') + '</div>';
         } else if (node.reportError) {
-            note = '<div class="blocked-list-note">' + esc(node.reportError) + '</div>';
+            note = '<div class="block-list-note">' + escapeHtml(node.reportError) + '</div>';
         } else if (lists.length) {
             // The Note row above already covers Advanced Blocking results, and manual
             // entries have no overlap to explain. Only built-in URL lists get this line.
@@ -296,24 +296,24 @@ const Blocklists = (() => {
                         .toLowerCase() === 'block-list-zone',
             );
             if (hasUrlList && !fromAdvancedBlocking) {
-                note = '<div class="blocked-list-note">Every built-in block list that matched is shown.</div>';
+                note = '<div class="block-list-note">Every built-in block list that matched is shown.</div>';
             }
         } else if (isBlocked) {
-            note = `<div class="blocked-list-note">${node.txtBlockingReport === false ? 'Allow TXT Blocking Report is off, so built-in block lists cannot be reported.' : 'No block list was reported. The Advanced Blocking app only names the first matching list, and a manual block may have no list URL.'}</div>`;
+            note = `<div class="block-list-note">${node.txtBlockingReport === false ? 'Allow TXT Blocking Report is off, so built-in block lists cannot be reported.' : 'No block list was reported. The Advanced Blocking app only names the first matching list, and a manual block may have no list URL.'}</div>`;
         } else {
-            note = `<div class="blocked-list-note">${node.txtBlockingReport === true ? 'No block list reported. The name is not blocked.' : node.txtBlockingReport === false ? 'Allow TXT Blocking Report is off, so built-in block lists cannot be reported. This name may still be blocked.' : 'No block list reported. The name is not blocked, or Allow TXT Blocking Report is off.'}</div>`;
+            note = `<div class="block-list-note">${node.txtBlockingReport === true ? 'No block list reported. The name is not blocked.' : node.txtBlockingReport === false ? 'Allow TXT Blocking Report is off, so built-in block lists cannot be reported. This name may still be blocked.' : 'No block list reported. The name is not blocked, or Allow TXT Blocking Report is off.'}</div>`;
         }
 
         const detailHtml = details.length
             ? details
                   .map(
                       item =>
-                          `<div class="blocked-lookup-meta-row"><span class="blocked-lookup-meta-label">${item.label ? esc(item.label + ':') : '&nbsp;'}</span><span class="blocked-lookup-meta-value">${item.value}</span></div>`,
+                          `<div class="blocked-lookup-meta-row"><span class="blocked-lookup-meta-label">${item.label ? escapeHtml(item.label + ':') : '&nbsp;'}</span><span class="blocked-lookup-meta-value">${item.value}</span></div>`,
                   )
                   .join('')
             : '';
 
-        return `<article class="blocked-lookup-card"><div class="blocked-lookup-card-header"><div class="blocked-lookup-card-title">${esc(node.server)}</div><div>${statusBadge}</div></div>${listHtml ? `<div class="blocked-list">${listHtml}</div>` : ''}${detailHtml ? `<div class="blocked-lookup-card-meta">${detailHtml}</div>` : ''}${note}</article>`;
+        return `<article class="blocked-lookup-card"><div class="blocked-lookup-card-header"><div class="blocked-lookup-card-title">${escapeHtml(node.server)}</div><div>${statusBadge}</div></div>${listHtml ? `<div class="block-list">${listHtml}</div>` : ''}${detailHtml ? `<div class="blocked-lookup-card-meta">${detailHtml}</div>` : ''}${note}</article>`;
     }
 
     // ---- Scope and counting ----------------------------------------------------------
@@ -370,7 +370,7 @@ const Blocklists = (() => {
             return;
         }
         if (data.error && !data.ok) {
-            el.innerHTML = '<div class="block-list-empty">' + esc(data.error) + '</div>';
+            el.innerHTML = '<div class="block-list-empty">' + escapeHtml(data.error) + '</div>';
             return;
         }
 
@@ -385,10 +385,10 @@ const Blocklists = (() => {
         function row(list) {
             const hits = list.hits || 0;
             const pct = Math.max(hits ? 2 : 0, Math.round((hits / max) * 100));
-            const names = list.domains ? ' · ' + fmtNum(list.domains) + (list.domains === 1 ? ' name' : ' names') : '';
-            const queries = fmtNum(hits) + (hits === 1 ? ' query' : ' queries');
-            const title = list.url ? ' title="' + esc(list.url) + '"' : '';
-            return `<div class="block-list-stat-row${list.dim ? ' dim' : ''}"${title}><div class="block-list-stat-top"><span class="block-list-stat-name">${esc(list.name || 'Block list')}</span><span class="block-list-stat-hits">${esc(queries + names)}</span></div><div class="block-list-stat-bar"><span style="width:${pct}%"></span></div></div>`;
+            const names = list.domains ? ' · ' + formatNumber(list.domains) + (list.domains === 1 ? ' name' : ' names') : '';
+            const queries = formatNumber(hits) + (hits === 1 ? ' query' : ' queries');
+            const title = list.url ? ' title="' + escapeHtml(list.url) + '"' : '';
+            return `<div class="block-list-stat-row${list.dim ? ' dim' : ''}"${title}><div class="block-list-stat-top"><span class="block-list-stat-name">${escapeHtml(list.name || 'Block list')}</span><span class="block-list-stat-hits">${escapeHtml(queries + names)}</span></div><div class="block-list-stat-bar"><span style="width:${pct}%"></span></div></div>`;
         }
 
         const when = data.updatedAt ? new Date(data.updatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
@@ -415,7 +415,7 @@ const Blocklists = (() => {
                 ? lists.map(row).join('') + extras.map(row).join('')
                 : '<div class="block-list-empty">No blocked queries in the last hour.</div>';
 
-        el.innerHTML = `<div class="block-list-stats-head"><span>${fmtNum(data.blockedQueries || 0)} blocked queries counted${data.skippedLoopback ? `, ${fmtNum(data.skippedLoopback)} skipped from 127.0.0.1 and ::1` : ''}</span>${when ? `<span class="block-list-stats-time">Counted for ${esc(scope || 'the cluster')} at ${esc(when)}</span>` : ''}</div>${lists.length || extras.length ? '<div class="block-list-stat-cols"><span>Block list</span><span>Queries · distinct names</span></div>' : ''}${body}<div class="block-list-stats-note">${esc(looked)}${extraNotes.length ? `<br>${esc(extraNotes.join(' '))}` : ''}</div>`;
+        el.innerHTML = `<div class="block-list-stats-head"><span>${formatNumber(data.blockedQueries || 0)} blocked queries counted${data.skippedLoopback ? `, ${formatNumber(data.skippedLoopback)} skipped from 127.0.0.1 and ::1` : ''}</span>${when ? `<span class="block-list-stats-time">Counted for ${escapeHtml(scope || 'the cluster')} at ${escapeHtml(when)}</span>` : ''}</div>${lists.length || extras.length ? '<div class="block-list-stat-cols"><span>Block list</span><span>Queries · distinct names</span></div>' : ''}${body}<div class="block-list-stats-note">${escapeHtml(looked)}${extraNotes.length ? `<br>${escapeHtml(extraNotes.join(' '))}` : ''}</div>`;
     }
 
     async function countBlockLists() {

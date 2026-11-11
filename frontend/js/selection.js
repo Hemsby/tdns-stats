@@ -7,7 +7,7 @@
  * picks and the counters that say how much is selected.
  */
 
-import { esc, normClient, normDomain } from './helpers.js';
+import { escapeHtml, normalizeClient, normalizeDomain } from './helpers.js';
 
 const Selection = (() => {
     const state = {
@@ -387,19 +387,19 @@ const Selection = (() => {
             '<button type="button" class="filter-chip" data-tab="' +
             tab +
             '" data-name="' +
-            esc(name) +
+            escapeHtml(name) +
             '" title="Remove this filter">' +
             '<span class="filter-chip-label">' +
             TAB_LABELS[tab] +
             '</span>' +
-            esc(name) +
+            escapeHtml(name) +
             '<span class="filter-chip-x" aria-hidden="true">&times;</span>' +
             '</button>'
         );
     }
 
     function normalize(tab, value) {
-        return tab === 'clients' ? normClient(value) : normDomain(value);
+        return tab === 'clients' ? normalizeClient(value) : normalizeDomain(value);
     }
 
     return {

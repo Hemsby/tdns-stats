@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * A stand-in for the technitium module.
+ * A stand-in for the Technitium module.
  *
  * The poller takes the module as a dependency, so the polling logic can be
  * driven without any HTTP. Every method returns an empty result unless the

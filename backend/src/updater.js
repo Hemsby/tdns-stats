@@ -48,9 +48,15 @@ function satisfies(version, range) {
     return false;
 }
 
+/**
+ * Compares two version numbers.
+ *
+ * The result is -1 when the first is older, 0 when they are the same and 1
+ * when the first is newer.
+ */
 function compareVersions(a, b) {
-    const left = a.split('.').map(Number);
-    const right = b.split('.').map(Number);
+    const left = a.split('.').map(p => parseInt(p, 10) || 0);
+    const right = b.split('.').map(p => parseInt(p, 10) || 0);
     for (let i = 0; i < 3; i++) {
         const difference = (left[i] || 0) - (right[i] || 0);
         if (difference !== 0) return difference < 0 ? -1 : 1;

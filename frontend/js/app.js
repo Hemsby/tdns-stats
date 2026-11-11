@@ -13,15 +13,15 @@ import { Selection } from './selection.js';
 import { Charts } from './charts.js';
 import { Blocklists } from './blocklists.js';
 import {
-    esc,
-    fmtNum,
-    fmtPct,
-    fmtMs,
-    fmtMsBare,
+    escapeHtml,
+    formatNumber,
+    formatPercent,
+    formatMs,
+    formatMsBare,
     relativeTime,
     safeUrl,
-    normClient,
-    normDomain,
+    normalizeClient,
+    normalizeDomain,
     CLUSTER_KEY,
     FOLLOW_CHART_KEY,
 } from './helpers.js';
@@ -516,18 +516,18 @@ const App = (() => {
             state.activeTab = validKeys[0];
         }
 
-        nav.querySelectorAll('.stab').forEach(b => b.classList.toggle('active', b.dataset.key === state.activeTab));
+        nav.querySelectorAll('.server-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.key === state.activeTab));
     }
 
     function makeTab(label, key) {
         const btn = document.createElement('button');
-        btn.className = 'stab' + (state.activeTab === key ? ' active' : '');
+        btn.className = 'server-tab-btn' + (state.activeTab === key ? ' active' : '');
         btn.dataset.key = key;
 
         const color = serverColor(key);
         if (color) {
             const dot = document.createElement('span');
-            dot.className = 'tab-dot ' + color;
+            dot.className = 'server-tab-dot ' + color;
             btn.appendChild(dot);
         }
         btn.appendChild(document.createTextNode(label));
@@ -552,7 +552,7 @@ const App = (() => {
             state.feedServer = key;
         }
 
-        document.querySelectorAll('.stab').forEach(b => b.classList.toggle('active', b.dataset.key === key));
+        document.querySelectorAll('.server-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.key === key));
         // Set the data-tab-type on the feed panel for responsive feed column visibility.
         const feedPanel = document.getElementById('feedPanel');
         if (feedPanel) {
@@ -637,7 +637,7 @@ const App = (() => {
         if (!document.getElementById(dotId)) {
             const dot = document.createElement('span');
             dot.id = dotId;
-            dot.className = 'sel-dot';
+            dot.className = 'selected-dot';
             sel.parentNode.insertBefore(dot, sel);
         }
     }
@@ -647,7 +647,7 @@ const App = (() => {
         if (!dot) return;
         const effectiveKey = selectId === 'topServerSelect' && key === FOLLOW_CHART_KEY ? state.chartServer : key;
         const color = serverColor(effectiveKey);
-        dot.className = 'sel-dot' + (color ? ' ' + color : '');
+        dot.className = 'selected-dot' + (color ? ' ' + color : '');
     }
 
     function syncSelects() {
@@ -938,11 +938,11 @@ const App = (() => {
                 data.blockedLookup && data.blockedSummary ? Blocklists.blockedSummary(data.blockedSummary, data.domain) : '';
         }
 
-        results.innerHTML = `<div class="domain-search-result-details"><div class="domain-search-target"><div><div class="domain-search-title">${esc(data.domain)}</div><div class="domain-search-meta">${serverCountText}</div></div><div class="domain-server-list">${cachedServers.map(server => `<span class="domain-server-pill">${esc(server)}</span>`).join('')}</div></div><div class="domain-search-node-list">${selectedServers.map(renderDomainCacheNode).join('')}</div></div>`;
+        results.innerHTML = `<div class="domain-search-result-details"><div class="domain-search-target"><div><div class="domain-search-title">${escapeHtml(data.domain)}</div><div class="domain-search-meta">${serverCountText}</div></div><div class="domain-server-list">${cachedServers.map(server => `<span class="domain-server-pill">${escapeHtml(server)}</span>`).join('')}</div></div><div class="domain-search-node-list">${selectedServers.map(renderDomainCacheNode).join('')}</div></div>`;
     }
 
     function renderDomainCacheNode(node) {
-        const statusClass = !node.ok ? 'domain-node-error' : node.cached ? 'domain-node-hit' : 'domain-node-miss';
+        const statusClass = !node.ok ? 'domain-cache-node-error' : node.cached ? 'domain-cache-node-hit' : 'domain-cache-node-miss';
         const statusBadgeClass = !node.ok
             ? 'neutral'
             : node.blockedLookup
@@ -966,7 +966,7 @@ const App = (() => {
 
         let body;
         if (!node.ok) {
-            body = '<div class="domain-cache-empty">' + esc(node.error || 'Unable to search this node') + '</div>';
+            body = '<div class="domain-cache-empty">' + escapeHtml(node.error || 'Unable to search this node') + '</div>';
         } else if (records.length > 0) {
             body = `<div class="domain-cache-table-wrap"><table class="domain-cache-table"><thead><tr><th>Type</th><th>Answer</th><th>TTL</th><th>Status</th></tr></thead><tbody>${records.map(renderDomainCacheRecord).join('')}</tbody></table></div>`;
         } else if (allRecords.length > 0) {
@@ -975,7 +975,7 @@ const App = (() => {
             body = '<div class="domain-cache-empty">Domain not cached on this node.</div>';
         }
 
-        return `<article class="domain-cache-node ${statusClass}"><div class="domain-cache-node-head"><div class="domain-search-node-title"><span class="srv-card-name">${esc(node.server)}</span>${node.domain && node.domain !== node.server ? `<span class="node-domain">${esc(node.domain)}</span>` : ''}</div><span class="status-badge ${statusBadgeClass}">${statusText}</span></div>${body}</article>`;
+        return `<article class="domain-cache-node ${statusClass}"><div class="domain-cache-node-head"><div class="domain-search-node-title"><span class="server-card-name">${escapeHtml(node.server)}</span>${node.domain && node.domain !== node.server ? `<span class="node-domain">${escapeHtml(node.domain)}</span>` : ''}</div><span class="status-badge ${statusBadgeClass}">${statusText}</span></div>${body}</article>`;
     }
 
     function collectCacheRecords(node) {
@@ -996,7 +996,7 @@ const App = (() => {
         const status = getSecurityStatus(r);
         const lastUsed = getRecordLastUsed(r);
 
-        return `<tr><td>${esc(type)}</td><td>${esc(answer)}${lastUsed ? `<div class="record-meta">${esc(lastUsed)}</div>` : ''}</td><td>${esc(ttl)}</td><td>${esc(status)}</td></tr>`;
+        return `<tr><td>${escapeHtml(type)}</td><td>${escapeHtml(answer)}${lastUsed ? `<div class="record-meta">${escapeHtml(lastUsed)}</div>` : ''}</td><td>${escapeHtml(ttl)}</td><td>${escapeHtml(status)}</td></tr>`;
     }
 
     function recordValue(record) {
@@ -1112,10 +1112,10 @@ const App = (() => {
 
     function buildAggregateCard(cluster) {
         const card = document.createElement('div');
-        card.className = 'srv-card';
+        card.className = 'server-card';
 
-        const header = cardHeader('Cluster', esc(cluster.clusterDomain || ''));
-        const role = '<div class="srv-card-role"><span class="node-badge primary">Cluster</span></div>';
+        const header = cardHeader('Cluster', escapeHtml(cluster.clusterDomain || ''));
+        const role = '<div class="server-card-role"><span class="node-badge primary">Cluster</span></div>';
 
         let st;
         if (state.timeRange === 'LastHour') {
@@ -1123,14 +1123,14 @@ const App = (() => {
         } else {
             const cached = state.rangeCache[CLUSTER_KEY + ':' + state.timeRange];
             if (!cached) {
-                card.innerHTML = header + role + '<div class="srv-card-loading">Loading…</div>';
+                card.innerHTML = header + role + '<div class="server-card-loading">Loading…</div>';
                 return card;
             }
             st = cached.stats || {};
         }
 
         const stats = cardStats(st);
-        card.innerHTML = header + role + '<div class="srv-stats-grid">' + stats.grid + '</div>' + cardFooter(stats.pct);
+        card.innerHTML = header + role + '<div class="server-stats-grid">' + stats.grid + '</div>' + cardFooter(stats.pct);
         return card;
     }
 
@@ -1151,17 +1151,17 @@ const App = (() => {
                 const lastSeen = n.lastSeen ? relativeTime(n.lastSeen) : n.state === 'Self' ? 'self' : '';
                 const lastSynced = n.configLastSynced && !n.configLastSynced.startsWith('0001-') ? relativeTime(n.configLastSynced) : '';
 
-                return `<tr class="node-row"><td><span class="node-dot ${stateClass}"></span> <span class="node-name" title="${esc(n.name)}">${esc(n.name)}</span></td><td class="node-role">${typeBadge}</td><td class="node-url"><a href="${esc(safeUrl(url))}" target="_blank">${esc(url)}</a></td><td class="node-ip"><span class="node-ip-text" title="${esc(ip)}">${esc(ip)}</span></td><td class="node-time node-uptime">up ${esc(upSince)}</td><td class="node-time node-lastseen">${esc(lastSeen)}</td><td class="node-time node-lastsynced">${lastSynced ? `synced ${esc(lastSynced)}` : ''}</td><td class="node-state-cell"><span class="node-state ${stateClass}">${esc(n.state)}</span></td></tr>`;
+                return `<tr class="node-row"><td><span class="node-dot ${stateClass}"></span> <span class="node-name" title="${escapeHtml(n.name)}">${escapeHtml(n.name)}</span></td><td class="node-role">${typeBadge}</td><td class="node-url"><a href="${escapeHtml(safeUrl(url))}" target="_blank">${escapeHtml(url)}</a></td><td class="node-ip"><span class="node-ip-text" title="${escapeHtml(ip)}">${escapeHtml(ip)}</span></td><td class="node-time node-uptime">up ${escapeHtml(upSince)}</td><td class="node-time node-lastseen">${escapeHtml(lastSeen)}</td><td class="node-time node-lastsynced">${lastSynced ? `synced ${escapeHtml(lastSynced)}` : ''}</td><td class="node-state-cell"><span class="node-state ${stateClass}">${escapeHtml(n.state)}</span></td></tr>`;
             })
             .join('');
 
-        wrap.innerHTML = `<div class="card-header"><h2 class="card-title">Cluster Nodes${clusterDomain ? ` <span class="node-domain">${esc(clusterDomain)}</span>` : ''}</h2></div><div class="node-table-scroll"><table class="node-table"><thead><tr><th>Node</th><th class="node-role">Role</th><th class="node-url">URL</th><th class="node-ip">IP</th><th class="node-uptime">Uptime</th><th class="node-lastseen">Last Seen</th><th class="node-lastsynced">Last Synced</th><th class="node-state-cell">State</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+        wrap.innerHTML = `<div class="card-header"><h2 class="card-title">Cluster Nodes${clusterDomain ? ` <span class="node-domain">${escapeHtml(clusterDomain)}</span>` : ''}</h2></div><div class="node-table-scroll"><table class="node-table"><thead><tr><th>Node</th><th class="node-role">Role</th><th class="node-url">URL</th><th class="node-ip">IP</th><th class="node-uptime">Uptime</th><th class="node-lastseen">Last Seen</th><th class="node-lastsynced">Last Synced</th><th class="node-state-cell">State</th></tr></thead><tbody>${rows}</tbody></table></div>`;
         return wrap;
     }
 
     function buildServerCard(name, node, role) {
         const card = document.createElement('div');
-        card.className = 'srv-card' + (node?.error ? ' offline' : '');
+        card.className = 'server-card' + (node?.error ? ' offline' : '');
 
         if (!node || node.error) {
             card.innerHTML = cardHeader(name, 'offline', 'color:var(--accent-red)');
@@ -1182,10 +1182,10 @@ const App = (() => {
 
         if (!role && node.clusterInitialized === false) role = 'Standalone';
         const badgeClass = role === 'Primary' ? 'primary' : role === 'Secondary' ? 'secondary' : 'standalone';
-        const roleBadge = role ? '<span class="node-badge ' + badgeClass + '">' + esc(role) + '</span>' : '';
+        const roleBadge = role ? '<span class="node-badge ' + badgeClass + '">' + escapeHtml(role) + '</span>' : '';
 
         const stats = cardStats(st);
-        card.innerHTML = `${cardHeader(node.dnsServerDomain || name, 'v' + esc(node.version))}${roleBadge ? `<div class="srv-card-role">${roleBadge}</div>` : ''}<div class="srv-stats-grid">${stats.grid}</div>${cardFooter(stats.pct)}`;
+        card.innerHTML = `${cardHeader(node.dnsServerDomain || name, 'v' + escapeHtml(node.version))}${roleBadge ? `<div class="server-card-role">${roleBadge}</div>` : ''}<div class="server-stats-grid">${stats.grid}</div>${cardFooter(stats.pct)}`;
         return card;
     }
 
@@ -1195,7 +1195,7 @@ const App = (() => {
      * the same header, so it is built once.
      */
     function cardHeader(name, badge, badgeStyle) {
-        return `<div class="srv-card-header"><span class="srv-card-name">${esc(name)}</span><span class="card-badge"${badgeStyle ? ` style="${badgeStyle}"` : ''}>${badge}</span></div>`;
+        return `<div class="server-card-header"><span class="server-card-name">${escapeHtml(name)}</span><span class="card-badge"${badgeStyle ? ` style="${badgeStyle}"` : ''}>${badge}</span></div>`;
     }
 
     function cardStats(st) {
@@ -1204,27 +1204,27 @@ const App = (() => {
         return {
             pct: total > 0 ? Math.round((blocked / total) * 100) : 0,
             grid: [
-                statMini('Total', fmtNum(total), 'blue'),
-                statMini('No Error', fmtNum(st.totalNoError || 0), 'green'),
-                statMini('Failures', fmtNum(st.totalServerFailure || 0), 'red'),
-                statMini('NXDOMAIN', fmtNum(st.totalNxDomain || 0), 'ora'),
-                statMini('Refused', fmtNum(st.totalRefused || 0), 'slate'),
-                statMini('Authoritative', fmtNum(st.totalAuthoritative || 0), 'yel'),
-                statMini('Recursive', fmtNum(st.totalRecursive || 0), 'pur'),
-                statMini('Cached', fmtNum(st.totalCached || 0), 'teal'),
-                statMini('Blocked', fmtNum(blocked), 'red'),
-                statMini('Dropped', fmtNum(st.totalDropped || 0), 'slate'),
-                statMini('Clients', fmtNum(st.totalClients || 0), 'pur'),
+                statMini('Total', formatNumber(total), 'blue'),
+                statMini('No Error', formatNumber(st.totalNoError || 0), 'green'),
+                statMini('Failures', formatNumber(st.totalServerFailure || 0), 'red'),
+                statMini('NXDOMAIN', formatNumber(st.totalNxDomain || 0), 'ora'),
+                statMini('Refused', formatNumber(st.totalRefused || 0), 'slate'),
+                statMini('Authoritative', formatNumber(st.totalAuthoritative || 0), 'yel'),
+                statMini('Recursive', formatNumber(st.totalRecursive || 0), 'pur'),
+                statMini('Cached', formatNumber(st.totalCached || 0), 'teal'),
+                statMini('Blocked', formatNumber(blocked), 'red'),
+                statMini('Dropped', formatNumber(st.totalDropped || 0), 'slate'),
+                statMini('Clients', formatNumber(st.totalClients || 0), 'pur'),
             ].join(''),
         };
     }
 
     function cardFooter(pct) {
-        return `<div class="srv-card-footer"><span class="blocked-pct">${pct}% blocked</span><div class="blocked-bar"><div class="blocked-bar-fill" style="width:${Math.min(pct, 100)}%"></div></div></div>`;
+        return `<div class="server-card-footer"><span class="blocked-pct">${pct}% blocked</span><div class="blocked-bar"><div class="blocked-bar-fill" style="width:${Math.min(pct, 100)}%"></div></div></div>`;
     }
 
     function statMini(label, value, colorClass) {
-        return `<div class="stat-mini"><span class="stat-mini-label">${esc(label)}</span><span class="stat-mini-value ${colorClass}">${esc(value)}</span></div>`;
+        return `<div class="stat-mini"><span class="stat-mini-label">${escapeHtml(label)}</span><span class="stat-mini-value ${colorClass}">${escapeHtml(value)}</span></div>`;
     }
 
     // ---- Server display name map -----------------------------------------------------
@@ -1286,7 +1286,7 @@ const App = (() => {
                     const node = state.nodes[name];
                     const ok = node && !node.error;
                     const displayName = isShort ? shortName(name) : name;
-                    return `<span class="server-pill ${ok ? 'online' : 'offline'}"><span class="pill-dot"></span>${esc(displayName)}</span>`;
+                    return `<span class="server-pill ${ok ? 'online' : 'offline'}"><span class="server-pill-dot"></span>${escapeHtml(displayName)}</span>`;
                 })
                 .join('');
 
@@ -1320,7 +1320,7 @@ const App = (() => {
             .map(name => {
                 const node = state.nodes[name];
                 const ok = node && !node.error;
-                return `<span class="server-pill ${ok ? 'online' : 'offline'}" title="${esc(name)}"><span class="pill-dot"></span><span class="pill-name-full">${esc(name)}</span><span class="pill-name-short">${esc(shortName(name))}</span></span>`;
+                return `<span class="server-pill ${ok ? 'online' : 'offline'}" title="${escapeHtml(name)}"><span class="server-pill-dot"></span><span class="server-pill-name-full">${escapeHtml(name)}</span><span class="server-pill-name-short">${escapeHtml(shortName(name))}</span></span>`;
             })
             .join('');
 
@@ -1363,7 +1363,7 @@ const App = (() => {
         const el = document.getElementById('dashboardViewers');
         if (!el) return;
         const viewerLabel = state.dashboardViewers === 1 ? 'viewer' : 'viewers';
-        el.innerHTML = '<span class="pill-dot"></span>' + fmtNum(state.dashboardViewers) + ' ' + viewerLabel;
+        el.innerHTML = '<span class="server-pill-dot"></span>' + formatNumber(state.dashboardViewers) + ' ' + viewerLabel;
     }
 
     // ---- Performance cards -----------------------------------------------------------
@@ -1388,7 +1388,7 @@ const App = (() => {
 
     function buildPerfCard(name, perf) {
         const card = document.createElement('div');
-        card.className = 'srv-card perf-card';
+        card.className = 'server-card perf-card';
 
         const node = state.nodes[name];
         const st = node?.stats?.stats || {};
@@ -1399,11 +1399,11 @@ const App = (() => {
         const statsHitRate = denominator > 0 ? Math.round((totalCached / denominator) * 100) : null;
 
         const cacheMax = state.cacheMaxEntries?.[name] || 0;
-        const cachePopHtml = cacheMax > 0 ? Math.round((cachedEntries / cacheMax) * 100) + '%' : fmtNum(cachedEntries);
+        const cachePopHtml = cacheMax > 0 ? Math.round((cachedEntries / cacheMax) * 100) + '%' : formatNumber(cachedEntries);
         const cachePopLabel = cacheMax > 0 ? 'Cache Pop.' : 'Entries';
 
         if (!perf) {
-            card.innerHTML = `<div class="srv-card-header"><span class="srv-card-name">${esc(node?.dnsServerDomain || name)}</span></div><div class="srv-card-role"><span class="perf-section-label" title="Upstream recursive resolution times only. Cache hits, blocked, and authoritative responses are excluded.">Recursive RTT <span class="perf-section-unit">(ms)</span></span></div><div class="srv-stats-grid srv-stats-grid--rtt">${statMini('Median', '--', 'teal')}${statMini('Mean', '--', 'blue')}${statMini('P95', '--', 'yel')}${statMini('P99', '--', 'yel')}${statMini('Jitter', '--', 'ora')}</div><div class="srv-card-role" style="margin-top:6px"><span class="perf-section-label">Cache</span></div><div class="srv-stats-grid">${statMini('Hit Rate', fmtPct(statsHitRate), 'green')}${statMini('Miss Rate', fmtPct(statsHitRate !== null ? 100 - statsHitRate : null), 'red')}${statMini(cachePopLabel, cachePopHtml, 'teal')}${statMini('Impact', '--', 'pur')}</div>`;
+            card.innerHTML = `<div class="server-card-header"><span class="server-card-name">${escapeHtml(node?.dnsServerDomain || name)}</span></div><div class="server-card-role"><span class="perf-section-label" title="Upstream recursive resolution times only. Cache hits, blocked, and authoritative responses are excluded.">Recursive RTT <span class="perf-section-unit">(ms)</span></span></div><div class="server-stats-grid server-stats-grid--rtt">${statMini('Median', '--', 'teal')}${statMini('Mean', '--', 'blue')}${statMini('P95', '--', 'yel')}${statMini('P99', '--', 'yel')}${statMini('Jitter', '--', 'ora')}</div><div class="server-card-role" style="margin-top:6px"><span class="perf-section-label">Cache</span></div><div class="server-stats-grid">${statMini('Hit Rate', formatPercent(statsHitRate), 'green')}${statMini('Miss Rate', formatPercent(statsHitRate !== null ? 100 - statsHitRate : null), 'red')}${statMini(cachePopLabel, cachePopHtml, 'teal')}${statMini('Impact', '--', 'pur')}</div>`;
             return card;
         }
 
@@ -1411,7 +1411,7 @@ const App = (() => {
         const hitRate = perf.cache?.hitRate || 0;
         const missRate = 100 - hitRate;
 
-        card.innerHTML = `<div class="srv-card-header"><span class="srv-card-name">${esc(node?.dnsServerDomain || name)}</span></div><div class="srv-card-role"><span class="perf-section-label" title="Upstream recursive resolution times only. Cache hits, blocked, and authoritative responses are excluded.">Recursive RTT <span class="perf-section-unit">(ms)</span></span></div><div class="srv-stats-grid srv-stats-grid--rtt">${statMini('Median', fmtMsBare(rtt.median), 'teal')}${statMini('Mean', fmtMsBare(rtt.mean), 'blue')}${statMini('P95', fmtMsBare(rtt.p95), 'yel')}${statMini('P99', fmtMsBare(rtt.p99), 'yel')}${statMini('Jitter', fmtMsBare(rtt.jitter), 'ora')}</div><div class="srv-card-role" style="margin-top:6px"><span class="perf-section-label">Cache</span></div><div class="srv-stats-grid">${statMini('Hit Rate', fmtPct(hitRate), 'green')}${statMini('Miss Rate', fmtPct(missRate), 'red')}${statMini(cachePopLabel, cachePopHtml, 'teal')}${statMini('Impact', fmtMs(perf.impact), 'pur')}</div>`;
+        card.innerHTML = `<div class="server-card-header"><span class="server-card-name">${escapeHtml(node?.dnsServerDomain || name)}</span></div><div class="server-card-role"><span class="perf-section-label" title="Upstream recursive resolution times only. Cache hits, blocked, and authoritative responses are excluded.">Recursive RTT <span class="perf-section-unit">(ms)</span></span></div><div class="server-stats-grid server-stats-grid--rtt">${statMini('Median', formatMsBare(rtt.median), 'teal')}${statMini('Mean', formatMsBare(rtt.mean), 'blue')}${statMini('P95', formatMsBare(rtt.p95), 'yel')}${statMini('P99', formatMsBare(rtt.p99), 'yel')}${statMini('Jitter', formatMsBare(rtt.jitter), 'ora')}</div><div class="server-card-role" style="margin-top:6px"><span class="perf-section-label">Cache</span></div><div class="server-stats-grid">${statMini('Hit Rate', formatPercent(hitRate), 'green')}${statMini('Miss Rate', formatPercent(missRate), 'red')}${statMini(cachePopLabel, cachePopHtml, 'teal')}${statMini('Impact', formatMs(perf.impact), 'pur')}</div>`;
 
         return card;
     }
@@ -1498,7 +1498,7 @@ const App = (() => {
         if (fill.style.width !== pct + '%') fill.style.width = pct + '%';
 
         const hits = row.querySelector('.top-hits');
-        const hitsText = fmtNum(item.hits);
+        const hitsText = formatNumber(item.hits);
         if (hits.textContent !== hitsText) hits.textContent = hitsText;
 
         let btn = row.querySelector('.top-row-action');
@@ -1530,13 +1530,15 @@ const App = (() => {
         const selected = Selection.getFilters()[tab];
         if (!selected) return;
         const rows = Array.from(content.querySelectorAll('.top-row'));
-        const flags = rows.map(row => selected.has(tab === 'clients' ? normClient(row.dataset.name) : normDomain(row.dataset.name)));
+        const flags = rows.map(row =>
+            selected.has(tab === 'clients' ? normalizeClient(row.dataset.name) : normalizeDomain(row.dataset.name)),
+        );
 
         rows.forEach((row, i) => {
             const isSelected = flags[i];
             row.classList.toggle('selected', isSelected);
-            row.classList.toggle('sel-first', isSelected && !flags[i - 1]);
-            row.classList.toggle('sel-last', isSelected && !flags[i + 1]);
+            row.classList.toggle('selected-first', isSelected && !flags[i - 1]);
+            row.classList.toggle('selected-last', isSelected && !flags[i + 1]);
             row.setAttribute('aria-selected', isSelected ? 'true' : 'false');
             const sub = row.querySelector('.top-sub');
             const value = sub ? row.dataset.name + ' (' + sub.textContent.trim() + ')' : row.dataset.name;

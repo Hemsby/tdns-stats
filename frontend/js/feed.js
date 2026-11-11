@@ -8,7 +8,7 @@
  */
 
 import { Log } from './log.js';
-import { esc, normDomain, normClient } from './helpers.js';
+import { escapeHtml, normalizeDomain, normalizeClient } from './helpers.js';
 import { Selection } from './selection.js';
 
 const Feed = (() => {
@@ -81,7 +81,7 @@ const Feed = (() => {
         const missing = unresolved.find(st => !st.queryLogsLookupFailed);
         if (missing) {
             const scope = serverFilter === 'all' ? ' on one or more servers' : '';
-            return '<div class="no-data warn">Query log app "' + esc(missing.queryLogsAppName) + '" not found' + scope + '</div>';
+            return '<div class="no-data warn">Query log app "' + escapeHtml(missing.queryLogsAppName) + '" not found' + scope + '</div>';
         }
         if (unresolved.length) {
             const scope = serverFilter === 'all' ? ' on one or more servers' : '';
@@ -173,11 +173,11 @@ const Feed = (() => {
         if (!hasSelection()) return true;
 
         const filters = Selection.getFilters();
-        const qname = normDomain(e.qname);
+        const qname = normalizeDomain(e.qname);
         const domainSelected = filters.domains.has(qname) || filters.blocked.has(qname);
         if ((filters.domains.size || filters.blocked.size) && !domainSelected) return false;
 
-        if (filters.clients.size && !filters.clients.has(normClient(e.clientIpAddress))) return false;
+        if (filters.clients.size && !filters.clients.has(normalizeClient(e.clientIpAddress))) return false;
         return true;
     }
 
@@ -251,15 +251,15 @@ const Feed = (() => {
             row.className = 'feed-row ' + rowClass(e);
 
             const ts = formatTime(e.timestamp);
-            const srvCls = colorMap[e._server] ? ' ' + colorMap[e._server] : '';
-            const badgeCls = badgeText.toLowerCase().replace(/\s+/g, '');
+            const serverClass = colorMap[e._server] ? ' ' + colorMap[e._server] : '';
+            const badgeClass = badgeText.toLowerCase().replace(/\s+/g, '');
 
             const rttVal = e.responseRtt;
-            const rtt = fmtMs(rttVal, e.responseType);
-            const latCls = getLatClass(rttVal);
+            const rtt = formatMs(rttVal, e.responseType);
+            const latencyClass = getLatencyClass(rttVal);
 
-            const clientValue = normClient(e.clientIpAddress);
-            const domainValue = normDomain(e.qname);
+            const clientValue = normalizeClient(e.clientIpAddress);
+            const domainValue = normalizeDomain(e.qname);
             const domainKind = e.responseType === 'Blocked' ? 'blocked' : 'domains';
             const filters = Selection.getFilters();
             const domainSelected = filters.domains.has(domainValue) || filters.blocked.has(domainValue);
@@ -267,64 +267,64 @@ const Feed = (() => {
 
             row.innerHTML =
                 '<span class="feed-time">' +
-                esc(ts) +
+                escapeHtml(ts) +
                 '</span>' +
                 '<span class="feed-server' +
-                srvCls +
+                serverClass +
                 '" title="' +
-                esc(e._server) +
+                escapeHtml(e._server) +
                 '">' +
-                esc(srvName) +
+                escapeHtml(srvName) +
                 '</span>' +
                 '<span class="feed-client" data-filter-kind="clients" data-filter-value="' +
-                esc(clientValue) +
+                escapeHtml(clientValue) +
                 '" title="' +
-                esc(e.clientIpAddress + ' - ' + (clientSelected ? 'Click to remove filter' : 'Click to filter')) +
+                escapeHtml(e.clientIpAddress + ' - ' + (clientSelected ? 'Click to remove filter' : 'Click to filter')) +
                 '">' +
-                esc(e.clientIpAddress) +
+                escapeHtml(e.clientIpAddress) +
                 '</span>' +
                 '<span class="feed-proto">' +
-                esc(e.protocol || '') +
+                escapeHtml(e.protocol || '') +
                 '</span>' +
                 '<span class="feed-qtype">' +
-                esc(e.qtype || '') +
+                escapeHtml(e.qtype || '') +
                 '</span>' +
                 '<span class="feed-domain" data-filter-kind="' +
                 domainKind +
                 '" data-filter-value="' +
-                esc(domainValue) +
+                escapeHtml(domainValue) +
                 '" title="' +
-                esc(e.qname + ' - ' + (domainSelected ? 'Click to remove filter' : 'Click to filter')) +
+                escapeHtml(e.qname + ' - ' + (domainSelected ? 'Click to remove filter' : 'Click to filter')) +
                 '">' +
-                esc(e.qname) +
+                escapeHtml(e.qname) +
                 '</span>' +
-                '<span class="feed-latencytype"><span class="feed-latency ' +
-                latCls +
+                '<span class="feed-latency-type"><span class="feed-latency ' +
+                latencyClass +
                 '">' +
-                esc(rtt) +
+                escapeHtml(rtt) +
                 '</span>' +
                 '<span class="feed-type ' +
-                badgeCls +
+                badgeClass +
                 '">' +
-                esc(badgeText) +
+                escapeHtml(badgeText) +
                 '</span></span>';
 
             frag.appendChild(row);
         }
         maxSrvW = Math.min(maxSrvW, 60);
 
-        list.style.setProperty('--srv-w', maxSrvW + 'px');
+        list.style.setProperty('--server-w', maxSrvW + 'px');
         list.replaceChildren(frag);
     }
 
-    function getLatClass(n) {
+    function getLatencyClass(n) {
         if (n == null || n <= 0) return '';
-        if (n <= 20) return 'lat-low';
-        if (n <= 100) return 'lat-mid';
-        return 'lat-high';
+        if (n <= 20) return 'latency-low';
+        if (n <= 100) return 'latency-mid';
+        return 'latency-high';
     }
 
-    function fmtMs(n, type) {
+    function formatMs(n, type) {
         // If it is not a recursive query, it is effectively 0ms latency from the server's perspective.
         const instantTypes = ['Cached', 'Blocked', 'Authoritative', 'Refused', 'Dropped'];
         if (instantTypes.includes(type)) {

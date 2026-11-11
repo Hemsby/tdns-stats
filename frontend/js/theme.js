@@ -10,15 +10,16 @@
     const KEY = 'tdns-theme';
     const systemScheme = window.matchMedia('(prefers-color-scheme: light)');
 
-    /** The 'system' theme follows the operating system, so it resolves to a real theme. */
-    function resolve(theme) {
-        return theme === 'system' ? (systemScheme.matches ? 'light' : 'dark') : theme;
-    }
-
     window.TdnsTheme = {
         saved: () => localStorage.getItem(KEY) || 'system',
         save: theme => localStorage.setItem(KEY, theme),
-        apply: theme => document.documentElement.setAttribute('data-theme', resolve(theme)),
+        // The system theme leaves the attribute off, so the stylesheet decides
+        // the colours from the operating system preference.
+        apply: theme => {
+            const root = document.documentElement;
+            if (theme === 'light' || theme === 'dark') root.setAttribute('data-theme', theme);
+            else root.removeAttribute('data-theme');
+        },
         // The system preference can change while the page is open.
         onSystemChange: handler => systemScheme.addEventListener('change', handler),
     };

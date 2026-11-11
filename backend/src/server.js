@@ -78,13 +78,20 @@ function configPathFromArgv(argv) {
     return null;
 }
 
-function semverGreater(v1, v2) {
-    const parts = v => v.split('.').map(p => parseInt(p, 10) || 0);
-    const [a, b] = [parts(v1), parts(v2)];
+/**
+ * Compares two version numbers.
+ *
+ * The result is -1 when the first is older, 0 when they are the same and 1
+ * when the first is newer.
+ */
+function compareVersions(a, b) {
+    const left = a.split('.').map(p => parseInt(p, 10) || 0);
+    const right = b.split('.').map(p => parseInt(p, 10) || 0);
     for (let i = 0; i < 3; i++) {
-        if (a[i] !== b[i]) return a[i] > b[i];
+        const difference = (left[i] || 0) - (right[i] || 0);
+        if (difference !== 0) return difference < 0 ? -1 : 1;
     }
-    return false;
+    return 0;
 }
 
 function loadConfig(argv = process.argv) {
@@ -672,7 +679,7 @@ function createApp(poller, updater) {
                 return res.json({ updateAvailable: false, currentVersion: VERSION });
             }
 
-            const updateAvailable = semverGreater(latestVersion, VERSION);
+            const updateAvailable = compareVersions(latestVersion, VERSION) > 0;
 
             res.json({
                 currentVersion: VERSION,

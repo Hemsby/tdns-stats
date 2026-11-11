@@ -15,13 +15,13 @@ export const CLUSTER_KEY = '__cluster';
 export const FOLLOW_CHART_KEY = '__follow_chart';
 
 /** A string that is safe to put into the page as markup. */
-export function esc(str) {
+export function escapeHtml(str) {
     if (!str) return '';
     return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 /** A domain name, the way the filters compare them. */
-export function normDomain(value) {
+export function normalizeDomain(value) {
     return String(value == null ? '' : value)
         .trim()
         .toLowerCase()
@@ -29,34 +29,34 @@ export function normDomain(value) {
 }
 
 /** A client address, the way the filters compare them. */
-export function normClient(value) {
+export function normalizeClient(value) {
     return String(value == null ? '' : value)
         .trim()
         .toLowerCase();
 }
 
 /** A count, shortened the way the cards show it. */
-export function fmtNum(n) {
+export function formatNumber(n) {
     if (n >= 1000000) return parseFloat((n / 1000000).toFixed(1)) + 'M';
     if (n >= 1000) return parseFloat((n / 1000).toFixed(1)) + 'K';
     return String(n);
 }
 
 /** A share, the way the cards show it. */
-export function fmtPct(n) {
+export function formatPercent(n) {
     if (n == null || n <= 0) return '--';
     return Number.isInteger(n) ? n + '%' : n.toFixed(1) + '%';
 }
 
 /** A duration, the way the cards show it. */
-export function fmtMs(n) {
+export function formatMs(n) {
     if (n == null) return '--';
     if (n >= 1000) return parseFloat((n / 1000).toFixed(2)) + 's';
     return parseFloat(n.toFixed(1)) + 'ms';
 }
 
 /** Bare millisecond value (no unit) for grids that carry the unit in their header. */
-export function fmtMsBare(n) {
+export function formatMsBare(n) {
     if (n == null) return '--';
     return String(parseFloat(n.toFixed(n < 100 ? 1 : 0)));
 }

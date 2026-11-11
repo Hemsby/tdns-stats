@@ -41,26 +41,42 @@
                 </a>
                 <nav class="main-tabs">
                     <button class="main-tab-btn active" data-tab="dashboard">
-                        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                        <svg
+                            class="main-tab-icon"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            width="14"
+                            height="14"
+                        >
                             <rect x="3" y="3" width="7" height="9" />
                             <rect x="14" y="3" width="7" height="5" />
                             <rect x="14" y="12" width="7" height="9" />
                             <rect x="3" y="16" width="7" height="5" />
                         </svg>
-                        <span class="tab-label">Dashboard</span>
+                        <span class="main-tab-label">Dashboard</span>
                     </button>
                     <button class="main-tab-btn" data-tab="other-stats">
-                        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                        <svg
+                            class="main-tab-icon"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            width="14"
+                            height="14"
+                        >
                             <circle cx="11" cy="11" r="8" />
                             <line x1="21" y1="21" x2="16.65" y2="16.65" />
                         </svg>
-                        <span class="tab-label">Cache &amp; Blocked</span>
+                        <span class="main-tab-label">Cache &amp; Blocked</span>
                     </button>
                 </nav>
                 <div class="topbar-status" id="serverIndicators"></div>
                 <div class="topbar-right">
                     <span class="server-pill viewers dashboard-viewers" id="dashboardViewers" title="Active dashboard viewers">
-                        <span class="pill-dot"></span>0 viewers
+                        <span class="server-pill-dot"></span>0 viewers
                     </span>
                     <div class="version-info">
                         <span class="version-pill" id="versionPill" title="View Changelog">v?.?.?</span>
@@ -172,7 +188,7 @@
                     <div class="chart-wrap">
                         <canvas id="mainChart"></canvas>
                         <div class="range-loading" id="chartLoading" hidden>
-                            <div class="rl-spinner"></div>
+                            <div class="range-loading-spinner"></div>
                             <span>Waiting for data…</span>
                         </div>
                     </div>
