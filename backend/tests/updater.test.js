@@ -10,14 +10,18 @@ const path = require('node:path');
 const Updater = require('../src/updater');
 
 /**
- * A project directory with a compose file in it, like the host project a
- * container sees at /app/host-project.
+ * A project directory with a compose file and a git checkout in it, like the
+ * host project a container sees at /app/host-project.
  */
 function tempProject() {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tdns-updater-'));
-    fs.writeFileSync(path.join(dir, 'docker-compose.yml'), 'services:\n  tdns-stats:\n    image: tdns-stats\n');
+    fs.writeFileSync(path.join(dir, 'docker-compose.yml'), COMPOSE_FILE);
+    fs.mkdirSync(path.join(dir, '.git'));
     return dir;
 }
+
+// The local compose file, which the update has to keep.
+const COMPOSE_FILE = 'services:\n  tdns-stats:\n    build: .\n';
 
 /**
  * An updater with a shell that answers from a table.
@@ -34,6 +38,7 @@ function makeUpdater(answers = {}, exists = {}) {
     const execFn = async (command, options) => {
         calls.push({ command, options });
         const answer = answers[command];
+        if (typeof answer === 'function') return { stdout: answer(command), stderr: '' };
         if (answer instanceof Error) throw answer;
         return { stdout: answer ?? '', stderr: '' };
     };
@@ -145,34 +150,7 @@ test.describe('backend/src/updater.js', () => {
     });
 
     test.describe('docker update', () => {
-        test.it('pulls the image and brings the compose project back up', async t => {
-            const project = tempProject();
-            t.after(() => {
-                delete process.env.HOST_PROJECT_PATH;
-                fs.rmSync(project, { recursive: true, force: true });
-            });
-            process.env.HOST_PROJECT_PATH = project;
-
-            const { updater, calls } = makeUpdater();
-
-            await updater.updateDocker();
-
-            const commands = calls.map(c => c.command);
-            const compose = path.join(project, 'docker-compose.yml');
-            const pull = `docker compose -p tdns-stats -f ${compose} pull`;
-            const up = `docker compose -p tdns-stats -f ${compose} up -d --build`;
-
-            assert.ok(commands.includes(pull), 'the image is pulled');
-            assert.ok(commands.includes(up), 'the project is started again');
-
-            // The image is pulled before the project is started again.
-            assert.ok(commands.indexOf(pull) < commands.indexOf(up));
-
-            // The compose commands run in the host project directory.
-            assert.equal(calls.find(c => c.command === pull).options.cwd, project);
-        });
-
-        test.it('does not start the project again when the pull fails', async t => {
+        test.it('pulls the new code from git and rebuilds the container', async t => {
             const project = tempProject();
             t.after(() => {
                 delete process.env.HOST_PROJECT_PATH;
@@ -182,13 +160,50 @@ test.describe('backend/src/updater.js', () => {
 
             const compose = path.join(project, 'docker-compose.yml');
             const { updater, calls } = makeUpdater({
-                [`docker compose -p tdns-stats -f ${compose} pull`]: new Error('pull failed'),
+                // A real reset puts the committed file back, which would lose
+                // a compose file the owner had edited.
+                'git reset --hard origin/master': () => {
+                    fs.writeFileSync(compose, 'services:\n  tdns-stats:\n    build: .\n    image: other\n');
+                    return 'HEAD is now at 38a96a3';
+                },
             });
 
-            await assert.rejects(() => updater.updateDocker(), /pull failed/);
+            await updater.updateDocker();
 
             const commands = calls.map(c => c.command);
-            assert.ok(!commands.some(c => c.includes('up -d --build')), 'the project is left as it was');
+
+            assert.ok(commands.includes('git fetch origin'), 'the host project is fetched');
+            assert.ok(commands.includes('git reset --hard origin/master'), 'the host project is reset to master');
+            assert.ok(
+                commands.includes(`docker compose -p tdns-stats -f ${compose} up -d --build`),
+                'the container is rebuilt and started again',
+            );
+
+            // The git commands run in the host project directory.
+            assert.equal(calls.find(c => c.command === 'git fetch origin').options.cwd, project);
+
+            // The owner's own compose file survives the update.
+            assert.equal(fs.readFileSync(compose, 'utf8'), COMPOSE_FILE);
+        });
+
+        test.it('fails when the rebuild fails', async t => {
+            const project = tempProject();
+            t.after(() => {
+                delete process.env.HOST_PROJECT_PATH;
+                fs.rmSync(project, { recursive: true, force: true });
+            });
+            process.env.HOST_PROJECT_PATH = project;
+
+            const compose = path.join(project, 'docker-compose.yml');
+            const { updater, calls } = makeUpdater({
+                [`docker compose -p tdns-stats -f ${compose} up -d --build`]: new Error('the build failed'),
+            });
+
+            await assert.rejects(() => updater.updateDocker(), /the build failed/);
+
+            // The code was already pulled, so the dashboard can be rebuilt by hand.
+            const commands = calls.map(c => c.command);
+            assert.ok(commands.includes('git reset --hard origin/master'));
         });
     });
 

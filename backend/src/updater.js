@@ -193,13 +193,6 @@ class Updater {
             }
         }
 
-        try {
-            await this.runLogged('pull complete', `${composeCmd} -p tdns-stats -f ${composeFile} pull`, { cwd });
-        } catch (e) {
-            console.error('[update] docker compose pull failed:', e.message);
-            throw e;
-        }
-
         log.debug('[update] scheduling compose restart from helper container');
         let helperImage = null;
         let helperHostSource = null;

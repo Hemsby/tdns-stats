@@ -175,7 +175,7 @@ The dashboard includes a built-in update checker that works with GitHub releases
 
 | Method  | Mechanism                                                 |
 | ------- | --------------------------------------------------------- |
-| Docker  | `docker compose pull` + `docker compose up -d --build`    |
+| Docker  | `git fetch` + `git reset --hard origin/master`, then `docker compose up -d --build` |
 | Systemd | `git pull origin master` + `systemctl restart tdns-stats` |
 
 **Requirements by deployment method:**
