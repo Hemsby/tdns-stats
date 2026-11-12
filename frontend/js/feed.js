@@ -81,11 +81,11 @@ const Feed = (() => {
         const missing = unresolved.find(st => !st.queryLogsLookupFailed);
         if (missing) {
             const scope = serverFilter === 'all' ? ' on one or more servers' : '';
-            return '<div class="no-data warn">Query log app "' + escapeHtml(missing.queryLogsAppName) + '" not found' + scope + '</div>';
+            return `<div class="no-data warn">Query log app "${escapeHtml(missing.queryLogsAppName)}" not found${scope}</div>`;
         }
         if (unresolved.length) {
             const scope = serverFilter === 'all' ? ' on one or more servers' : '';
-            return '<div class="no-data">Could not reach the query log app' + scope + ', retrying...</div>';
+            return `<div class="no-data">Could not reach the query log app${scope}, retrying...</div>`;
         }
         if (hasSelection) return '<div class="no-data selection-empty">No feed entries match the selected filters</div>';
         return '<div class="no-data">Waiting for query data...</div>';
@@ -265,49 +265,7 @@ const Feed = (() => {
             const domainSelected = filters.domains.has(domainValue) || filters.blocked.has(domainValue);
             const clientSelected = filters.clients.has(clientValue);
 
-            row.innerHTML =
-                '<span class="feed-time">' +
-                escapeHtml(ts) +
-                '</span>' +
-                '<span class="feed-server' +
-                serverClass +
-                '" title="' +
-                escapeHtml(e._server) +
-                '">' +
-                escapeHtml(srvName) +
-                '</span>' +
-                '<span class="feed-client" data-filter-kind="clients" data-filter-value="' +
-                escapeHtml(clientValue) +
-                '" title="' +
-                escapeHtml(e.clientIpAddress + ' - ' + (clientSelected ? 'Click to remove filter' : 'Click to filter')) +
-                '">' +
-                escapeHtml(e.clientIpAddress) +
-                '</span>' +
-                '<span class="feed-proto">' +
-                escapeHtml(e.protocol || '') +
-                '</span>' +
-                '<span class="feed-qtype">' +
-                escapeHtml(e.qtype || '') +
-                '</span>' +
-                '<span class="feed-domain" data-filter-kind="' +
-                domainKind +
-                '" data-filter-value="' +
-                escapeHtml(domainValue) +
-                '" title="' +
-                escapeHtml(e.qname + ' - ' + (domainSelected ? 'Click to remove filter' : 'Click to filter')) +
-                '">' +
-                escapeHtml(e.qname) +
-                '</span>' +
-                '<span class="feed-latency-type"><span class="feed-latency ' +
-                latencyClass +
-                '">' +
-                escapeHtml(rtt) +
-                '</span>' +
-                '<span class="feed-type ' +
-                badgeClass +
-                '">' +
-                escapeHtml(badgeText) +
-                '</span></span>';
+            row.innerHTML = `<span class="feed-time">${escapeHtml(ts)}</span><span class="feed-server${serverClass}" title="${escapeHtml(e._server)}">${escapeHtml(srvName)}</span><span class="feed-client" data-filter-kind="clients" data-filter-value="${escapeHtml(clientValue)}" title="${escapeHtml(e.clientIpAddress + ' - ' + (clientSelected ? 'Click to remove filter' : 'Click to filter'))}">${escapeHtml(e.clientIpAddress)}</span><span class="feed-proto">${escapeHtml(e.protocol || '')}</span><span class="feed-qtype">${escapeHtml(e.qtype || '')}</span><span class="feed-domain" data-filter-kind="${domainKind}" data-filter-value="${escapeHtml(domainValue)}" title="${escapeHtml(e.qname + ' - ' + (domainSelected ? 'Click to remove filter' : 'Click to filter'))}">${escapeHtml(e.qname)}</span><span class="feed-latency-type"><span class="feed-latency ${latencyClass}">${escapeHtml(rtt)}</span><span class="feed-type ${badgeClass}">${escapeHtml(badgeText)}</span></span>`;
 
             frag.appendChild(row);
         }

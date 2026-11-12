@@ -260,13 +260,13 @@ const Blocklists = (() => {
             .toLowerCase();
         const listHtml = lists
             .map(list => {
-                const url = list.url ? '<div class="block-list-url">' + escapeHtml(list.url) + '</div>' : '';
+                const url = list.url ? `<div class="block-list-url">${escapeHtml(list.url)}</div>` : '';
                 const matched = String(list.matchedDomain || '')
                     .replace(/\.+$/, '')
                     .toLowerCase();
                 const match =
                     list.matchedDomain && matched !== asked
-                        ? '<div class="block-list-match">Matched ' + escapeHtml(list.matchedDomain) + '</div>'
+                        ? `<div class="block-list-match">Matched ${escapeHtml(list.matchedDomain)}</div>`
                         : '';
                 return `<div class="block-list-item"><div class="block-list-name">${escapeHtml(list.name || 'Block list')}</div>${url}${match}</div>`;
             })
@@ -283,9 +283,9 @@ const Blocklists = (() => {
 
         let note = '';
         if (!node.ok) {
-            note = '<div class="block-list-note">' + escapeHtml(node.error || 'Lookup failed') + '</div>';
+            note = `<div class="block-list-note">${escapeHtml(node.error || 'Lookup failed')}</div>`;
         } else if (node.reportError) {
-            note = '<div class="block-list-note">' + escapeHtml(node.reportError) + '</div>';
+            note = `<div class="block-list-note">${escapeHtml(node.reportError)}</div>`;
         } else if (lists.length) {
             // The Note row above already covers Advanced Blocking results, and manual
             // entries have no overlap to explain. Only built-in URL lists get this line.
@@ -370,7 +370,7 @@ const Blocklists = (() => {
             return;
         }
         if (data.error && !data.ok) {
-            el.innerHTML = '<div class="block-list-empty">' + escapeHtml(data.error) + '</div>';
+            el.innerHTML = `<div class="block-list-empty">${escapeHtml(data.error)}</div>`;
             return;
         }
 

@@ -966,7 +966,7 @@ const App = (() => {
 
         let body;
         if (!node.ok) {
-            body = '<div class="domain-cache-empty">' + escapeHtml(node.error || 'Unable to search this node') + '</div>';
+            body = `<div class="domain-cache-empty">${escapeHtml(node.error || 'Unable to search this node')}</div>`;
         } else if (records.length > 0) {
             body = `<div class="domain-cache-table-wrap"><table class="domain-cache-table"><thead><tr><th>Type</th><th>Answer</th><th>TTL</th><th>Status</th></tr></thead><tbody>${records.map(renderDomainCacheRecord).join('')}</tbody></table></div>`;
         } else if (allRecords.length > 0) {
@@ -1123,14 +1123,14 @@ const App = (() => {
         } else {
             const cached = state.rangeCache[CLUSTER_KEY + ':' + state.timeRange];
             if (!cached) {
-                card.innerHTML = header + role + '<div class="server-card-loading">Loading…</div>';
+                card.innerHTML = `${header}${role}<div class="server-card-loading">Loading…</div>`;
                 return card;
             }
             st = cached.stats || {};
         }
 
         const stats = cardStats(st);
-        card.innerHTML = header + role + '<div class="server-stats-grid">' + stats.grid + '</div>' + cardFooter(stats.pct);
+        card.innerHTML = `${header}${role}<div class="server-stats-grid">${stats.grid}</div>${cardFooter(stats.pct)}`;
         return card;
     }
 
@@ -1182,7 +1182,7 @@ const App = (() => {
 
         if (!role && node.clusterInitialized === false) role = 'Standalone';
         const badgeClass = role === 'Primary' ? 'primary' : role === 'Secondary' ? 'secondary' : 'standalone';
-        const roleBadge = role ? '<span class="node-badge ' + badgeClass + '">' + escapeHtml(role) + '</span>' : '';
+        const roleBadge = role ? `<span class="node-badge ${badgeClass}">${escapeHtml(role)}</span>` : '';
 
         const stats = cardStats(st);
         card.innerHTML = `${cardHeader(node.dnsServerDomain || name, 'v' + escapeHtml(node.version))}${roleBadge ? `<div class="server-card-role">${roleBadge}</div>` : ''}<div class="server-stats-grid">${stats.grid}</div>${cardFooter(stats.pct)}`;
@@ -1363,7 +1363,7 @@ const App = (() => {
         const el = document.getElementById('dashboardViewers');
         if (!el) return;
         const viewerLabel = state.dashboardViewers === 1 ? 'viewer' : 'viewers';
-        el.innerHTML = '<span class="server-pill-dot"></span>' + formatNumber(state.dashboardViewers) + ' ' + viewerLabel;
+        el.innerHTML = `<span class="server-pill-dot"></span>${formatNumber(state.dashboardViewers)} ${viewerLabel}`;
     }
 
     // ---- Performance cards -----------------------------------------------------------

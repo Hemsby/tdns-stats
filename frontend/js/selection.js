@@ -374,28 +374,11 @@ const Selection = (() => {
             return;
         }
 
-        bar.innerHTML =
-            '<span class="feed-selection-label">Filtering</span>' +
-            '<div class="feed-selection-chips">' +
-            chips.join('') +
-            '</div>' +
-            '<button type="button" class="feed-selection-clear" title="Clear all filters">Clear All</button>';
+        bar.innerHTML = `<span class="feed-selection-label">Filtering</span><div class="feed-selection-chips">${chips.join('')}</div><button type="button" class="feed-selection-clear" title="Clear all filters">Clear All</button>`;
     }
 
     function chipHtml(tab, name) {
-        return (
-            '<button type="button" class="filter-chip" data-tab="' +
-            tab +
-            '" data-name="' +
-            escapeHtml(name) +
-            '" title="Remove this filter">' +
-            '<span class="filter-chip-label">' +
-            TAB_LABELS[tab] +
-            '</span>' +
-            escapeHtml(name) +
-            '<span class="filter-chip-x" aria-hidden="true">&times;</span>' +
-            '</button>'
-        );
+        return `<button type="button" class="filter-chip" data-tab="${tab}" data-name="${escapeHtml(name)}" title="Remove this filter"><span class="filter-chip-label">${TAB_LABELS[tab]}</span>${escapeHtml(name)}<span class="filter-chip-x" aria-hidden="true">&times;</span></button>`;
     }
 
     function normalize(tab, value) {
